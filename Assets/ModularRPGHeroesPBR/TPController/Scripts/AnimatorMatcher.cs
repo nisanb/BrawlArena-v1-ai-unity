@@ -29,7 +29,7 @@ namespace DM
                 return;
 
             control.rigid.linearDamping = 0;
-            float multiplier = 3f;
+            float multiplier = 3.5f;
 
             dPosition = anim.deltaPosition;   //storing delta positin of active model's position.         
             
