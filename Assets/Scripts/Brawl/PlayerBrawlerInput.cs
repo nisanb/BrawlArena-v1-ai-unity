@@ -55,6 +55,11 @@ namespace BrawlArena
             if (kb != null && (kb.spaceKey.isPressed || kb.jKey.isPressed)) attack = true;
 
             if (attack) self.TryAttackAuto();
+
+            bool sprint = false;
+            if (hud != null && hud.SprintHeld) sprint = true;
+            if (kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed)) sprint = true;
+            self.SetSprintInput(sprint);
         }
     }
 }

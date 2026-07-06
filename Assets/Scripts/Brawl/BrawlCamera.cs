@@ -3,14 +3,17 @@ using UnityEngine;
 namespace BrawlArena
 {
     /// <summary>
-    /// Classic brawler chase camera: fixed 3/4 top-down angle, smooth follow,
-    /// small perlin shake for hit feedback.
+    /// Brawler chase camera: fixed third-person 3/4 angle, smooth follow, small
+    /// perlin shake for hit feedback. Before a target exists (character select /
+    /// loading), it slowly orbits the arena as a backdrop vista.
     /// </summary>
     public class BrawlCamera : MonoBehaviour
     {
         public Transform target;
-        public Vector3 offset = new Vector3(0f, 11.5f, -7.5f);
+        [Tooltip("Follow offset; pitch is derived from it so the target stays centered.")]
+        public Vector3 offset = new Vector3(0f, 7.2f, -8.2f);
         public float smoothTime = 0.12f;
+        public float vistaOrbitSpeed = 4f;
 
         static BrawlCamera instance;
 
@@ -30,20 +33,37 @@ namespace BrawlArena
 
         void Start()
         {
-            float pitch = Mathf.Atan2(offset.y, -offset.z) * Mathf.Rad2Deg;
-            transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
-
             if (target == null)
             {
                 var player = FindFirstObjectByType<PlayerBrawlerInput>();
-                if (player != null) target = player.transform;
+                if (player != null) SetTarget(player.transform);
             }
-            if (target != null) transform.position = target.position + offset;
+            else
+            {
+                SetTarget(target);
+            }
+        }
+
+        public void SetTarget(Transform t)
+        {
+            target = t;
+            if (target == null) return;
+            float pitch = Mathf.Atan2(offset.y, -offset.z) * Mathf.Rad2Deg;
+            transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
+            transform.position = target.position + offset;
+            velocity = Vector3.zero;
         }
 
         void LateUpdate()
         {
-            if (target == null) return;
+            if (target == null)
+            {
+                // Idle vista: slow orbit around the arena center.
+                transform.RotateAround(new Vector3(0f, 1f, 0f), Vector3.up, vistaOrbitSpeed * Time.deltaTime);
+                transform.LookAt(new Vector3(0f, 1.5f, 0f));
+                return;
+            }
+
             Vector3 pos = Vector3.SmoothDamp(transform.position, target.position + offset, ref velocity, smoothTime);
             if (Time.time < shakeUntil)
             {

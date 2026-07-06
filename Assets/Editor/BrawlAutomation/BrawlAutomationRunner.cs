@@ -114,9 +114,23 @@ namespace BrawlArena.EditorAutomation
                     EditorApplication.EnterPlaymode();
                     result.message = "entering play mode";
                     break;
+                case "play_test":
+                    // Autopilot flag: GameFlow auto-picks a character and the
+                    // player brawler is bot-driven, so the match runs unattended.
+                    File.WriteAllText(Path.Combine(Dir, "autopilot.flag"), "1");
+                    EditorApplication.EnterPlaymode();
+                    result.message = "entering play mode with autopilot";
+                    break;
                 case "exit_play":
+                {
+                    string flag = Path.Combine(Dir, "autopilot.flag");
+                    if (File.Exists(flag)) File.Delete(flag);
                     EditorApplication.ExitPlaymode();
                     result.message = "exiting play mode";
+                    break;
+                }
+                case "status":
+                    result.message = StatusDump();
                     break;
                 case "game_screenshot":
                 {
@@ -130,6 +144,30 @@ namespace BrawlArena.EditorAutomation
                     result.message = "unknown action: " + cmd.action;
                     break;
             }
+        }
+
+        static string StatusDump()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"playing={EditorApplication.isPlaying} compiling={EditorApplication.isCompiling}");
+            var mm = MatchManager.Instance;
+            if (mm != null)
+                sb.AppendLine($"match={mm.State} time={mm.TimeRemaining:0} blue={mm.BlueScore} red={mm.RedScore}");
+            foreach (var b in UnityEngine.Object.FindObjectsByType<BrawlerController>(FindObjectsSortMode.None))
+            {
+                var anim = b.GetComponentInChildren<Animator>();
+                string clip = "?";
+                if (anim != null && anim.isActiveAndEnabled && anim.runtimeAnimatorController != null)
+                {
+                    var clips = anim.GetCurrentAnimatorClipInfo(0);
+                    clip = clips.Length > 0 ? clips[0].clip.name : "(none)";
+                }
+                Vector3 p = b.transform.position;
+                sb.AppendLine(
+                    $"{b.displayName} [{b.team}]{(b.IsPlayer ? " PLAYER" : "")} hp={b.Health.Current:0}/{b.Health.Max:0} " +
+                    $"stam={b.Stamina:0} pos=({p.x:0.0},{p.z:0.0}) anim={clip} dead={b.IsDead}");
+            }
+            return sb.ToString();
         }
 
         [Serializable]

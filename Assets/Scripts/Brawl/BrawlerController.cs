@@ -6,13 +6,15 @@ using UnityEngine.AI;
 namespace BrawlArena
 {
     /// <summary>
-    /// Drives one brawler body: movement, animation, combat, death and respawn.
-    /// Intent comes from PlayerBrawlerInput (CharacterController movement) or
-    /// AIBrawler (NavMeshAgent movement); this class is shared by both.
+    /// Drives one brawler body: movement, animation, combat, sprint, death and
+    /// respawn. Intent comes from PlayerBrawlerInput (CharacterController) or
+    /// AIBrawler (NavMeshAgent); this class is shared by both.
     ///
-    /// Animation contract (ModularRPGHeroesPBR controllers): float "vertical"
-    /// drives the idle/run blend, bool "onGround" must be true, and one-shot
-    /// actions are CrossFades to states named "&lt;Action&gt;_&lt;animSuffix&gt;".
+    /// The ModularRPGHeroesPBR showcase controllers expose no locomotion
+    /// parameters (their only parameter is a trigger), so locomotion is driven
+    /// by state: CrossFade between Idle_&lt;suffix&gt; and Run_&lt;suffix&gt; based on
+    /// measured speed, with a watchdog that returns to locomotion when any
+    /// one-shot state (attack, hit reaction) finishes.
     /// </summary>
     [RequireComponent(typeof(Health))]
     public class BrawlerController : MonoBehaviour
@@ -36,6 +38,13 @@ namespace BrawlArena
         public float attackMoveLock = 0.45f;
         public float autoAimRange = 3.5f;
 
+        [Header("Sprint")]
+        public float sprintMultiplier = 1.5f;
+        public float maxStamina = 100f;
+        public float staminaDrainPerSec = 26f;
+        public float staminaRegenPerSec = 20f;
+        public float staminaRegenDelay = 0.8f;
+
         [Header("Ranged (leave prefab empty for melee)")]
         public GameObject projectilePrefab;
         public float projectileSpeed = 16f;
@@ -52,14 +61,17 @@ namespace BrawlArena
         public bool IsDead => Health.IsDead;
         public bool IsPlayer { get; private set; }
         public bool MovementLocked => Time.time < attackLockUntil;
+        public float Stamina { get; private set; }
+        public bool Sprinting { get; private set; }
+        public float CurrentSpeed => moveSpeed * (Sprinting ? sprintMultiplier : 1f);
         public float CooldownFraction =>
             Mathf.Clamp01((nextAttackTime - Time.time) / Mathf.Max(0.01f, attackCooldown));
         public bool CanAct =>
             !IsDead && !respawning &&
             (MatchManager.Instance == null || MatchManager.Instance.State == MatchState.Playing);
 
-        static readonly int VerticalParam = Animator.StringToHash("vertical");
-        static readonly int OnGroundParam = Animator.StringToHash("onGround");
+        static readonly Collider[] MeleeBuffer = new Collider[24];
+        static readonly HashSet<BrawlerController> MeleeHitSet = new HashSet<BrawlerController>();
 
         Animator anim;
         CharacterController cc;
@@ -67,10 +79,20 @@ namespace BrawlArena
         AudioSource audioSource;
         SkinnedMeshRenderer[] skins;
         Vector3 moveInput;
+        bool sprintInput;
         float nextAttackTime;
         float attackLockUntil;
         float nextFlinchTime;
+        float staminaRegenAt;
         bool respawning;
+        bool initialized;
+
+        int idleHash;
+        int runHash;
+        int getHitHash;
+        int dieHash;
+        int victoryHash;
+        int[] attackHashes;
 
         void Awake()
         {
@@ -79,7 +101,7 @@ namespace BrawlArena
             agent = GetComponent<NavMeshAgent>();
             anim = GetComponentInChildren<Animator>();
             skins = GetComponentsInChildren<SkinnedMeshRenderer>();
-            IsPlayer = GetComponent<PlayerBrawlerInput>() != null;
+            Stamina = maxStamina;
 
             audioSource = gameObject.AddComponent<AudioSource>();
             audioSource.playOnAwake = false;
@@ -90,20 +112,35 @@ namespace BrawlArena
             Health.Died += OnDied;
         }
 
+        /// <summary>
+        /// Deferred init: runtime spawning (GameFlow) adds this component before
+        /// configuring fields and sibling components, so identity, hashes and
+        /// cosmetics must resolve in Start, not Awake.
+        /// </summary>
         void Start()
         {
-            if (anim != null)
-            {
-                anim.applyRootMotion = false;
-                anim.SetBool(OnGroundParam, true);
-            }
+            IsPlayer = GetComponent<PlayerBrawlerInput>() != null;
+            cc = GetComponent<CharacterController>();
+            agent = GetComponent<NavMeshAgent>();
+            Stamina = maxStamina;
+
+            idleHash = Animator.StringToHash("Idle_" + animSuffix);
+            runHash = Animator.StringToHash("Run_" + animSuffix);
+            getHitHash = Animator.StringToHash("GetHit_" + animSuffix);
+            dieHash = Animator.StringToHash("Die_" + animSuffix);
+            victoryHash = Animator.StringToHash("Victory_" + animSuffix);
+            attackHashes = new int[attackStates != null ? attackStates.Length : 0];
+            for (int i = 0; i < attackHashes.Length; i++)
+                attackHashes[i] = Animator.StringToHash(attackStates[i]);
+
+            if (anim != null) anim.applyRootMotion = false;
             if (agent != null)
             {
                 agent.speed = moveSpeed;
                 agent.acceleration = 40f;
                 agent.angularSpeed = 720f;
-                // If this agent enabled before the runtime NavMesh bake finished,
-                // it never attached to the mesh; re-enable and warp to recover.
+                // If this agent enabled before the NavMesh bake finished, it
+                // never attached to the mesh; re-enable and warp to recover.
                 if (!agent.isOnNavMesh)
                 {
                     agent.enabled = false;
@@ -114,6 +151,7 @@ namespace BrawlArena
             if (MatchManager.Instance != null) MatchManager.Instance.Register(this);
             CreateTeamRing();
             HealthBarWorld.Create(this);
+            initialized = true;
         }
 
         void OnDestroy()
@@ -130,11 +168,19 @@ namespace BrawlArena
             moveInput = Vector3.ClampMagnitude(new Vector3(worldDir.x, 0f, worldDir.z), 1f);
         }
 
+        public void SetSprintInput(bool on)
+        {
+            sprintInput = on;
+        }
+
         void Update()
         {
+            if (!initialized) return;
+            UpdateSprint();
+
             if (cc != null && cc.enabled)
             {
-                Vector3 planar = (CanAct && !MovementLocked) ? moveInput * moveSpeed : Vector3.zero;
+                Vector3 planar = (CanAct && !MovementLocked) ? moveInput * CurrentSpeed : Vector3.zero;
                 cc.Move((planar + Vector3.down * 15f) * Time.deltaTime);
                 if (planar.sqrMagnitude > 0.04f)
                 {
@@ -142,36 +188,94 @@ namespace BrawlArena
                     transform.rotation = Quaternion.Slerp(transform.rotation, look, 14f * Time.deltaTime);
                 }
             }
+            else if (agent != null && agent.enabled)
+            {
+                agent.speed = CurrentSpeed;
+            }
+
             UpdateAnimator();
         }
 
-        void UpdateAnimator()
+        void UpdateSprint()
         {
-            if (anim == null) return;
-            float speed01 = 0f;
-            if (agent != null && agent.enabled)
+            bool moving = cc != null
+                ? moveInput.sqrMagnitude > 0.04f
+                : agent != null && agent.enabled && agent.velocity.sqrMagnitude > 0.2f;
+            Sprinting = sprintInput && moving && Stamina > 0f && CanAct && !MovementLocked;
+            if (Sprinting)
             {
-                speed01 = agent.velocity.magnitude / Mathf.Max(0.1f, agent.speed);
+                Stamina = Mathf.Max(0f, Stamina - staminaDrainPerSec * Time.deltaTime);
+                staminaRegenAt = Time.time + staminaRegenDelay;
             }
-            else if (cc != null)
+            else if (Time.time >= staminaRegenAt)
             {
-                Vector3 v = cc.velocity;
-                v.y = 0f;
-                speed01 = v.magnitude / Mathf.Max(0.1f, moveSpeed);
+                Stamina = Mathf.Min(maxStamina, Stamina + staminaRegenPerSec * Time.deltaTime);
             }
-            anim.SetFloat(VerticalParam, Mathf.Clamp01(speed01), 0.12f, Time.deltaTime);
         }
 
-        // ---------------- Combat ----------------
+        // ---------------- animation ----------------
+
+        float ComputeSpeed01()
+        {
+            Vector3 v;
+            if (agent != null && agent.enabled) v = agent.velocity;
+            else if (cc != null) v = cc.velocity;
+            else return 0f;
+            v.y = 0f;
+            return Mathf.Clamp01(v.magnitude / Mathf.Max(0.1f, moveSpeed));
+        }
+
+        /// <summary>
+        /// State-driven locomotion: the pack controllers have no locomotion
+        /// parameters, so switch Idle/Run by CrossFade and return from finished
+        /// one-shots ourselves.
+        /// </summary>
+        void UpdateAnimator()
+        {
+            if (anim == null || IsDead) return;
+            if (MatchManager.Instance != null && MatchManager.Instance.State == MatchState.Ended) return;
+            if (anim.IsInTransition(0)) return;
+
+            float speed01 = ComputeSpeed01();
+            var st = anim.GetCurrentAnimatorStateInfo(0);
+            int cur = st.shortNameHash;
+            bool wantRun = speed01 > 0.25f;
+            bool wantIdle = speed01 <= 0.2f;
+
+            if (cur == runHash)
+            {
+                if (wantIdle) anim.CrossFadeInFixedTime(idleHash, 0.15f);
+                return;
+            }
+            if (cur == idleHash)
+            {
+                if (wantRun) anim.CrossFadeInFixedTime(runHash, 0.12f);
+                return;
+            }
+            if (st.loop)
+            {
+                // A looping variation (idle fidget etc.) — pull back into main locomotion.
+                if (wantRun) anim.CrossFadeInFixedTime(runHash, 0.15f);
+                else if (wantIdle) anim.CrossFadeInFixedTime(idleHash, 0.25f);
+                return;
+            }
+            // One-shot (attack, hit reaction, spawn pose): let it finish, then return.
+            if (st.normalizedTime >= 0.92f)
+                anim.CrossFadeInFixedTime(wantRun ? runHash : idleHash, 0.12f);
+        }
+
+        // ---------------- combat ----------------
 
         public BrawlerController FindNearestEnemy(float maxRange)
         {
             if (MatchManager.Instance == null) return null;
             BrawlerController best = null;
             float bestDist = maxRange;
-            foreach (var b in MatchManager.Instance.GetBrawlers())
+            var brawlers = MatchManager.Instance.GetBrawlers();
+            for (int i = 0; i < brawlers.Count; i++)
             {
-                if (b == this || b.team == team || b.IsDead) continue;
+                var b = brawlers[i];
+                if (b == null || b == this || b.team == team || b.IsDead) continue;
                 float d = Vector3.Distance(transform.position, b.transform.position);
                 if (d < bestDist)
                 {
@@ -210,12 +314,16 @@ namespace BrawlArena
 
         IEnumerator AttackRoutine(BrawlerController target)
         {
-            if (anim != null && attackStates != null && attackStates.Length > 0)
-                anim.CrossFadeInFixedTime(attackStates[Random.Range(0, attackStates.Length)], 0.08f);
+            if (anim != null && attackHashes != null && attackHashes.Length > 0)
+                anim.CrossFadeInFixedTime(attackHashes[Random.Range(0, attackHashes.Length)], 0.08f);
             if (attackSfx != null) audioSource.PlayOneShot(attackSfx);
 
             yield return new WaitForSeconds(attackHitDelay);
             if (IsDead) yield break;
+
+            // Re-face the target at the moment damage lands, so enemies that
+            // circled around during the windup are still hit.
+            if (target != null && !target.IsDead) FaceInstant(target.transform.position);
 
             if (projectilePrefab != null) FireProjectile(target);
             else MeleeStrike();
@@ -228,7 +336,7 @@ namespace BrawlArena
             if (target != null && !target.IsDead)
             {
                 Vector3 aim = target.transform.position + Vector3.up * 1.1f - muzzle;
-                aim.y *= 0.35f; // keep shots mostly flat
+                aim.y *= 0.35f;
                 if (aim.sqrMagnitude > 0.01f) dir = aim.normalized;
             }
             if (swingVfx != null) SpawnVfx(swingVfx, muzzle, Quaternion.LookRotation(dir), 2f);
@@ -239,16 +347,17 @@ namespace BrawlArena
             proj.Launch(this, dir, attackDamage, projectileSpeed, impactVfx);
         }
 
-        static readonly Collider[] MeleeBuffer = new Collider[24];
-        static readonly HashSet<BrawlerController> MeleeHitSet = new HashSet<BrawlerController>();
-
         void MeleeStrike()
         {
-            Vector3 center = transform.position + transform.forward * (attackRange * 0.7f) + Vector3.up;
-            if (swingVfx != null) SpawnVfx(swingVfx, center, transform.rotation, 2f);
+            // Capsule from the body out to attack range: point-blank enemies are
+            // inside the volume too, not just those standing at max range.
+            Vector3 origin = transform.position + Vector3.up;
+            Vector3 tip = origin + transform.forward * attackRange;
+            if (swingVfx != null)
+                SpawnVfx(swingVfx, origin + transform.forward * (attackRange * 0.5f), transform.rotation, 2f);
 
             MeleeHitSet.Clear();
-            int count = Physics.OverlapSphereNonAlloc(center, attackRadius, MeleeBuffer, ~0, QueryTriggerInteraction.Ignore);
+            int count = Physics.OverlapCapsuleNonAlloc(origin, tip, attackRadius, MeleeBuffer, ~0, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
                 var other = MeleeBuffer[i].GetComponentInParent<BrawlerController>();
@@ -267,7 +376,7 @@ namespace BrawlArena
             Destroy(go, life);
         }
 
-        // ---------------- Damage / death / respawn ----------------
+        // ---------------- damage / death / respawn ----------------
 
         void OnDamaged(float amount, GameObject attacker)
         {
@@ -277,7 +386,7 @@ namespace BrawlArena
             if (Time.time > attackLockUntil && Time.time > nextFlinchTime && Random.value < 0.6f)
             {
                 nextFlinchTime = Time.time + 1.1f;
-                if (anim != null) anim.CrossFadeInFixedTime("GetHit_" + animSuffix, 0.08f);
+                if (anim != null) anim.CrossFadeInFixedTime(getHitHash, 0.08f);
             }
         }
 
@@ -285,7 +394,7 @@ namespace BrawlArena
         {
             StopAllCoroutines();
             moveInput = Vector3.zero;
-            if (anim != null) anim.CrossFadeInFixedTime("Die_" + animSuffix, 0.1f);
+            if (anim != null) anim.CrossFadeInFixedTime(dieHash, 0.1f);
             if (koVfx != null) SpawnVfx(koVfx, transform.position + Vector3.up * 0.5f, Quaternion.identity, 3f);
             if (IsPlayer) BrawlCamera.Shake(0.5f, 0.3f);
             if (agent != null)
@@ -317,7 +426,8 @@ namespace BrawlArena
                 : transform.position;
             Teleport(spawn);
             Health.Revive();
-            if (anim != null) anim.CrossFadeInFixedTime("Idle_" + animSuffix, 0.05f);
+            Stamina = maxStamina;
+            if (anim != null) anim.CrossFadeInFixedTime(idleHash, 0.05f);
             if (spawnVfx != null) SpawnVfx(spawnVfx, spawn, Quaternion.identity, 3f);
             if (IsPlayer && BrawlHUD.Instance != null) BrawlHUD.Instance.HideRespawn();
             respawning = false;
@@ -368,10 +478,10 @@ namespace BrawlArena
         {
             moveInput = Vector3.zero;
             if (agent != null && agent.enabled && agent.isOnNavMesh) agent.ResetPath();
-            if (anim != null) anim.CrossFadeInFixedTime("Victory_" + animSuffix, 0.2f);
+            if (anim != null) anim.CrossFadeInFixedTime(victoryHash, 0.2f);
         }
 
-        // ---------------- Cosmetics ----------------
+        // ---------------- cosmetics ----------------
 
         void CreateTeamRing()
         {

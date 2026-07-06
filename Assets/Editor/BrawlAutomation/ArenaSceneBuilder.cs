@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -34,14 +34,48 @@ namespace BrawlArena.EditorAutomation
 
         public static string ConvertMaterialsToUrp()
         {
+            // Converters.RunInBatchMode is broken in URP 17.3 (Base2DMaterialUpgrader
+            // has no default ctor), so drive the public MaterialUpgrader API per
+            // material instead â€” silent, no dialogs.
             int legacyFixed = FixLegacyParticleMaterials();
-            Converters.RunInBatchMode(
-                ConverterContainerId.BuiltInToURP,
-                new List<ConverterId> { ConverterId.Material },
-                ConverterFilter.Inclusive);
+
+            var upgraders = new Dictionary<string, UnityEditor.Rendering.MaterialUpgrader>
+            {
+                { "Standard", new StandardUpgrader("Standard") },
+                { "Standard (Specular setup)", new StandardUpgrader("Standard (Specular setup)") },
+                { "Particles/Standard Unlit", new ParticleUpgrader("Particles/Standard Unlit") },
+                { "Particles/Standard Surface", new ParticleUpgrader("Particles/Standard Surface") },
+            };
+
+            int upgraded = 0, legacyLit = 0;
+            foreach (var guid in AssetDatabase.FindAssets("t:Material", new[] { "Assets" }))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (mat == null || mat.shader == null) continue;
+                string shaderName = mat.shader.name;
+
+                if (upgraders.TryGetValue(shaderName, out var up))
+                {
+                    UnityEditor.Rendering.MaterialUpgrader.Upgrade(mat, up, UnityEditor.Rendering.MaterialUpgrader.UpgradeFlags.None);
+                    upgraded++;
+                }
+                else if (shaderName.StartsWith("Legacy Shaders/") && !shaderName.Contains("Particle"))
+                {
+                    var lit = Shader.Find("Universal Render Pipeline/Lit");
+                    if (lit == null) continue;
+                    Texture tex = mat.HasProperty("_MainTex") ? mat.GetTexture("_MainTex") : null;
+                    Color c = mat.HasProperty("_Color") ? mat.GetColor("_Color") : Color.white;
+                    mat.shader = lit;
+                    if (tex != null) mat.SetTexture("_BaseMap", tex);
+                    mat.SetColor("_BaseColor", c);
+                    EditorUtility.SetDirty(mat);
+                    legacyLit++;
+                }
+            }
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            return $"Remapped {legacyFixed} legacy particle materials; ran URP material converter.";
+            return $"legacyParticles={legacyFixed}, upgraded={upgraded}, legacyLitRemapped={legacyLit}";
         }
 
         static int FixLegacyParticleMaterials()
@@ -90,8 +124,7 @@ namespace BrawlArena.EditorAutomation
             BuildBoundary(env.transform);
             BuildProps(env.transform);
             BuildLighting();
-            var systems = BuildSystems(env);
-            BuildBrawlers(systems);
+            BuildSystems();
             BuildCamera();
             BakeNavMesh(env);
 
@@ -338,14 +371,13 @@ namespace BrawlArena.EditorAutomation
             volume.sharedProfile = profile;
         }
 
-        static GameObject BuildSystems(GameObject env)
+        static void BuildSystems()
         {
             var systems = new GameObject("GameSystems");
             var mm = systems.AddComponent<MatchManager>();
-            mm.matchDuration = 150f;
-            mm.scoreToWin = 10;
-            mm.respawnDelay = 2.5f;
-            mm.introDuration = 1.6f;
+            // Rule values stay at the script defaults; GameFlow starts the match
+            // after character select.
+            mm.autoStart = false;
 
             var spawnRoot = new GameObject("SpawnPoints").transform;
             spawnRoot.SetParent(systems.transform, false);
@@ -371,194 +403,102 @@ namespace BrawlArena.EditorAutomation
 
             var hud = new GameObject("HUD");
             hud.AddComponent<BrawlHUD>();
-            return systems;
+
+            var flow = systems.AddComponent<GameFlow>();
+            flow.roster = BuildRoster();
         }
 
-        class BrawlerSpec
+        static BrawlerDefinition Def(
+            string id, string name, string role, string prefabFile, string suffix, string controllerFile,
+            string[] attacks, float hp, float dmg, float range, float radius, float cd, float hitDelay,
+            float moveLock, float speed, float aim, string projectile, float projSpeed,
+            string swing, string impact, string ko, string spawn)
         {
-            public string prefab;
-            public string name;
-            public TeamId team;
-            public string suffix;
-            public string controller;
-            public string[] attacks;
-            public bool player;
-            public float hp, dmg, range, radius, cd, hitDelay, moveLock, speed, aim;
-            public string projectile;
-            public float projSpeed;
-            public string swing, impact, ko, spawn;
-            public Vector3 pos;
-        }
-
-        static void BuildBrawlers(GameObject systems)
-        {
-            string MagicPath(string sub) => Magic + sub + ".prefab";
-            var specs = new List<BrawlerSpec>
+            return new BrawlerDefinition
             {
-                new BrawlerSpec
-                {
-                    prefab = Chars + "DoubleSword01.prefab", name = "Aria (You)", team = TeamId.Blue,
-                    suffix = "DoubleSword", controller = Anims + "DoubleSwords.controller",
-                    attacks = new[] { "NormalAttack01_DoubleSword", "NormalAttack02_DoubleSword" }, player = true,
-                    hp = 120, dmg = 20, range = 2.3f, radius = 1.6f, cd = 0.75f, hitDelay = 0.32f, moveLock = 0.4f, speed = 5.4f, aim = 3.8f,
-                    swing = MagicPath("Slash/ArcaneSlash"), impact = MagicPath("Slash Hit/ArcaneSlashHit"),
-                    ko = MagicPath("Nova/NovaArcane"), spawn = MagicPath("Muzzleflash/Big/ArcaneMuzzleBig"),
-                    pos = new Vector3(0f, 0f, -16f),
-                },
-                new BrawlerSpec
-                {
-                    prefab = Chars + "SwordAndShield01.prefab", name = "Bastion", team = TeamId.Blue,
-                    suffix = "SwordShield", controller = Anims + "SwordShield.controller",
-                    attacks = new[] { "NormalAttack01_SwordShield", "NormalAttack02_SwordShield" },
-                    hp = 150, dmg = 16, range = 2.2f, radius = 1.6f, cd = 1.1f, hitDelay = 0.38f, moveLock = 0.5f, speed = 4.6f, aim = 3.4f,
-                    swing = MagicPath("Slash/FrostSlash"), impact = MagicPath("Slash Hit/FrostSlashHit"),
-                    ko = MagicPath("Nova/NovaFrost"), spawn = MagicPath("Muzzleflash/Big/FrostMuzzleBig"),
-                    pos = new Vector3(-4f, 0f, -16f),
-                },
-                new BrawlerSpec
-                {
-                    prefab = Chars + "MagicWand02.prefab", name = "Nova", team = TeamId.Blue,
-                    suffix = "MagicWand", controller = Anims + "MagicWand.controller",
-                    attacks = new[] { "Attack01_MagicWand", "Attack02_MagicWand" },
-                    hp = 85, dmg = 18, range = 8f, radius = 1.2f, cd = 1.3f, hitDelay = 0.42f, moveLock = 0.35f, speed = 4.9f, aim = 10f,
-                    projectile = MagicPath("Missiles & Explosions/Storm/StormMissileNormal"), projSpeed = 15f,
-                    swing = MagicPath("Muzzleflash/Normal/StormMuzzleNormal"),
-                    impact = MagicPath("Missiles & Explosions/Storm/StormExplosionSmall"),
-                    ko = MagicPath("Nova/NovaStorm"), spawn = MagicPath("Muzzleflash/Big/StormMuzzleBig"),
-                    pos = new Vector3(4f, 0f, -16f),
-                },
-                new BrawlerSpec
-                {
-                    prefab = Chars + "SingleTwoHandSword03.prefab", name = "Grimm", team = TeamId.Red,
-                    suffix = "SingleTwohandSword", controller = Anims + "SingleTwoHandSword.controller",
-                    attacks = new[] { "NormalAttack01_SingleTwohandSword", "NormalAttack02_SingleTwohandSword" },
-                    hp = 135, dmg = 28, range = 2.5f, radius = 1.8f, cd = 1.35f, hitDelay = 0.45f, moveLock = 0.55f, speed = 4.7f, aim = 3.6f,
-                    swing = MagicPath("Slash/FireSlash"), impact = MagicPath("Slash Hit/FireSlashHit"),
-                    ko = MagicPath("Nova/NovaFire"), spawn = MagicPath("Muzzleflash/Big/FireMuzzleBig"),
-                    pos = new Vector3(0f, 0f, 16f),
-                },
-                new BrawlerSpec
-                {
-                    prefab = Chars + "DoubleSword05.prefab", name = "Vex", team = TeamId.Red,
-                    suffix = "DoubleSword", controller = Anims + "DoubleSwords.controller",
-                    attacks = new[] { "NormalAttack01_DoubleSword", "NormalAttack02_DoubleSword" },
-                    hp = 110, dmg = 19, range = 2.3f, radius = 1.6f, cd = 0.8f, hitDelay = 0.32f, moveLock = 0.4f, speed = 5.3f, aim = 3.6f,
-                    swing = MagicPath("Slash/ShadowSlash"), impact = MagicPath("Slash Hit/ShadowSlashHit"),
-                    ko = MagicPath("Nova/NovaShadow"), spawn = MagicPath("Muzzleflash/Big/ShadowMuzzleBig"),
-                    pos = new Vector3(-4f, 0f, 16f),
-                },
-                new BrawlerSpec
-                {
-                    prefab = Chars + "Bow02.prefab", name = "Thorn", team = TeamId.Red,
-                    suffix = "Bow", controller = Anims + "Bow.controller",
-                    attacks = new[] { "Attack01_Bow", "Attack02_Bow" },
-                    hp = 85, dmg = 22, range = 8.5f, radius = 1.2f, cd = 1.5f, hitDelay = 0.5f, moveLock = 0.4f, speed = 4.8f, aim = 11f,
-                    projectile = MagicPath("Missiles & Explosions/Earth/EarthMissileNormal"), projSpeed = 20f,
-                    swing = MagicPath("Muzzleflash/Normal/EarthMuzzleNormal"),
-                    impact = MagicPath("Missiles & Explosions/Earth/EarthExplosionSmall"),
-                    ko = MagicPath("Nova/NovaEarth"), spawn = MagicPath("Muzzleflash/Big/EarthMuzzleBig"),
-                    pos = new Vector3(4f, 0f, 16f),
-                },
+                id = id,
+                displayName = name,
+                role = role,
+                prefab = Load(Chars + prefabFile),
+                animSuffix = suffix,
+                attackStates = VerifyAttackStates(Anims + controllerFile, suffix, attacks),
+                maxHealth = hp,
+                damage = dmg,
+                attackRange = range,
+                attackRadius = radius,
+                cooldown = cd,
+                hitDelay = hitDelay,
+                moveLock = moveLock,
+                moveSpeed = speed,
+                autoAimRange = aim,
+                projectilePrefab = string.IsNullOrEmpty(projectile) ? null : Load(Magic + projectile + ".prefab"),
+                projectileSpeed = projSpeed,
+                swingVfx = Load(Magic + swing + ".prefab"),
+                impactVfx = Load(Magic + impact + ".prefab"),
+                koVfx = Load(Magic + ko + ".prefab"),
+                spawnVfx = Load(Magic + spawn + ".prefab"),
             };
-
-            foreach (var spec in specs) BuildBrawler(spec);
         }
 
-        static void BuildBrawler(BrawlerSpec spec)
+        static string[] VerifyAttackStates(string controllerPath, string suffix, string[] wanted)
         {
-            var prefab = Load(spec.prefab);
-            if (prefab == null) return;
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
-            go.name = spec.name;
-            go.transform.position = spec.pos;
-            go.transform.rotation = Quaternion.Euler(0f, spec.team == TeamId.Blue ? 0f : 180f, 0f);
-
-            // Animator: make sure the right controller is assigned.
-            var animator = go.GetComponentInChildren<Animator>();
-            if (animator == null)
+            var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(controllerPath);
+            if (controller == null)
             {
-                Report.AppendLine($"WARNING {spec.name}: no Animator on {spec.prefab}");
+                Report.AppendLine("MISSING CONTROLLER: " + controllerPath);
+                return wanted;
             }
-            else if (animator.runtimeAnimatorController == null)
+            var names = new HashSet<string>();
+            foreach (var layer in controller.layers) CollectStates(layer.stateMachine, names);
+            var valid = wanted.Where(names.Contains).ToArray();
+            if (valid.Length == 0)
             {
-                animator.runtimeAnimatorController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(spec.controller);
-                Report.AppendLine($"{spec.name}: controller assigned from {spec.controller}");
+                Report.AppendLine($"WARNING {suffix}: no attack states found from [{string.Join(",", wanted)}]");
+                valid = wanted;
             }
-
-            // Keep only attack states that really exist in the controller.
-            var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(spec.controller);
-            string[] attacks = spec.attacks;
-            if (controller != null)
+            else if (valid.Length != wanted.Length)
             {
-                var stateNames = new HashSet<string>();
-                foreach (var layer in controller.layers) CollectStates(layer.stateMachine, stateNames);
-                var valid = spec.attacks.Where(stateNames.Contains).ToArray();
-                if (valid.Length == 0)
-                {
-                    Report.AppendLine($"WARNING {spec.name}: none of the attack states exist! Wanted: {string.Join(",", spec.attacks)}");
-                    valid = spec.attacks;
-                }
-                else if (valid.Length != spec.attacks.Length)
-                {
-                    Report.AppendLine($"{spec.name}: filtered attacks to {string.Join(",", valid)}");
-                }
-                attacks = valid;
-                foreach (var s in new[] { "Idle_", "Run_", "GetHit_", "Die_", "Victory_" })
-                    if (!stateNames.Contains(s + spec.suffix))
-                        Report.AppendLine($"WARNING {spec.name}: missing state {s}{spec.suffix}");
+                Report.AppendLine($"{suffix}: attacks filtered to [{string.Join(",", valid)}]");
             }
+            foreach (var s in new[] { "Idle_", "Run_", "GetHit_", "Die_", "Victory_" })
+                if (!names.Contains(s + suffix))
+                    Report.AppendLine($"WARNING {suffix}: missing state {s}{suffix}");
+            return valid;
+        }
 
-            var health = go.AddComponent<Health>();
-            var so = new SerializedObject(health);
-            so.FindProperty("maxHealth").floatValue = spec.hp;
-            so.ApplyModifiedPropertiesWithoutUndo();
-
-            if (spec.player)
+        static BrawlerDefinition[] BuildRoster()
+        {
+            return new[]
             {
-                var cc = go.AddComponent<CharacterController>();
-                cc.center = new Vector3(0f, 1f, 0f);
-                cc.radius = 0.4f;
-                cc.height = 1.8f;
-            }
-            else
-            {
-                var capsule = go.AddComponent<CapsuleCollider>();
-                capsule.center = new Vector3(0f, 1f, 0f);
-                capsule.radius = 0.4f;
-                capsule.height = 1.9f;
-                var agent = go.AddComponent<NavMeshAgent>();
-                agent.radius = 0.45f;
-                agent.height = 1.9f;
-                agent.speed = spec.speed;
-                agent.acceleration = 40f;
-                agent.angularSpeed = 720f;
-                agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
-            }
-
-            var ctrl = go.AddComponent<BrawlerController>();
-            ctrl.displayName = spec.name;
-            ctrl.team = spec.team;
-            ctrl.animSuffix = spec.suffix;
-            ctrl.attackStates = attacks;
-            ctrl.moveSpeed = spec.speed;
-            ctrl.attackDamage = spec.dmg;
-            ctrl.attackRange = spec.range;
-            ctrl.attackRadius = spec.radius;
-            ctrl.attackCooldown = spec.cd;
-            ctrl.attackHitDelay = spec.hitDelay;
-            ctrl.attackMoveLock = spec.moveLock;
-            ctrl.autoAimRange = spec.aim;
-            ctrl.projectileSpeed = spec.projSpeed;
-            if (!string.IsNullOrEmpty(spec.projectile)) ctrl.projectilePrefab = Load(spec.projectile);
-            ctrl.swingVfx = Load(spec.swing);
-            ctrl.impactVfx = Load(spec.impact);
-            ctrl.koVfx = Load(spec.ko);
-            ctrl.spawnVfx = Load(spec.spawn);
-
-            if (spec.player) go.AddComponent<PlayerBrawlerInput>();
-            else go.AddComponent<AIBrawler>();
-
-            Report.AppendLine($"Brawler ready: {spec.name} [{spec.team}] {(spec.player ? "PLAYER" : "AI")} at {spec.pos}");
+                Def("aria", "Aria", "Twin-Blade Duelist", "DoubleSword01.prefab", "DoubleSword", "DoubleSwords.controller",
+                    new[] { "NormalAttack01_DoubleSword", "NormalAttack02_DoubleSword" },
+                    120f, 20f, 2.3f, 1.6f, 0.75f, 0.32f, 0.4f, 5.4f, 3.8f, null, 0f,
+                    "Slash/ArcaneSlash", "Slash Hit/ArcaneSlashHit", "Nova/NovaArcane", "Muzzleflash/Big/ArcaneMuzzleBig"),
+                Def("bastion", "Bastion", "Shield Vanguard", "SwordAndShield01.prefab", "SwordShield", "SwordShield.controller",
+                    new[] { "NormalAttack01_SwordShield", "NormalAttack02_SwordShield" },
+                    150f, 16f, 2.2f, 1.6f, 1.1f, 0.38f, 0.5f, 4.6f, 3.4f, null, 0f,
+                    "Slash/FrostSlash", "Slash Hit/FrostSlashHit", "Nova/NovaFrost", "Muzzleflash/Big/FrostMuzzleBig"),
+                Def("nova", "Nova", "Storm Mage", "MagicWand02.prefab", "MagicWand", "MagicWand.controller",
+                    new[] { "Attack01_MagicWand", "Attack02_MagicWand" },
+                    85f, 18f, 8f, 1.2f, 1.3f, 0.42f, 0.35f, 4.9f, 10f,
+                    "Missiles & Explosions/Storm/StormMissileNormal", 15f,
+                    "Muzzleflash/Normal/StormMuzzleNormal", "Missiles & Explosions/Storm/StormExplosionSmall",
+                    "Nova/NovaStorm", "Muzzleflash/Big/StormMuzzleBig"),
+                Def("grimm", "Grimm", "Greatsword Bruiser", "SingleTwoHandSword03.prefab", "SingleTwohandSword", "SingleTwoHandSword.controller",
+                    new[] { "NormalAttack01_SingleTwohandSword", "NormalAttack02_SingleTwohandSword" },
+                    135f, 28f, 2.5f, 1.8f, 1.35f, 0.45f, 0.55f, 4.7f, 3.6f, null, 0f,
+                    "Slash/FireSlash", "Slash Hit/FireSlashHit", "Nova/NovaFire", "Muzzleflash/Big/FireMuzzleBig"),
+                Def("vex", "Vex", "Shadow Skirmisher", "DoubleSword05.prefab", "DoubleSword", "DoubleSwords.controller",
+                    new[] { "NormalAttack01_DoubleSword", "NormalAttack02_DoubleSword" },
+                    110f, 19f, 2.3f, 1.6f, 0.8f, 0.32f, 0.4f, 5.3f, 3.6f, null, 0f,
+                    "Slash/ShadowSlash", "Slash Hit/ShadowSlashHit", "Nova/NovaShadow", "Muzzleflash/Big/ShadowMuzzleBig"),
+                Def("thorn", "Thorn", "Earth Ranger", "Bow02.prefab", "Bow", "Bow.controller",
+                    new[] { "Attack01_Bow", "Attack02_Bow" },
+                    85f, 22f, 8.5f, 1.2f, 1.5f, 0.5f, 0.4f, 4.8f, 11f,
+                    "Missiles & Explosions/Earth/EarthMissileNormal", 20f,
+                    "Muzzleflash/Normal/EarthMuzzleNormal", "Missiles & Explosions/Earth/EarthExplosionSmall",
+                    "Nova/NovaEarth", "Muzzleflash/Big/EarthMuzzleBig"),
+            };
         }
 
         static void CollectStates(AnimatorStateMachine sm, HashSet<string> names)
@@ -572,7 +512,7 @@ namespace BrawlArena.EditorAutomation
             var camGo = new GameObject("Main Camera");
             camGo.tag = "MainCamera";
             var cam = camGo.AddComponent<Camera>();
-            cam.fieldOfView = 50f;
+            cam.fieldOfView = 52f;
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = 200f;
             camGo.AddComponent<AudioListener>();
@@ -580,8 +520,11 @@ namespace BrawlArena.EditorAutomation
             extra.renderPostProcessing = true;
             extra.antialiasing = AntialiasingMode.FastApproximateAntialiasing;
             var follow = camGo.AddComponent<BrawlCamera>();
-            follow.offset = new Vector3(0f, 11.5f, -7.5f);
-            camGo.transform.position = new Vector3(0f, 11.5f, -23.5f);
+            // Lower third-person angle (~41 degrees) for a more 3D read.
+            follow.offset = new Vector3(0f, 7.2f, -8.2f);
+            // Authored vista framing for the character-select orbit.
+            camGo.transform.position = new Vector3(16f, 10f, -19f);
+            camGo.transform.LookAt(new Vector3(0f, 1.5f, 0f));
         }
 
         static void BakeNavMesh(GameObject env)

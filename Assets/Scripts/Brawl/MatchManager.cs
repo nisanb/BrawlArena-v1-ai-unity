@@ -7,6 +7,7 @@ namespace BrawlArena
 {
     public enum MatchState
     {
+        Waiting,
         Intro,
         Playing,
         Ended
@@ -23,15 +24,17 @@ namespace BrawlArena
 
         [Header("Rules")]
         public float matchDuration = 150f;
-        public int scoreToWin = 10;
+        public int scoreToWin = 2;
         public float respawnDelay = 2.5f;
         public float introDuration = 1.6f;
+        [Tooltip("Start the match immediately on Start. Off when GameFlow drives character select first.")]
+        public bool autoStart = true;
 
         [Header("Spawns")]
         public Transform[] blueSpawns;
         public Transform[] redSpawns;
 
-        public MatchState State { get; private set; } = MatchState.Intro;
+        public MatchState State { get; private set; } = MatchState.Waiting;
         public float TimeRemaining { get; private set; }
         public int BlueScore { get; private set; }
         public int RedScore { get; private set; }
@@ -55,7 +58,15 @@ namespace BrawlArena
 
         void Start()
         {
+            if (autoStart) BeginMatch();
+        }
+
+        public void BeginMatch()
+        {
+            if (State != MatchState.Waiting) return;
+            State = MatchState.Intro;
             introEndsAt = Time.time + introDuration;
+            TimeRemaining = matchDuration;
         }
 
         void OnDestroy()

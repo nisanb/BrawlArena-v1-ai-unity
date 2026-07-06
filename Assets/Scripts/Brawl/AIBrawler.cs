@@ -66,11 +66,12 @@ namespace BrawlArena
             }
 
             bool engaging = false;
+            float distToTarget = float.MaxValue;
             if (target != null && !target.IsDead)
             {
-                float dist = PlanarDistance(transform.position, target.transform.position);
+                distToTarget = PlanarDistance(transform.position, target.transform.position);
                 float engageRange = Ranged ? preferredRange + 1.5f : self.attackRange + 0.4f;
-                if (dist <= engageRange)
+                if (distToTarget <= engageRange)
                 {
                     engaging = true;
                     FaceTarget();
@@ -79,6 +80,9 @@ namespace BrawlArena
                 }
             }
             agent.updateRotation = !engaging;
+
+            // Sprint to escape when retreating, or to close big gaps.
+            self.SetSprintInput(retreating || (!engaging && distToTarget > 9f && distToTarget < 100f));
         }
 
         void Think()

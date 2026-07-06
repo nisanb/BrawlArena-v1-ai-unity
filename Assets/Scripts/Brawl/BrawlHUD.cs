@@ -18,8 +18,12 @@ namespace BrawlArena
 
         public VirtualJoystick Joystick { get; private set; }
         public bool AttackHeld => attackButton != null && attackButton.Held;
+        public bool SprintHeld => sprintButton != null && sprintButton.Held;
 
         AttackButtonWidget attackButton;
+        AttackButtonWidget sprintButton;
+        Image staminaFill;
+        GameObject gameplayRoot;
         Image cooldownOverlay;
         Text timerText;
         Text blueScoreText;
@@ -38,7 +42,7 @@ namespace BrawlArena
         int lastRespawnTenths = -1;
         float respawnEndsAt;
         float fightFlashUntil;
-        MatchState prevState = MatchState.Intro;
+        MatchState prevState = MatchState.Waiting;
 
         static Sprite circleSprite;
         static Font uiFont;
@@ -67,6 +71,12 @@ namespace BrawlArena
         public bool ConsumeAttackPressed()
         {
             return attackButton != null && attackButton.ConsumePressed();
+        }
+
+        /// <summary>Show/hide the combat controls (joystick, buttons, top bar).</summary>
+        public void SetGameplayVisible(bool visible)
+        {
+            if (gameplayRoot != null) gameplayRoot.SetActive(visible);
         }
 
         public void ShowRespawn(float duration)
@@ -137,8 +147,23 @@ namespace BrawlArena
             }
 
             // Attack cooldown ring
+            if (player == null)
+            {
+                var pi = FindFirstObjectByType<PlayerBrawlerInput>();
+                if (pi != null) player = pi.GetComponent<BrawlerController>();
+            }
             if (player != null && cooldownOverlay != null)
                 cooldownOverlay.fillAmount = player.CooldownFraction;
+
+            // Stamina bar
+            if (player != null && staminaFill != null)
+            {
+                float frac = player.maxStamina > 0f ? player.Stamina / player.maxStamina : 0f;
+                staminaFill.fillAmount = frac;
+                staminaFill.color = frac < 0.3f
+                    ? new Color(1f, 0.5f, 0.25f)
+                    : new Color(1f, 0.9f, 0.4f);
+            }
 
             // Editor convenience: R to restart after the match ends.
             if (mm.State == MatchState.Ended && Keyboard.current != null &&
@@ -197,9 +222,14 @@ namespace BrawlArena
             scaler.matchWidthOrHeight = 0.5f;
             Transform root = canvasGo.transform;
 
-            BuildJoystick(root);
-            BuildAttackButton(root);
-            BuildTopBar(root);
+            gameplayRoot = NewRect("GameplayRoot", root);
+            StretchRect((RectTransform)gameplayRoot.transform);
+            Transform gameplay = gameplayRoot.transform;
+
+            BuildJoystick(gameplay);
+            BuildAttackButton(gameplay);
+            BuildSprintControls(gameplay);
+            BuildTopBar(gameplay);
 
             centerText = MakeText("CenterText", root, "", 96, Color.white, TextAnchor.MiddleCenter, true);
             var crt = centerText.rectTransform;
@@ -279,6 +309,49 @@ namespace BrawlArena
             cooldownOverlay.fillOrigin = (int)Image.Origin360.Top;
             cooldownOverlay.fillClockwise = false;
             cooldownOverlay.fillAmount = 0f;
+        }
+
+        void BuildSprintControls(Transform root)
+        {
+            var btn = NewRect("SprintButton", root);
+            var rt = (RectTransform)btn.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(-430f, 150f);
+            rt.sizeDelta = new Vector2(150f, 150f);
+
+            var img = btn.AddComponent<Image>();
+            img.sprite = GetCircleSprite();
+            img.color = new Color(0.3f, 0.6f, 0.95f, 0.85f);
+            sprintButton = btn.AddComponent<AttackButtonWidget>();
+
+            var label = MakeText("Label", btn.transform, "SPRINT", 26, new Color(1f, 1f, 1f, 0.95f), TextAnchor.MiddleCenter, true);
+            StretchRect(label.rectTransform);
+            label.raycastTarget = false;
+
+            // Stamina bar above the button cluster.
+            var barBg = NewRect("StaminaBg", root);
+            var brt = (RectTransform)barBg.transform;
+            brt.anchorMin = brt.anchorMax = new Vector2(1f, 0f);
+            brt.pivot = new Vector2(0.5f, 0.5f);
+            brt.anchoredPosition = new Vector2(-300f, 350f);
+            brt.sizeDelta = new Vector2(330f, 16f);
+            var bgImg = barBg.AddComponent<Image>();
+            bgImg.color = new Color(0f, 0f, 0f, 0.5f);
+            bgImg.raycastTarget = false;
+
+            var fillGo = NewRect("StaminaFill", barBg.transform);
+            var frt = (RectTransform)fillGo.transform;
+            StretchRect(frt);
+            frt.offsetMin = new Vector2(2f, 2f);
+            frt.offsetMax = new Vector2(-2f, -2f);
+            fillGo.AddComponent<Canvas>();
+            staminaFill = fillGo.AddComponent<Image>();
+            staminaFill.sprite = GetWhiteSprite();
+            staminaFill.color = new Color(1f, 0.9f, 0.4f);
+            staminaFill.raycastTarget = false;
+            staminaFill.type = Image.Type.Filled;
+            staminaFill.fillMethod = Image.FillMethod.Horizontal;
         }
 
         void BuildTopBar(Transform root)
@@ -384,6 +457,16 @@ namespace BrawlArena
                 o.effectDistance = new Vector2(2.5f, -2.5f);
             }
             return txt;
+        }
+
+        static Sprite whiteSprite;
+
+        static Sprite GetWhiteSprite()
+        {
+            if (whiteSprite != null) return whiteSprite;
+            var tex = Texture2D.whiteTexture;
+            whiteSprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+            return whiteSprite;
         }
 
         static Sprite GetCircleSprite()
