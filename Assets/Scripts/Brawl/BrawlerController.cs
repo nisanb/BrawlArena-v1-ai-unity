@@ -45,6 +45,13 @@ namespace BrawlArena
         public float staminaRegenPerSec = 20f;
         public float staminaRegenDelay = 0.8f;
 
+        [Header("Health regen")]
+        [Tooltip("Seconds without taking damage before health regen starts.")]
+        public float healthRegenDelay = 3f;
+        [Tooltip("Fraction of max health restored per regen tick.")]
+        public float healthRegenTickFraction = 0.08f;
+        public float healthRegenTickInterval = 0.8f;
+
         [Header("Ranged (leave prefab empty for melee)")]
         public GameObject projectilePrefab;
         public float projectileSpeed = 16f;
@@ -84,6 +91,8 @@ namespace BrawlArena
         float attackLockUntil;
         float nextFlinchTime;
         float staminaRegenAt;
+        float lastDamagedAt;
+        float nextHealthRegenAt;
         bool respawning;
         bool initialized;
 
@@ -177,6 +186,7 @@ namespace BrawlArena
         {
             if (!initialized) return;
             UpdateSprint();
+            UpdateHealthRegen();
 
             if (cc != null && cc.enabled)
             {
@@ -213,6 +223,20 @@ namespace BrawlArena
             {
                 Stamina = Mathf.Min(maxStamina, Stamina + staminaRegenPerSec * Time.deltaTime);
             }
+        }
+
+        /// <summary>
+        /// Out-of-combat recovery: after a few seconds without taking damage,
+        /// health returns in chunky ticks (only taking damage resets the
+        /// timer — dealing damage doesn't pause your own regen).
+        /// </summary>
+        void UpdateHealthRegen()
+        {
+            if (!CanAct || Health.Current >= Health.Max) return;
+            if (Time.time < lastDamagedAt + healthRegenDelay) return;
+            if (Time.time < nextHealthRegenAt) return;
+            nextHealthRegenAt = Time.time + healthRegenTickInterval;
+            Health.Heal(Mathf.Round(Health.Max * healthRegenTickFraction));
         }
 
         // ---------------- animation ----------------
@@ -382,6 +406,7 @@ namespace BrawlArena
 
         void OnDamaged(float amount, GameObject attacker)
         {
+            lastDamagedAt = Time.time;
             if (hitSfx != null) audioSource.PlayOneShot(hitSfx);
             if (IsPlayer) BrawlCamera.Shake(0.28f, 0.18f);
             if (IsDead) return;

@@ -14,6 +14,8 @@ namespace BrawlArena
 
         /// <summary>(damage amount, attacker root object)</summary>
         public event Action<float, GameObject> Damaged;
+        /// <summary>(amount actually restored)</summary>
+        public event Action<float> Healed;
         /// <summary>(attacker root object)</summary>
         public event Action<GameObject> Died;
         public event Action Changed;
@@ -37,6 +39,15 @@ namespace BrawlArena
             Changed?.Invoke();
             Damaged?.Invoke(amount, attacker);
             if (Current <= 0f) Died?.Invoke(attacker);
+        }
+
+        public void Heal(float amount)
+        {
+            if (IsDead || amount <= 0f || Current >= maxHealth) return;
+            float restored = Mathf.Min(amount, maxHealth - Current);
+            Current += restored;
+            Changed?.Invoke();
+            Healed?.Invoke(restored);
         }
 
         public void Revive()

@@ -209,7 +209,9 @@ namespace BrawlArena.EditorAutomation
             {
                 for (int iz = -half; iz < half; iz++)
                 {
-                    bool alt = ((ix + iz) & 1) == 0 && floorPrefab2 != null;
+                    // Mostly Floor1 with scattered Floor2 accents — strict
+                    // alternation read as a chess board from the game camera.
+                    bool alt = floorPrefab2 != null && rng.NextDouble() < 0.15;
                     var prefab = alt ? floorPrefab2 : floorPrefab;
                     var t = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
                     t.transform.SetParent(groundRoot, false);
@@ -423,9 +425,10 @@ namespace BrawlArena.EditorAutomation
             gems.minePosition = Vector3.zero;
 
             var popups = systems.AddComponent<DamagePopups>();
-            var (enemyHit, allyHurt) = ThemeKit.EnsureDnpPrefabs();
+            var (enemyHit, allyHurt, heal) = ThemeKit.EnsureDnpPrefabs();
             popups.enemyHitPrefab = enemyHit;
             popups.allyHurtPrefab = allyHurt;
+            popups.healPrefab = heal;
 
             ThemeKit.CreateThemeObject();
 

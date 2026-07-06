@@ -84,13 +84,21 @@ namespace BrawlArena.EditorAutomation
         /// tune them for brawl hits: pooling on, bigger numbers for bigger
         /// hits, short lifetime so spam stays readable.
         /// </summary>
-        public static (DamageNumberMesh enemyHit, DamageNumberMesh allyHurt) EnsureDnpPrefabs()
+        public static (DamageNumberMesh enemyHit, DamageNumberMesh allyHurt, DamageNumberMesh heal) EnsureDnpPrefabs()
         {
             System.IO.Directory.CreateDirectory(DnpOut);
             var hit = EnsureVariant("Clear.prefab", "EnemyHit.prefab");
             var hurt = EnsureVariant("Red Glow.prefab", "AllyHurt.prefab");
+            var heal = EnsureVariant("Clear.prefab", "Heal.prefab");
+            if (heal != null)
+            {
+                // "+27" instead of a bare number; DamagePopups tints it green.
+                heal.enableLeftText = true;
+                heal.leftText = "+";
+                EditorUtility.SetDirty(heal);
+            }
             AssetDatabase.SaveAssets();
-            return (hit, hurt);
+            return (hit, hurt, heal);
         }
 
         static DamageNumberMesh EnsureVariant(string source, string dest)
