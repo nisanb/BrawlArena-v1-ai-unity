@@ -130,6 +130,16 @@ namespace BrawlArena.EditorAutomation
                 case "build_scene":
                     result.message = ArenaSceneBuilder.BuildArenaScene();
                     break;
+                case "build_menu":
+                    result.message = MenuSceneBuilder.BuildMenuScene();
+                    break;
+                case "open_scene":
+                {
+                    string path = string.IsNullOrEmpty(cmd.arg) ? "Assets/Scenes/Arena.unity" : cmd.arg;
+                    UnityEditor.SceneManagement.EditorSceneManager.OpenScene(path);
+                    result.message = "opened " + path;
+                    break;
+                }
                 case "screenshot_scene":
                     result.message = ArenaSceneBuilder.CaptureSceneOverview();
                     break;
@@ -178,6 +188,11 @@ namespace BrawlArena.EditorAutomation
             var flow = UnityEngine.Object.FindFirstObjectByType<GameFlow>();
             sb.AppendLine("gameFlow=" + (flow != null ? $"present rosterLen={(flow.roster != null ? flow.roster.Length : -1)}" : "MISSING"));
             sb.AppendLine("flowPhase=" + GameFlow.DebugPhase);
+            sb.AppendLine("menuPhase=" + MainMenuFlow.DebugPhase);
+            var gems = UnityEngine.Object.FindFirstObjectByType<GemGrabManager>();
+            if (gems != null && gems.ActiveMode)
+                sb.AppendLine($"gems blue={gems.TeamGems(TeamId.Blue)} red={gems.TeamGems(TeamId.Red)} " +
+                              $"countdown={(gems.CountdownTeam.HasValue ? gems.CountdownTeam.Value + ":" + gems.CountdownRemaining.ToString("0.0") : "none")}");
             var mmObj = UnityEngine.Object.FindFirstObjectByType<MatchManager>();
             sb.AppendLine($"mmByFind={(mmObj != null)} mmStatic={(MatchManager.Instance != null)}");
             var mm = MatchManager.Instance;

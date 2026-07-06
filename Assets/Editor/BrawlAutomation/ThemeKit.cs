@@ -1,0 +1,115 @@
+using DamageNumbersPro;
+using TMPro;
+using UnityEditor;
+using UnityEngine;
+
+namespace BrawlArena.EditorAutomation
+{
+    /// <summary>
+    /// Shared wiring of the Layer Lab GUI Pro sprites/fonts into a scene
+    /// UiTheme object, plus creation of the project-owned DamageNumbersPro
+    /// prefab variants. Used by both Arena and MainMenu scene builders.
+    /// </summary>
+    public static class ThemeKit
+    {
+        const string Gui = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/";
+        const string Dnp = "Assets/DamageNumbersPro/Demo/Prefabs/3D/";
+        const string DnpOut = "Assets/Prefabs/DNP/";
+
+        /// <summary>Load a sprite tolerating the pack's mixed .png/.Png casing.</summary>
+        static Sprite LoadSprite(string pathNoExt)
+        {
+            var s = AssetDatabase.LoadAssetAtPath<Sprite>(pathNoExt + ".png");
+            if (s == null) s = AssetDatabase.LoadAssetAtPath<Sprite>(pathNoExt + ".Png");
+            if (s == null) Debug.LogWarning("[ThemeKit] missing sprite: " + pathNoExt);
+            return s;
+        }
+
+        static TMP_FontAsset LoadFont(string file)
+        {
+            var f = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(Gui + "Fonts/" + file);
+            if (f == null) Debug.LogWarning("[ThemeKit] missing font: " + file);
+            return f;
+        }
+
+        public static UiTheme CreateThemeObject()
+        {
+            var go = new GameObject("UiTheme");
+            var t = go.AddComponent<UiTheme>();
+
+            t.headingFont = LoadFont("LilitaOne-Regular Outline 120 SDF.asset");
+            t.buttonFont = LoadFont("LilitaOne-Regular Outline 54 SDF.asset");
+            t.bodyFont = LoadFont("LilitaOne-Regular SDF.asset");
+
+            string c = Gui + "Sprites/Components/";
+            t.panel = LoadSprite(c + "Frame/PanelFrame01_Round_Bg");
+            t.frame = LoadSprite(c + "Frame/BasicFrame_Round12");
+            t.ribbon = LoadSprite(c + "Label/Title_Ribbon_Bg_Blue");
+            t.labelChip = LoadSprite(c + "Label/Label_Round01_White");
+            t.card = LoadSprite(c + "Frame/CardFrame06_Bg_Blue");
+            t.cardFocus = LoadSprite(c + "Frame/CardFrame04_Focus");
+            t.glow = LoadSprite(c + "Popup/Common_Popup_Glow");
+            t.additiveMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                Gui + "Shader & Materials/UIAdditive.mat");
+
+            t.buttonYellow = LoadSprite(c + "Button/Button01_225_Yellow");
+            t.buttonGreen = LoadSprite(c + "Button/Button01_175_Green");
+            t.buttonBlue = LoadSprite(c + "Button/Button01_175_Blue");
+            t.buttonRed = LoadSprite(c + "Button/Button01_175_Red");
+            t.buttonRound = LoadSprite(c + "Button/Button_Circle147_White");
+            t.arrowLeft = LoadSprite(c + "IconMisc/Icon_PictoIcon_Prev01");
+            t.arrowRight = LoadSprite(c + "IconMisc/Icon_PictoIcon_Next01");
+
+            t.barBg = LoadSprite(c + "Slider/Slider_Basic01_Bg");
+            t.barFillYellow = LoadSprite(c + "Slider/Slider_Basic01_Fill_White");
+            t.barFillGreen = t.barFillYellow;
+            t.barFillBlue = t.barFillYellow;
+            t.barFillRed = t.barFillYellow;
+
+            t.gemIcon = LoadSprite(c + "IconMisc/Icon_ImageIcon_Gem01_l");
+            t.trophyIcon = LoadSprite(c + "IconMisc/Icon_ImageIcon_Trophy_l");
+            t.swordIcon = LoadSprite(c + "IconMisc/Icon_ImageIcon_Knife_Battle");
+            t.timerIcon = LoadSprite(c + "IconMisc/Icon_PictoIcon_Time");
+            return t;
+        }
+
+        /// <summary>
+        /// Copy two DNP demo presets into project-owned prefabs (once) and
+        /// tune them for brawl hits: pooling on, bigger numbers for bigger
+        /// hits, short lifetime so spam stays readable.
+        /// </summary>
+        public static (DamageNumberMesh enemyHit, DamageNumberMesh allyHurt) EnsureDnpPrefabs()
+        {
+            System.IO.Directory.CreateDirectory(DnpOut);
+            var hit = EnsureVariant("Clear.prefab", "EnemyHit.prefab");
+            var hurt = EnsureVariant("Red Glow.prefab", "AllyHurt.prefab");
+            AssetDatabase.SaveAssets();
+            return (hit, hurt);
+        }
+
+        static DamageNumberMesh EnsureVariant(string source, string dest)
+        {
+            string destPath = DnpOut + dest;
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(destPath) == null)
+            {
+                if (!AssetDatabase.CopyAsset(Dnp + source, destPath))
+                {
+                    Debug.LogError("[ThemeKit] failed to copy DNP prefab " + source);
+                    return null;
+                }
+            }
+            var dn = AssetDatabase.LoadAssetAtPath<DamageNumberMesh>(destPath);
+            if (dn == null) return null;
+            dn.enablePooling = true;
+            dn.poolSize = 60;
+            dn.lifetime = 0.85f;
+            dn.enableScaleByNumber = true;
+            dn.scaleByNumberSettings.fromNumber = 10f;
+            dn.scaleByNumberSettings.toNumber = 40f;
+            dn.scaleByNumberSettings.fromScale = 0.85f;
+            dn.scaleByNumberSettings.toScale = 1.6f;
+            EditorUtility.SetDirty(dn);
+            return dn;
+        }
+    }
+}

@@ -28,7 +28,10 @@ namespace BrawlArena
         Text timerText;
         Text blueScoreText;
         Text redScoreText;
+        GameObject blueGemIcon;
+        GameObject redGemIcon;
         Text centerText;
+        UiTheme theme;
         Text respawnText;
         Text bannerTitle;
         Text bannerSub;
@@ -51,6 +54,9 @@ namespace BrawlArena
         {
             Instance = this;
             uiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            // Direct lookup instead of UiTheme.Instance: both Awake in the same
+            // frame and the order is not guaranteed.
+            theme = FindFirstObjectByType<UiTheme>();
             EnsureEventSystem();
             Build();
         }
@@ -103,16 +109,25 @@ namespace BrawlArena
                 timerText.text = $"{secs / 60}:{secs % 60:00}";
             }
 
-            // Scores
-            if (mm.BlueScore != lastBlue)
+            // Scores: KOs in Knockout, held gems in Gem Grab.
+            bool gemMode = mm.mode == GameMode.GemGrab && GemGrabManager.Instance != null;
+            var gems = GemGrabManager.Instance;
+            int blueValue = gemMode ? gems.TeamGems(TeamId.Blue) : mm.BlueScore;
+            int redValue = gemMode ? gems.TeamGems(TeamId.Red) : mm.RedScore;
+            if (blueValue != lastBlue)
             {
-                lastBlue = mm.BlueScore;
-                blueScoreText.text = lastBlue.ToString();
+                lastBlue = blueValue;
+                blueScoreText.text = blueValue.ToString();
             }
-            if (mm.RedScore != lastRed)
+            if (redValue != lastRed)
             {
-                lastRed = mm.RedScore;
-                redScoreText.text = lastRed.ToString();
+                lastRed = redValue;
+                redScoreText.text = redValue.ToString();
+            }
+            if (blueGemIcon != null && blueGemIcon.activeSelf != gemMode)
+            {
+                blueGemIcon.SetActive(gemMode);
+                redGemIcon.SetActive(gemMode);
             }
 
             // Intro -> FIGHT! flash
@@ -124,11 +139,21 @@ namespace BrawlArena
             {
                 centerText.gameObject.SetActive(true);
                 centerText.text = "GET READY...";
+                centerText.color = Color.white;
             }
             else if (Time.time < fightFlashUntil)
             {
                 centerText.gameObject.SetActive(true);
                 centerText.text = "FIGHT!";
+                centerText.color = Color.white;
+            }
+            else if (gemMode && gems.CountdownTeam.HasValue && mm.State == MatchState.Playing)
+            {
+                centerText.gameObject.SetActive(true);
+                int secs2 = Mathf.CeilToInt(gems.CountdownRemaining);
+                centerText.text = (gems.CountdownTeam.Value == TeamId.Blue ? "BLUE" : "RED") +
+                                  " WINS IN " + secs2;
+                centerText.color = TeamUtil.Color(gems.CountdownTeam.Value);
             }
             else
             {
@@ -227,9 +252,11 @@ namespace BrawlArena
             Transform gameplay = gameplayRoot.transform;
 
             BuildJoystick(gameplay);
+            BuildCameraDragZone(gameplay);
             BuildAttackButton(gameplay);
             BuildSprintControls(gameplay);
             BuildTopBar(gameplay);
+            BuildKillFeed(gameplay);
 
             centerText = MakeText("CenterText", root, "", 96, Color.white, TextAnchor.MiddleCenter, true);
             var crt = centerText.rectTransform;
@@ -276,6 +303,32 @@ namespace BrawlArena
             Joystick.radius = 105f;
             // VirtualJoystick.Awake ran before baseRect was assigned, so hide it here.
             joyBase.SetActive(false);
+        }
+
+        void BuildCameraDragZone(Transform root)
+        {
+            // Right half of the screen orbits the camera. Added before the
+            // attack/sprint buttons so they stay on top for raycasts.
+            var zone = NewRect("CameraDragZone", root);
+            var rt = (RectTransform)zone.transform;
+            rt.anchorMin = new Vector2(0.5f, 0f);
+            rt.anchorMax = new Vector2(1f, 0.85f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var img = zone.AddComponent<Image>();
+            img.color = new Color(1f, 1f, 1f, 0f);
+            zone.AddComponent<CameraDragZone>();
+        }
+
+        void BuildKillFeed(Transform root)
+        {
+            var feed = NewRect("KillFeed", root);
+            var rt = (RectTransform)feed.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.anchoredPosition = new Vector2(24f, -110f);
+            rt.sizeDelta = new Vector2(430f, 240f);
+            feed.AddComponent<KillFeed>();
         }
 
         void BuildAttackButton(Transform root)
@@ -362,11 +415,11 @@ namespace BrawlArena
             trt.anchoredPosition = new Vector2(0f, -55f);
             trt.sizeDelta = new Vector2(240f, 80f);
 
-            blueScoreText = MakeScoreChip(root, TeamId.Blue, new Vector2(-210f, -55f));
-            redScoreText = MakeScoreChip(root, TeamId.Red, new Vector2(210f, -55f));
+            blueScoreText = MakeScoreChip(root, TeamId.Blue, new Vector2(-210f, -55f), out blueGemIcon);
+            redScoreText = MakeScoreChip(root, TeamId.Red, new Vector2(210f, -55f), out redGemIcon);
         }
 
-        Text MakeScoreChip(Transform root, TeamId team, Vector2 pos)
+        Text MakeScoreChip(Transform root, TeamId team, Vector2 pos, out GameObject gemIcon)
         {
             var chip = NewRect(team + "Chip", root);
             var rt = (RectTransform)chip.transform;
@@ -374,9 +427,34 @@ namespace BrawlArena
             rt.anchoredPosition = pos;
             rt.sizeDelta = new Vector2(150f, 66f);
             var img = chip.AddComponent<Image>();
-            img.sprite = GetCircleSprite();
+            if (theme != null && theme.labelChip != null)
+            {
+                img.sprite = theme.labelChip;
+                img.type = Image.Type.Sliced;
+            }
+            else
+            {
+                img.sprite = GetCircleSprite();
+            }
             img.color = TeamUtil.Color(team);
             img.raycastTarget = false;
+
+            // Gem icon shown only in Gem Grab, outward of each chip.
+            gemIcon = null;
+            if (theme != null && theme.gemIcon != null)
+            {
+                gemIcon = NewRect("GemIcon", chip.transform);
+                var grt = (RectTransform)gemIcon.transform;
+                float side = pos.x < 0f ? -1f : 1f;
+                grt.anchorMin = grt.anchorMax = new Vector2(0.5f, 0.5f);
+                grt.anchoredPosition = new Vector2(side * 95f, 0f);
+                grt.sizeDelta = new Vector2(52f, 60f);
+                var gi = gemIcon.AddComponent<Image>();
+                gi.sprite = theme.gemIcon;
+                gi.preserveAspect = true;
+                gi.raycastTarget = false;
+                gemIcon.SetActive(false);
+            }
 
             var txt = MakeText("Score", chip.transform, "0", 44, Color.white, TextAnchor.MiddleCenter, true);
             StretchRect(txt.rectTransform);
@@ -417,6 +495,30 @@ namespace BrawlArena
             srt.anchorMin = srt.anchorMax = new Vector2(0.5f, 0.4f);
             srt.sizeDelta = new Vector2(1000f, 80f);
             bannerSub.raycastTarget = false;
+
+            // Back to the main menu, when the menu scene is in the build list.
+            if (Application.CanStreamedLevelBeLoaded("MainMenu"))
+            {
+                var menuBtn = NewRect("MenuButton", bannerRoot.transform);
+                var mrt = (RectTransform)menuBtn.transform;
+                mrt.anchorMin = mrt.anchorMax = new Vector2(0.5f, 0.26f);
+                mrt.sizeDelta = new Vector2(320f, 96f);
+                var img = menuBtn.AddComponent<Image>();
+                if (theme != null && theme.buttonBlue != null)
+                {
+                    img.sprite = theme.buttonBlue;
+                    img.type = Image.Type.Sliced;
+                }
+                else
+                {
+                    img.color = new Color(0.2f, 0.45f, 0.9f, 0.95f);
+                }
+                var btn = menuBtn.AddComponent<Button>();
+                btn.onClick.AddListener(() => SceneManager.LoadScene("MainMenu"));
+                var label = MakeText("Label", menuBtn.transform, "MENU", 40, Color.white, TextAnchor.MiddleCenter, true);
+                StretchRect(label.rectTransform);
+                label.raycastTarget = false;
+            }
 
             bannerRoot.SetActive(false);
         }

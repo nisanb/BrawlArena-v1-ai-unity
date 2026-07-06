@@ -15,6 +15,7 @@ namespace BrawlArena
         public string id;
         public string displayName;
         public string role;
+        [TextArea] public string description;
         public GameObject prefab;
         public string animSuffix;
         public string[] attackStates;
@@ -68,7 +69,14 @@ namespace BrawlArena
             {
                 if (!Application.isEditor) return false;
                 string flag = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Automation", "autopilot.flag");
-                return File.Exists(flag);
+                if (!File.Exists(flag)) return false;
+                // Flag content selects the mode for unattended tests ("gemgrab").
+                try
+                {
+                    if (File.ReadAllText(flag).Contains("gemgrab")) MatchSetup.Mode = GameMode.GemGrab;
+                }
+                catch { }
+                return true;
             }
         }
 
@@ -80,6 +88,17 @@ namespace BrawlArena
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUi();
             if (BrawlHUD.Instance != null) BrawlHUD.Instance.SetGameplayVisible(false);
+
+            // Launched from the main menu: character and mode already chosen.
+            // Under the test harness the player must still be bot-driven.
+            if (MatchSetup.CharacterIndex >= 0 && MatchSetup.CharacterIndex < roster.Length)
+            {
+                DebugPhase = "menu-selection " + MatchSetup.CharacterIndex;
+                selectPanel.SetActive(false);
+                StartCoroutine(LoadAndSpawn(MatchSetup.CharacterIndex, AutopilotRequested));
+                return;
+            }
+
             bool auto = AutopilotRequested;
             DebugPhase = "started autopilot=" + auto;
             if (auto) StartCoroutine(AutoPick());
@@ -119,8 +138,12 @@ namespace BrawlArena
             DebugPhase = "spawned";
             loadingPanel.SetActive(false);
             if (BrawlHUD.Instance != null) BrawlHUD.Instance.SetGameplayVisible(true);
-            if (MatchManager.Instance != null) MatchManager.Instance.BeginMatch();
-            DebugPhase = "match-begun";
+            if (MatchManager.Instance != null)
+            {
+                MatchManager.Instance.mode = MatchSetup.Mode;
+                MatchManager.Instance.BeginMatch();
+            }
+            DebugPhase = "match-begun mode=" + MatchSetup.Mode;
         }
 
         void SpawnAll(int playerIndex, bool autopilot)

@@ -130,13 +130,24 @@ namespace BrawlArena.EditorAutomation
 
             Directory.CreateDirectory("Assets/Scenes");
             EditorSceneManager.SaveScene(scene, ScenePath);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            RegisterBuildScenes();
             EnsureAlwaysIncludedShader("Universal Render Pipeline/Unlit");
             TunePipelineAssets();
             AssetDatabase.SaveAssets();
 
             Report.AppendLine("Scene saved: " + ScenePath);
             return Report.ToString();
+        }
+
+        /// <summary>MainMenu first (when built), then Arena.</summary>
+        internal static void RegisterBuildScenes()
+        {
+            var list = new List<EditorBuildSettingsScene>();
+            const string menuPath = "Assets/Scenes/MainMenu.unity";
+            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(menuPath) != null)
+                list.Add(new EditorBuildSettingsScene(menuPath, true));
+            list.Add(new EditorBuildSettingsScene(ScenePath, true));
+            EditorBuildSettings.scenes = list.ToArray();
         }
 
         static GameObject Load(string path)
@@ -271,8 +282,12 @@ namespace BrawlArena.EditorAutomation
             Place(Arena + "Props/Barrel01.prefab", new Vector3(13.1f, 0f, -0.4f), 130f, props, 1f, true);
             Place(Arena + "Props/Plank.prefab", new Vector3(12.4f, 0f, -2.3f), 15f, props);
 
-            // Center accent: broken chariot slightly off-middle.
-            Place(Arena + "Props/Chariot.prefab", new Vector3(2.5f, 0f, 0.5f), -35f, props, 1f, true);
+            // Broken chariot as side accent — kept clear of the center so the
+            // Gem Grab mine area stays walkable.
+            Place(Arena + "Props/Chariot.prefab", new Vector3(7f, 0f, 5f), -35f, props, 1f, true);
+
+            // Gem mine marker: small crystal cluster dead center.
+            Place(Arena + "Rocks/Crystal2.prefab", new Vector3(0f, 0f, 0f), 15f, props, 0.55f, true);
 
             // Crystals glowing near the corners.
             Place(Arena + "Rocks/Crystal1.prefab", new Vector3(-16f, 0f, 14f), 30f, props, 1.2f, true);
@@ -401,6 +416,16 @@ namespace BrawlArena.EditorAutomation
                 Spawn("RedSpawn2", new Vector3(4f, 0f, 16f)),
             };
 
+            var gems = systems.AddComponent<GemGrabManager>();
+            gems.minePosition = Vector3.zero;
+
+            var popups = systems.AddComponent<DamagePopups>();
+            var (enemyHit, allyHurt) = ThemeKit.EnsureDnpPrefabs();
+            popups.enemyHitPrefab = enemyHit;
+            popups.allyHurtPrefab = allyHurt;
+
+            ThemeKit.CreateThemeObject();
+
             var hud = new GameObject("HUD");
             hud.AddComponent<BrawlHUD>();
 
@@ -409,7 +434,7 @@ namespace BrawlArena.EditorAutomation
         }
 
         static BrawlerDefinition Def(
-            string id, string name, string role, string prefabFile, string suffix, string controllerFile,
+            string id, string name, string role, string desc, string prefabFile, string suffix, string controllerFile,
             string[] attacks, float hp, float dmg, float range, float radius, float cd, float hitDelay,
             float moveLock, float speed, float aim, string projectile, float projSpeed,
             string swing, string impact, string ko, string spawn)
@@ -419,6 +444,7 @@ namespace BrawlArena.EditorAutomation
                 id = id,
                 displayName = name,
                 role = role,
+                description = desc,
                 prefab = Load(Chars + prefabFile),
                 animSuffix = suffix,
                 attackStates = VerifyAttackStates(Anims + controllerFile, suffix, attacks),
@@ -466,33 +492,45 @@ namespace BrawlArena.EditorAutomation
             return valid;
         }
 
-        static BrawlerDefinition[] BuildRoster()
+        internal static BrawlerDefinition[] BuildRoster()
         {
             return new[]
             {
-                Def("aria", "Aria", "Twin-Blade Duelist", "DoubleSword01.prefab", "DoubleSword", "DoubleSwords.controller",
+                Def("aria", "Aria", "Twin-Blade Duelist",
+                    "A whirlwind of arcane steel. Aria darts between enemies and shreds them up close with fast twin-sword combos before they can react.",
+                    "DoubleSword01.prefab", "DoubleSword", "DoubleSwords.controller",
                     new[] { "NormalAttack01_DoubleSword", "NormalAttack02_DoubleSword" },
                     120f, 20f, 2.3f, 1.6f, 0.75f, 0.32f, 0.4f, 5.4f, 3.8f, null, 0f,
                     "Slash/ArcaneSlash", "Slash Hit/ArcaneSlashHit", "Nova/NovaArcane", "Muzzleflash/Big/ArcaneMuzzleBig"),
-                Def("bastion", "Bastion", "Shield Vanguard", "SwordAndShield01.prefab", "SwordShield", "SwordShield.controller",
+                Def("bastion", "Bastion", "Shield Vanguard",
+                    "The immovable wall. Bastion soaks up punishment on the front line and grinds enemies down with frost-touched shield strikes.",
+                    "SwordAndShield01.prefab", "SwordShield", "SwordShield.controller",
                     new[] { "NormalAttack01_SwordShield", "NormalAttack02_SwordShield" },
                     150f, 16f, 2.2f, 1.6f, 1.1f, 0.38f, 0.5f, 4.6f, 3.4f, null, 0f,
                     "Slash/FrostSlash", "Slash Hit/FrostSlashHit", "Nova/NovaFrost", "Muzzleflash/Big/FrostMuzzleBig"),
-                Def("nova", "Nova", "Storm Mage", "MagicWand02.prefab", "MagicWand", "MagicWand.controller",
+                Def("nova", "Nova", "Storm Mage",
+                    "Fragile but ferocious. Nova rains storm bolts from long range — keep your distance, keep casting, and never let them close the gap.",
+                    "MagicWand02.prefab", "MagicWand", "MagicWand.controller",
                     new[] { "Attack01_MagicWand", "Attack02_MagicWand" },
                     85f, 18f, 8f, 1.2f, 1.3f, 0.42f, 0.35f, 4.9f, 10f,
                     "Missiles & Explosions/Storm/StormMissileNormal", 15f,
                     "Muzzleflash/Normal/StormMuzzleNormal", "Missiles & Explosions/Storm/StormExplosionSmall",
                     "Nova/NovaStorm", "Muzzleflash/Big/StormMuzzleBig"),
-                Def("grimm", "Grimm", "Greatsword Bruiser", "SingleTwoHandSword03.prefab", "SingleTwohandSword", "SingleTwoHandSword.controller",
+                Def("grimm", "Grimm", "Greatsword Bruiser",
+                    "Slow wind-up, devastating payoff. Grimm's flaming greatsword hits harder than anything in the arena — every swing has to count.",
+                    "SingleTwoHandSword03.prefab", "SingleTwohandSword", "SingleTwoHandSword.controller",
                     new[] { "NormalAttack01_SingleTwohandSword", "NormalAttack02_SingleTwohandSword" },
                     135f, 28f, 2.5f, 1.8f, 1.35f, 0.45f, 0.55f, 4.7f, 3.6f, null, 0f,
                     "Slash/FireSlash", "Slash Hit/FireSlashHit", "Nova/NovaFire", "Muzzleflash/Big/FireMuzzleBig"),
-                Def("vex", "Vex", "Shadow Skirmisher", "DoubleSword05.prefab", "DoubleSword", "DoubleSwords.controller",
+                Def("vex", "Vex", "Shadow Skirmisher",
+                    "Strike from the dark. Vex slips along the arena's edges, ambushes stragglers with shadow blades, and vanishes before help arrives.",
+                    "DoubleSword05.prefab", "DoubleSword", "DoubleSwords.controller",
                     new[] { "NormalAttack01_DoubleSword", "NormalAttack02_DoubleSword" },
                     110f, 19f, 2.3f, 1.6f, 0.8f, 0.32f, 0.4f, 5.3f, 3.6f, null, 0f,
                     "Slash/ShadowSlash", "Slash Hit/ShadowSlashHit", "Nova/NovaShadow", "Muzzleflash/Big/ShadowMuzzleBig"),
-                Def("thorn", "Thorn", "Earth Ranger", "Bow02.prefab", "Bow", "Bow.controller",
+                Def("thorn", "Thorn", "Earth Ranger",
+                    "Patient and precise. Thorn's earth-forged arrows control the long lanes — pin enemies at range and let the arena crumble beneath them.",
+                    "Bow02.prefab", "Bow", "Bow.controller",
                     new[] { "Attack01_Bow", "Attack02_Bow" },
                     85f, 22f, 8.5f, 1.2f, 1.5f, 0.5f, 0.4f, 4.8f, 11f,
                     "Missiles & Explosions/Earth/EarthMissileNormal", 20f,

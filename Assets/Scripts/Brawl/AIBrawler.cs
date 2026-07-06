@@ -90,10 +90,18 @@ namespace BrawlArena
             target = PickTarget();
 
             float hpPct = self.Health.Current / Mathf.Max(1f, self.Health.Max);
+            // Heavy gem carriers play safer: bail out of fights earlier.
+            float retreatAt = retreatBelowPct + (CarriedGems() >= 4 ? 0.17f : 0f);
             if (retreating && hpPct >= resumeAbovePct) retreating = false;
-            else if (!retreating && hpPct <= retreatBelowPct) retreating = true;
+            else if (!retreating && hpPct <= retreatAt) retreating = true;
+            // HP never regenerates, so a hurt bot with no pursuer must fight
+            // on or it would hide in a corner for the rest of the match.
+            if (retreating && (target == null ||
+                PlanarDistance(transform.position, target.transform.position) > 12f))
+                retreating = false;
 
             if (!agent.enabled || !agent.isOnNavMesh) return;
+            if (!retreating && ThinkGems()) return;
             if (target == null)
             {
                 if (agent.hasPath) agent.ResetPath();
@@ -128,6 +136,49 @@ namespace BrawlArena
             if (NavMesh.SamplePosition(dest, out NavMeshHit hit, 3f, NavMesh.AllAreas))
                 dest = hit.position;
             agent.SetDestination(dest);
+        }
+
+        int CarriedGems()
+        {
+            return GemGrabManager.Instance != null ? GemGrabManager.Instance.CarriedBy(self) : 0;
+        }
+
+        /// <summary>
+        /// Gem Grab priorities. True when this think tick already chose a
+        /// destination: collect nearby loose gems unless an enemy is breathing
+        /// down our neck, and once our team's countdown is running, carriers
+        /// fall back toward their own spawn line to protect the lead.
+        /// </summary>
+        bool ThinkGems()
+        {
+            var mgr = GemGrabManager.Instance;
+            if (mgr == null || !mgr.ActiveMode) return false;
+
+            // Protect the lead: countdown running for us and we hold gems.
+            if (mgr.CountdownTeam == self.team && CarriedGems() > 0)
+            {
+                float homeZ = self.team == TeamId.Blue ? -14f : 14f;
+                Vector3 home = new Vector3(transform.position.x * 0.5f, 0f, homeZ);
+                if (NavMesh.SamplePosition(home, out NavMeshHit safeHit, 4f, NavMesh.AllAreas))
+                {
+                    agent.SetDestination(safeHit.position);
+                    return true;
+                }
+            }
+
+            var gem = mgr.NearestLooseGem(transform.position);
+            if (gem == null) return false;
+
+            float gemDist = PlanarDistance(transform.position, gem.transform.position);
+            float enemyDist = target != null && !target.IsDead
+                ? PlanarDistance(transform.position, target.transform.position)
+                : float.MaxValue;
+
+            // Fight instead when an enemy is close and the gem isn't a snap grab.
+            if (enemyDist < 5f && gemDist > 3f) return false;
+
+            agent.SetDestination(gem.transform.position);
+            return true;
         }
 
         BrawlerController PickTarget()

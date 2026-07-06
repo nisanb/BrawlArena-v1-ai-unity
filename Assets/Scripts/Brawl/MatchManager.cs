@@ -23,7 +23,9 @@ namespace BrawlArena
         public static MatchManager Instance { get; private set; }
 
         [Header("Rules")]
+        public GameMode mode = GameMode.Knockout;
         public float matchDuration = 150f;
+        [Tooltip("KO score that ends a Knockout match. Ignored in Gem Grab.")]
         public int scoreToWin = 2;
         public float respawnDelay = 2.5f;
         public float introDuration = 1.6f;
@@ -40,6 +42,8 @@ namespace BrawlArena
         public int RedScore { get; private set; }
 
         public event Action ScoreChanged;
+        /// <summary>(victim, attacker) — attacker may be null (environment).</summary>
+        public event Action<BrawlerController, BrawlerController> Kill;
         /// <summary>Winner, or null on a draw.</summary>
         public event Action<TeamId?> MatchEnded;
 
@@ -84,14 +88,26 @@ namespace BrawlArena
             if (TimeRemaining <= 0f)
             {
                 TimeRemaining = 0f;
-                if (BlueScore == RedScore) EndMatch(null);
-                else EndMatch(BlueScore > RedScore ? TeamId.Blue : TeamId.Red);
+                EndMatch(TimeoutWinner());
             }
         }
 
+        TeamId? TimeoutWinner()
+        {
+            if (mode == GameMode.GemGrab && GemGrabManager.Instance != null)
+                return GemGrabManager.Instance.LeadingTeam();
+            if (BlueScore == RedScore) return null;
+            return BlueScore > RedScore ? TeamId.Blue : TeamId.Red;
+        }
+
+        /// <summary>Fires for every brawler that joins (spawned any time).</summary>
+        public event Action<BrawlerController> BrawlerRegistered;
+
         public void Register(BrawlerController b)
         {
-            if (!brawlers.Contains(b)) brawlers.Add(b);
+            if (brawlers.Contains(b)) return;
+            brawlers.Add(b);
+            BrawlerRegistered?.Invoke(b);
         }
 
         public List<BrawlerController> GetBrawlers()
@@ -103,8 +119,10 @@ namespace BrawlArena
         {
             if (State == MatchState.Ended) return;
 
-            TeamId scoringTeam = TeamUtil.Other(victim.team);
             var attacker = attackerGo != null ? attackerGo.GetComponentInParent<BrawlerController>() : null;
+            Kill?.Invoke(victim, attacker);
+
+            TeamId scoringTeam = TeamUtil.Other(victim.team);
             if (attacker != null) scoringTeam = attacker.team;
             if (scoringTeam == victim.team) return;
 
@@ -112,8 +130,14 @@ namespace BrawlArena
             else RedScore++;
             ScoreChanged?.Invoke();
 
-            if (BlueScore >= scoreToWin || RedScore >= scoreToWin)
+            if (mode == GameMode.Knockout && (BlueScore >= scoreToWin || RedScore >= scoreToWin))
                 EndMatch(BlueScore >= scoreToWin ? TeamId.Blue : TeamId.Red);
+        }
+
+        /// <summary>Mode managers (Gem Grab countdown) end the match through this.</summary>
+        public void DeclareWinner(TeamId? winner)
+        {
+            EndMatch(winner);
         }
 
         /// <summary>Pick the team spawn farthest from living enemies.</summary>
