@@ -180,7 +180,9 @@ namespace BrawlArena
 
             if (cc != null && cc.enabled)
             {
-                Vector3 planar = (CanAct && !MovementLocked) ? moveInput * CurrentSpeed : Vector3.zero;
+                // Attacking does not lock movement: swings re-aim at the
+                // target when damage lands, so kiting mid-swing stays fair.
+                Vector3 planar = CanAct ? moveInput * CurrentSpeed : Vector3.zero;
                 cc.Move((planar + Vector3.down * 15f) * Time.deltaTime);
                 if (planar.sqrMagnitude > 0.04f)
                 {
@@ -201,7 +203,7 @@ namespace BrawlArena
             bool moving = cc != null
                 ? moveInput.sqrMagnitude > 0.04f
                 : agent != null && agent.enabled && agent.velocity.sqrMagnitude > 0.2f;
-            Sprinting = sprintInput && moving && Stamina > 0f && CanAct && !MovementLocked;
+            Sprinting = sprintInput && moving && Stamina > 0f && CanAct;
             if (Sprinting)
             {
                 Stamina = Mathf.Max(0f, Stamina - staminaDrainPerSec * Time.deltaTime);

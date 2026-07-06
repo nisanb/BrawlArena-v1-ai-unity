@@ -55,8 +55,16 @@ namespace BrawlArena.EditorAutomation
                     if (Time.frameCount == lastPumpFrame) stallTicks++;
                     else stallTicks = 0;
                     lastPumpFrame = Time.frameCount;
-                    if (stallTicks >= 3) EditorApplication.Step();
-                    else EditorApplication.QueuePlayerLoopUpdate();
+                    if (stallTicks >= 3)
+                    {
+                        // Update ticks are sparse in a background editor; step
+                        // several frames per tick or matches run in slow motion.
+                        for (int i = 0; i < 4; i++) EditorApplication.Step();
+                    }
+                    else
+                    {
+                        EditorApplication.QueuePlayerLoopUpdate();
+                    }
                 }
                 else if (!EditorApplication.isPaused)
                 {

@@ -54,12 +54,9 @@ namespace BrawlArena
                 return;
             }
 
-            if (self.MovementLocked)
-            {
-                // Hold position while the attack swing plays, like the player does.
-                if (agent.enabled && agent.isOnNavMesh && agent.hasPath) agent.ResetPath();
-            }
-            else if (Time.time >= nextThink)
+            // Attacks don't interrupt movement (swings re-aim when damage
+            // lands), so bots keep pathing straight through their swings.
+            if (Time.time >= nextThink)
             {
                 Think();
                 nextThink = Time.time + thinkInterval;

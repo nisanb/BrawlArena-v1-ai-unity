@@ -32,6 +32,7 @@ namespace BrawlArena
         GameObject modePanel;
         GameObject charPanel;
         GameObject shopPanel;
+        ScrollRect shopScroll;
         TextMeshProUGUI menuCoinsText;
         TextMeshProUGUI shopCoinsText;
         readonly List<System.Action> shopRefreshers = new List<System.Action>();
@@ -98,7 +99,11 @@ namespace BrawlArena
             // Detour through the shop so unattended runs exercise/screenshot it.
             yield return new WaitForSeconds(1.4f);
             OnShopPressed();
-            yield return new WaitForSeconds(2f);
+            yield return new WaitForSeconds(1f);
+            // Scroll to the bottom row so tests prove the grid scrolls; dwell
+            // long enough for the slow background-stepped screenshot to land.
+            if (shopScroll != null) shopScroll.verticalNormalizedPosition = 0f;
+            yield return new WaitForSeconds(5f);
             OnBackToMain();
             yield return new WaitForSeconds(0.6f);
             OnPlayPressed();
@@ -515,12 +520,41 @@ namespace BrawlArena
             hrt.anchorMin = hrt.anchorMax = new Vector2(0.5f, 0.82f);
             hrt.sizeDelta = new Vector2(2100f, 50f);
 
+            // Scrollable card grid: two rows don't fit above the safe area on
+            // shorter screens.
+            var viewport = NewRect("Viewport", panel.transform);
+            var vrt = (RectTransform)viewport.transform;
+            vrt.anchorMin = new Vector2(0.06f, 0.03f);
+            vrt.anchorMax = new Vector2(0.94f, 0.78f);
+            vrt.offsetMin = Vector2.zero;
+            vrt.offsetMax = Vector2.zero;
+            var vpImg = viewport.AddComponent<Image>();
+            vpImg.color = new Color(1f, 1f, 1f, 0f); // invisible drag surface
+            viewport.AddComponent<RectMask2D>();
+
+            var content = NewRect("Content", viewport.transform);
+            var crt = (RectTransform)content.transform;
+            crt.anchorMin = new Vector2(0f, 1f);
+            crt.anchorMax = new Vector2(1f, 1f);
+            crt.pivot = new Vector2(0.5f, 1f);
+            int rows = (roster.Length + 2) / 3;
+            crt.sizeDelta = new Vector2(0f, rows * 560f + 80f);
+            crt.anchoredPosition = Vector2.zero;
+
+            shopScroll = viewport.AddComponent<ScrollRect>();
+            shopScroll.viewport = vrt;
+            shopScroll.content = crt;
+            shopScroll.horizontal = false;
+            shopScroll.vertical = true;
+            shopScroll.movementType = ScrollRect.MovementType.Elastic;
+            shopScroll.scrollSensitivity = 40f;
+
             for (int i = 0; i < roster.Length; i++)
             {
                 int col = i % 3;
                 int row = i / 3;
-                BuildShopCard(panel.transform, roster[i],
-                    new Vector2((col - 1) * 720f, 90f - row * 560f));
+                BuildShopCard(content.transform, roster[i],
+                    new Vector2((col - 1) * 720f, -320f - row * 560f));
             }
 
             panel.SetActive(false);
@@ -531,7 +565,8 @@ namespace BrawlArena
         {
             var card = NewRect("Shop_" + def.id, root);
             var rt = (RectTransform)card.transform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.45f);
+            // Anchored to the scroll content's top edge.
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
             rt.anchoredPosition = pos;
             rt.sizeDelta = new Vector2(660f, 520f);
 
