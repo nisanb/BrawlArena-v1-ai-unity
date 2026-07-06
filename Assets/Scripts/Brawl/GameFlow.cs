@@ -72,17 +72,24 @@ namespace BrawlArena
             }
         }
 
+        /// <summary>Automation breadcrumb readable from the editor status dump.</summary>
+        public static string DebugPhase = "none";
+
         void Start()
         {
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUi();
             if (BrawlHUD.Instance != null) BrawlHUD.Instance.SetGameplayVisible(false);
-            if (AutopilotRequested) StartCoroutine(AutoPick());
+            bool auto = AutopilotRequested;
+            DebugPhase = "started autopilot=" + auto;
+            if (auto) StartCoroutine(AutoPick());
         }
 
         IEnumerator AutoPick()
         {
+            DebugPhase = "autopick-waiting";
             yield return new WaitForSeconds(0.8f);
+            DebugPhase = "autopick-firing";
             if (selectPanel != null && selectPanel.activeSelf)
                 Pick(UnityEngine.Random.Range(0, roster.Length), true);
         }
@@ -96,6 +103,7 @@ namespace BrawlArena
 
         IEnumerator LoadAndSpawn(int index, bool autopilot)
         {
+            DebugPhase = "loading pick=" + index;
             loadingPanel.SetActive(true);
             loadingTip.text = Tips[UnityEngine.Random.Range(0, Tips.Length)];
             float t = 0f;
@@ -108,9 +116,11 @@ namespace BrawlArena
             }
 
             SpawnAll(index, autopilot);
+            DebugPhase = "spawned";
             loadingPanel.SetActive(false);
             if (BrawlHUD.Instance != null) BrawlHUD.Instance.SetGameplayVisible(true);
             if (MatchManager.Instance != null) MatchManager.Instance.BeginMatch();
+            DebugPhase = "match-begun";
         }
 
         void SpawnAll(int playerIndex, bool autopilot)

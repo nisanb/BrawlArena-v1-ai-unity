@@ -22,6 +22,8 @@ namespace BrawlArena.EditorAutomation
 
         static readonly List<string> LogBuffer = new List<string>();
         static double nextPoll;
+        static int lastPumpFrame = -1;
+        static int stallTicks;
 
         static AutomationRunner()
         {
@@ -41,6 +43,27 @@ namespace BrawlArena.EditorAutomation
 
         static void Poll()
         {
+            // Keep the game simulating while the editor is unfocused. In a
+            // background editor QueuePlayerLoopUpdate is ignored, so when
+            // frames stall during an autopilot run, force them with Step().
+            if (EditorApplication.isPlaying)
+            {
+                bool autopilot = File.Exists(Path.Combine(Dir, "autopilot.flag"));
+                if (autopilot)
+                {
+                    if (EditorApplication.isPaused) EditorApplication.isPaused = false;
+                    if (Time.frameCount == lastPumpFrame) stallTicks++;
+                    else stallTicks = 0;
+                    lastPumpFrame = Time.frameCount;
+                    if (stallTicks >= 3) EditorApplication.Step();
+                    else EditorApplication.QueuePlayerLoopUpdate();
+                }
+                else if (!EditorApplication.isPaused)
+                {
+                    EditorApplication.QueuePlayerLoopUpdate();
+                }
+            }
+
             if (EditorApplication.timeSinceStartup < nextPoll) return;
             nextPoll = EditorApplication.timeSinceStartup + 0.5;
             if (EditorApplication.isCompiling) return;
@@ -149,7 +172,14 @@ namespace BrawlArena.EditorAutomation
         static string StatusDump()
         {
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"playing={EditorApplication.isPlaying} compiling={EditorApplication.isCompiling}");
+            sb.AppendLine($"playing={EditorApplication.isPlaying} paused={EditorApplication.isPaused} compiling={EditorApplication.isCompiling}");
+            sb.AppendLine($"frame={Time.frameCount} time={Time.time:0.0} timeScale={Time.timeScale}");
+            sb.AppendLine("autopilotFlag=" + File.Exists(Path.Combine(Dir, "autopilot.flag")));
+            var flow = UnityEngine.Object.FindFirstObjectByType<GameFlow>();
+            sb.AppendLine("gameFlow=" + (flow != null ? $"present rosterLen={(flow.roster != null ? flow.roster.Length : -1)}" : "MISSING"));
+            sb.AppendLine("flowPhase=" + GameFlow.DebugPhase);
+            var mmObj = UnityEngine.Object.FindFirstObjectByType<MatchManager>();
+            sb.AppendLine($"mmByFind={(mmObj != null)} mmStatic={(MatchManager.Instance != null)}");
             var mm = MatchManager.Instance;
             if (mm != null)
                 sb.AppendLine($"match={mm.State} time={mm.TimeRemaining:0} blue={mm.BlueScore} red={mm.RedScore}");
