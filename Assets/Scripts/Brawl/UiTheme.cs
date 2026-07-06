@@ -50,6 +50,11 @@ namespace BrawlArena
         public Sprite trophyIcon;
         public Sprite swordIcon;
         public Sprite timerIcon;
+        public Sprite coinIcon;
+        public Sprite resourceCapsule;
+
+        [Header("Minimap")]
+        public Sprite minimapBackground;
 
         void Awake()
         {

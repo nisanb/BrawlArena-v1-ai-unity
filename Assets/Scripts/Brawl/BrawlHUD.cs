@@ -196,9 +196,26 @@ namespace BrawlArena
                 Restart();
         }
 
+        string rewardLine;
+
+        /// <summary>End-of-match payout line shown under the banner title.</summary>
+        public void ShowRewards(string line)
+        {
+            rewardLine = line;
+            if (bannerRoot != null && bannerRoot.activeSelf) ApplyBannerSub();
+        }
+
+        void ApplyBannerSub()
+        {
+            bannerSub.text = string.IsNullOrEmpty(rewardLine)
+                ? "TAP TO PLAY AGAIN"
+                : rewardLine + "\nTAP TO PLAY AGAIN";
+        }
+
         void OnMatchEnded(TeamId? winner)
         {
             bannerRoot.SetActive(true);
+            ApplyBannerSub();
             HideRespawn();
             TeamId playerTeam = player != null ? player.team : TeamId.Blue;
             if (!winner.HasValue)
@@ -257,6 +274,7 @@ namespace BrawlArena
             BuildSprintControls(gameplay);
             BuildTopBar(gameplay);
             BuildKillFeed(gameplay);
+            MinimapView.Create(gameplay, theme, 300f);
 
             centerText = MakeText("CenterText", root, "", 96, Color.white, TextAnchor.MiddleCenter, true);
             var crt = centerText.rectTransform;

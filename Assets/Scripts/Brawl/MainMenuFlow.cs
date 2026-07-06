@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using TMPro;
 using UnityEngine;
@@ -30,12 +31,17 @@ namespace BrawlArena
         GameObject mainPanel;
         GameObject modePanel;
         GameObject charPanel;
+        GameObject shopPanel;
+        TextMeshProUGUI menuCoinsText;
+        TextMeshProUGUI shopCoinsText;
+        readonly List<System.Action> shopRefreshers = new List<System.Action>();
 
         // Character select widgets
         TextMeshProUGUI charName;
         TextMeshProUGUI charRole;
         TextMeshProUGUI charDescription;
         TextMeshProUGUI charKind;
+        TextMeshProUGUI charLevel;
         Image[] statFills = new Image[3];
         GameObject previewInstance;
         int charIndex;
@@ -89,7 +95,12 @@ namespace BrawlArena
             bool gemGrab = false;
             try { gemGrab = File.ReadAllText(flag).Contains("gemgrab"); } catch { }
 
-            yield return new WaitForSeconds(1.6f);
+            // Detour through the shop so unattended runs exercise/screenshot it.
+            yield return new WaitForSeconds(1.4f);
+            OnShopPressed();
+            yield return new WaitForSeconds(2f);
+            OnBackToMain();
+            yield return new WaitForSeconds(0.6f);
             OnPlayPressed();
             yield return new WaitForSeconds(1.6f);
             OnModePicked(gemGrab ? GameMode.GemGrab : GameMode.Knockout);
@@ -111,6 +122,23 @@ namespace BrawlArena
             mainPanel.SetActive(panel == mainPanel);
             modePanel.SetActive(panel == modePanel);
             charPanel.SetActive(panel == charPanel);
+            if (shopPanel != null) shopPanel.SetActive(panel == shopPanel);
+            if (panel == mainPanel || panel == shopPanel) RefreshShop();
+        }
+
+        void OnShopPressed()
+        {
+            ShowPanel(shopPanel);
+            SetPreviewVisible(false);
+            DebugPhase = "shop";
+        }
+
+        void RefreshShop()
+        {
+            string coins = Progress.Coins.ToString("N0");
+            if (menuCoinsText != null) menuCoinsText.text = coins;
+            if (shopCoinsText != null) shopCoinsText.text = coins;
+            foreach (var refresh in shopRefreshers) refresh();
         }
 
         void OnPlayPressed()
@@ -207,6 +235,7 @@ namespace BrawlArena
             if (charRole != null) charRole.text = def.role.ToUpperInvariant();
             if (charDescription != null) charDescription.text = def.description;
             if (charKind != null) charKind.text = def.projectilePrefab != null ? "RANGED" : "MELEE";
+            if (charLevel != null) charLevel.text = "LEVEL " + Progress.Get(def.id).level;
             SetStat(0, def.maxHealth / 160f);
             SetStat(1, def.damage / 30f);
             SetStat(2, (def.moveSpeed - 4f) / 1.6f);
@@ -238,6 +267,7 @@ namespace BrawlArena
             mainPanel = BuildMainPanel(canvasGo.transform);
             modePanel = BuildModePanel(canvasGo.transform);
             charPanel = BuildCharacterPanel(canvasGo.transform);
+            shopPanel = BuildShopPanel(canvasGo.transform);
         }
 
         GameObject BuildMainPanel(Transform root)
@@ -257,6 +287,10 @@ namespace BrawlArena
 
             MakeButton(panel.transform, "PLAY", theme != null ? theme.buttonYellow : null,
                 new Vector2(0.5f, 0.24f), new Vector2(620f, 225f), 96f, OnPlayPressed);
+            MakeButton(panel.transform, "SHOP", theme != null ? theme.buttonBlue : null,
+                new Vector2(0.5f, 0.09f), new Vector2(420f, 150f), 60f, OnShopPressed);
+
+            menuCoinsText = AddCoinsCapsule(panel.transform);
 
             var version = MakeBody(panel.transform, "v0.3 dev", 34f, new Color(1f, 1f, 1f, 0.45f));
             var vrt = version.rectTransform;
@@ -370,6 +404,11 @@ namespace BrawlArena
             krt.anchorMin = krt.anchorMax = new Vector2(0.16f, 0.47f);
             krt.sizeDelta = new Vector2(620f, 60f);
 
+            charLevel = MakeHeading(panel.transform, "", 52f, new Color(1f, 0.85f, 0.3f));
+            var lrt = charLevel.rectTransform;
+            lrt.anchorMin = lrt.anchorMax = new Vector2(0.16f, 0.39f);
+            lrt.sizeDelta = new Vector2(620f, 70f);
+
             // Description + stats card on the right.
             var info = NewRect("InfoCard", panel.transform);
             var irt = (RectTransform)info.transform;
@@ -414,6 +453,205 @@ namespace BrawlArena
                 new Vector2(0.5f, 0.09f), new Vector2(560f, 195f), 84f, OnBattlePressed);
 
             return panel;
+        }
+
+        // ---------------- shop ----------------
+
+        TextMeshProUGUI AddCoinsCapsule(Transform root)
+        {
+            var capsule = NewRect("Coins", root);
+            var rt = (RectTransform)capsule.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.93f, 0.94f);
+            rt.sizeDelta = new Vector2(300f, 82f);
+            var bg = capsule.AddComponent<Image>();
+            if (theme != null && theme.resourceCapsule != null)
+            {
+                bg.sprite = theme.resourceCapsule;
+                bg.type = Image.Type.Sliced;
+                bg.color = new Color(0.1f, 0.12f, 0.2f, 0.9f);
+            }
+            else
+            {
+                bg.color = new Color(0f, 0f, 0f, 0.5f);
+            }
+            bg.raycastTarget = false;
+
+            if (theme != null && theme.coinIcon != null)
+            {
+                var icon = NewRect("Icon", capsule.transform);
+                var irt = (RectTransform)icon.transform;
+                irt.anchorMin = irt.anchorMax = new Vector2(0.14f, 0.5f);
+                irt.sizeDelta = new Vector2(72f, 78f);
+                var img = icon.AddComponent<Image>();
+                img.sprite = theme.coinIcon;
+                img.preserveAspect = true;
+                img.raycastTarget = false;
+            }
+
+            var text = MakeButtonLabel(capsule.transform, Progress.Coins.ToString("N0"), 44f, Color.white);
+            var trt = text.rectTransform;
+            trt.anchorMin = new Vector2(0.28f, 0f);
+            trt.anchorMax = new Vector2(0.96f, 1f);
+            trt.offsetMin = Vector2.zero;
+            trt.offsetMax = Vector2.zero;
+            text.alignment = TextAlignmentOptions.Center;
+            return text;
+        }
+
+        GameObject BuildShopPanel(Transform root)
+        {
+            var panel = NewRect("Shop", root);
+            Stretch((RectTransform)panel.transform);
+
+            AddDim(panel.transform, 0.55f);
+            AddRibbonTitle(panel.transform, "SHOP");
+            AddBackButton(panel.transform, OnBackToMain);
+            shopCoinsText = AddCoinsCapsule(panel.transform);
+
+            var hint = MakeBody(panel.transform,
+                "EARN POINTS AND COINS IN BATTLE  —  SPEND THEM HERE TO LEVEL UP YOUR BRAWLERS (+5% HP & DAMAGE PER LEVEL)",
+                34f, new Color(1f, 1f, 1f, 0.8f));
+            var hrt = hint.rectTransform;
+            hrt.anchorMin = hrt.anchorMax = new Vector2(0.5f, 0.82f);
+            hrt.sizeDelta = new Vector2(2100f, 50f);
+
+            for (int i = 0; i < roster.Length; i++)
+            {
+                int col = i % 3;
+                int row = i / 3;
+                BuildShopCard(panel.transform, roster[i],
+                    new Vector2((col - 1) * 720f, 90f - row * 560f));
+            }
+
+            panel.SetActive(false);
+            return panel;
+        }
+
+        void BuildShopCard(Transform root, BrawlerDefinition def, Vector2 pos)
+        {
+            var card = NewRect("Shop_" + def.id, root);
+            var rt = (RectTransform)card.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.45f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(660f, 520f);
+
+            var bg = card.AddComponent<Image>();
+            if (theme != null && theme.card != null)
+            {
+                bg.sprite = theme.card;
+                bg.type = Image.Type.Sliced;
+            }
+            else
+            {
+                bg.color = new Color(0.12f, 0.15f, 0.24f, 0.97f);
+            }
+
+            if (def.portrait != null)
+            {
+                var pGo = NewRect("Portrait", card.transform);
+                var prt = (RectTransform)pGo.transform;
+                prt.anchorMin = prt.anchorMax = new Vector2(0.22f, 0.62f);
+                prt.sizeDelta = new Vector2(240f, 300f);
+                var img = pGo.AddComponent<Image>();
+                img.sprite = def.portrait;
+                img.preserveAspect = true;
+                img.raycastTarget = false;
+            }
+
+            var name = MakeHeading(card.transform, def.displayName.ToUpperInvariant(), 56f, Color.white);
+            var nrt = name.rectTransform;
+            nrt.anchorMin = nrt.anchorMax = new Vector2(0.66f, 0.86f);
+            nrt.sizeDelta = new Vector2(320f, 70f);
+
+            var levelText = MakeButtonLabel(card.transform, "", 44f, new Color(1f, 0.85f, 0.3f));
+            var lrt = levelText.rectTransform;
+            lrt.anchorMin = lrt.anchorMax = new Vector2(0.66f, 0.7f);
+            lrt.sizeDelta = new Vector2(320f, 60f);
+
+            // Points progress toward the next level.
+            var barBg = NewRect("PointsBg", card.transform);
+            var brt = (RectTransform)barBg.transform;
+            brt.anchorMin = brt.anchorMax = new Vector2(0.66f, 0.55f);
+            brt.sizeDelta = new Vector2(280f, 32f);
+            var bgImg = barBg.AddComponent<Image>();
+            if (theme != null && theme.barBg != null)
+            {
+                bgImg.sprite = theme.barBg;
+                bgImg.type = Image.Type.Sliced;
+            }
+            bgImg.color = new Color(0.1f, 0.1f, 0.16f, 0.9f);
+            bgImg.raycastTarget = false;
+
+            var fillGo = NewRect("PointsFill", barBg.transform);
+            var frt = (RectTransform)fillGo.transform;
+            frt.anchorMin = Vector2.zero;
+            frt.anchorMax = new Vector2(0.5f, 1f);
+            frt.offsetMin = new Vector2(3f, 3f);
+            frt.offsetMax = new Vector2(-3f, -3f);
+            var fillImg = fillGo.AddComponent<Image>();
+            if (theme != null && theme.barFillYellow != null)
+            {
+                fillImg.sprite = theme.barFillYellow;
+                fillImg.type = Image.Type.Sliced;
+            }
+            fillImg.color = new Color(0.55f, 0.4f, 1f);
+            fillImg.raycastTarget = false;
+
+            var pointsText = MakeBody(card.transform, "", 30f, new Color(1f, 1f, 1f, 0.85f));
+            var ptr = pointsText.rectTransform;
+            ptr.anchorMin = ptr.anchorMax = new Vector2(0.66f, 0.46f);
+            ptr.sizeDelta = new Vector2(320f, 40f);
+
+            // Upgrade button along the card bottom.
+            var btnGo = NewRect("Upgrade", card.transform);
+            var urt = (RectTransform)btnGo.transform;
+            urt.anchorMin = urt.anchorMax = new Vector2(0.5f, 0.14f);
+            urt.sizeDelta = new Vector2(480f, 130f);
+            var btnImg = btnGo.AddComponent<Image>();
+            if (theme != null && theme.buttonGreen != null)
+            {
+                btnImg.sprite = theme.buttonGreen;
+                btnImg.type = Image.Type.Sliced;
+            }
+            else
+            {
+                btnImg.color = new Color(0.3f, 0.8f, 0.35f, 0.95f);
+            }
+            var button = btnGo.AddComponent<Button>();
+            var btnLabel = MakeButtonLabel(btnGo.transform, "", 44f, Color.white);
+            Stretch(btnLabel.rectTransform);
+            btnLabel.rectTransform.offsetMin = new Vector2(0f, 16f);
+            btnLabel.raycastTarget = false;
+
+            button.onClick.AddListener(() =>
+            {
+                if (Progress.TryUpgrade(def.id)) RefreshShop();
+            });
+
+            void Refresh()
+            {
+                var c = Progress.Get(def.id);
+                levelText.text = "LEVEL " + c.level;
+                if (c.level >= Progress.MaxLevel)
+                {
+                    pointsText.text = "MAX LEVEL";
+                    frt.anchorMax = new Vector2(1f, 1f);
+                    btnLabel.text = "MAXED";
+                    button.interactable = false;
+                    btnImg.color = new Color(0.6f, 0.6f, 0.6f, 0.8f);
+                    return;
+                }
+                int needed = Progress.PointsNeeded(c.level);
+                pointsText.text = $"{c.points} / {needed} POINTS";
+                frt.anchorMax = new Vector2(Mathf.Clamp01(c.points / (float)needed), 1f);
+                btnLabel.text = $"UPGRADE   {Progress.CoinCost(c.level)} COINS";
+                bool can = Progress.CanUpgrade(def.id);
+                button.interactable = can;
+                btnImg.color = can ? Color.white : new Color(0.55f, 0.55f, 0.55f, 0.85f);
+            }
+
+            shopRefreshers.Add(Refresh);
+            Refresh();
         }
 
         Image AddStatBar(Transform card, string label, Color color, float anchorY)

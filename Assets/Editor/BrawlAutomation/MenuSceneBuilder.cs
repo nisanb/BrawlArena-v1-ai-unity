@@ -133,11 +133,11 @@ namespace BrawlArena.EditorAutomation
             }
 
             // Characters get parented here, standing on the disc's top face.
+            // Pack prefabs face +Z at identity and the camera sits at +Z, so
+            // no extra rotation is needed to face it.
             var pivot = new GameObject("CharacterPivot");
             pivot.transform.SetParent(root.transform, false);
             pivot.transform.localPosition = new Vector3(0f, 0.19f, 0f);
-            // Face the camera (the pack prefabs face +Z; camera sits at +Z).
-            pivot.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             return pivot.transform;
         }
 
@@ -234,6 +234,7 @@ namespace BrawlArena.EditorAutomation
             var systems = new GameObject("MenuSystems");
             var flow = systems.AddComponent<MainMenuFlow>();
             flow.roster = ArenaSceneBuilder.BuildRoster();
+            PortraitStudio.EnsurePortraits(flow.roster);
             flow.podium = podium;
         }
     }

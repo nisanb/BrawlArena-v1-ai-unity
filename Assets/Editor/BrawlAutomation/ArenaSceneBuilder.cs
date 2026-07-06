@@ -124,6 +124,9 @@ namespace BrawlArena.EditorAutomation
             BuildBoundary(env.transform);
             BuildProps(env.transform);
             BuildLighting();
+            // Environment + lighting are final here; render the minimap before
+            // the theme object loads it.
+            PortraitStudio.CaptureMinimap(24f);
             BuildSystems();
             BuildCamera();
             BakeNavMesh(env);
@@ -431,6 +434,7 @@ namespace BrawlArena.EditorAutomation
 
             var flow = systems.AddComponent<GameFlow>();
             flow.roster = BuildRoster();
+            PortraitStudio.EnsurePortraits(flow.roster);
         }
 
         static BrawlerDefinition Def(

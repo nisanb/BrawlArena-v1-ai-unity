@@ -193,6 +193,8 @@ namespace BrawlArena.EditorAutomation
             if (gems != null && gems.ActiveMode)
                 sb.AppendLine($"gems blue={gems.TeamGems(TeamId.Blue)} red={gems.TeamGems(TeamId.Red)} " +
                               $"countdown={(gems.CountdownTeam.HasValue ? gems.CountdownTeam.Value + ":" + gems.CountdownRemaining.ToString("0.0") : "none")}");
+            sb.AppendLine("coins=" + Progress.Coins + " chars=[" + string.Join(", ",
+                Progress.Data.characters.ConvertAll(c => $"{c.id}:L{c.level}/{c.points}p")) + "]");
             var mmObj = UnityEngine.Object.FindFirstObjectByType<MatchManager>();
             sb.AppendLine($"mmByFind={(mmObj != null)} mmStatic={(MatchManager.Instance != null)}");
             var mm = MatchManager.Instance;

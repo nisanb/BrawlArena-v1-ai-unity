@@ -33,6 +33,9 @@ namespace BrawlArena
         public float CountdownRemaining { get; private set; }
 
         readonly List<Gem> looseGems = new List<Gem>();
+
+        /// <summary>Live list for read-only consumers (minimap); entries may be null.</summary>
+        public IReadOnlyList<Gem> LooseGems => looseGems;
         readonly Dictionary<BrawlerController, int> carried = new Dictionary<BrawlerController, int>();
         float nextSpawnAt;
         bool hooked;
