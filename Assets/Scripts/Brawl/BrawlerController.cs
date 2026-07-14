@@ -32,6 +32,10 @@ namespace BrawlArena
         public float attackRange = 2.2f;
         public float attackRadius = 1.5f;
         public float attackCooldown = 0.9f;
+        [Header("Basic attack charges")]
+        [Tooltip("Seconds required to restore one of the three basic-attack charges. Zero-valued legacy data uses the production default.")]
+        [Min(0.05f)] public float basicAttackReloadInterval =
+            MobileCombatRules.BasicAttackReloadInterval;
         [Tooltip("Seconds into the swing when damage lands / projectile spawns.")]
         public float attackHitDelay = 0.35f;
         public float attackMoveLock = 0.45f;
@@ -152,6 +156,19 @@ namespace BrawlArena
             (attackRoutine != null ? MobileCombatRules.CastMovementMultiplier : 1f);
         public float CooldownFraction =>
             Mathf.Clamp01((nextAttackTime - Time.time) / Mathf.Max(0.01f, attackCooldown));
+        public int BasicAttackCharges => basicAttackCharges;
+        public int MaxBasicAttackCharges => MobileCombatRules.BasicAttackChargeCapacity;
+        public bool BasicAttackReloading =>
+            BasicAttackCharges < MobileCombatRules.BasicAttackChargeCapacity;
+        public float BasicAttackReloadProgress01 => BasicAttackReloading
+            ? Mathf.Clamp01(basicAttackReloadElapsed / EffectiveBasicAttackReloadInterval)
+            : 1f;
+        public float BasicAttackReloadSecondsRemaining => BasicAttackReloading
+            ? Mathf.Max(0f, EffectiveBasicAttackReloadInterval - basicAttackReloadElapsed)
+            : 0f;
+        public bool BasicAttackReady =>
+            CanAct && !superInProgress && Time.time >= nextAttackTime &&
+            BasicAttackCharges > 0;
         public string SuperName => string.IsNullOrEmpty(superName) ? "POWER BURST" : superName;
         public float SuperCharge { get; private set; }
         public float SuperCharge01 => Mathf.Clamp01(SuperCharge / Mathf.Max(1f, maxSuperCharge));
@@ -199,6 +216,9 @@ namespace BrawlArena
         SkinnedMeshRenderer[] skins;
         Vector3 moveInput;
         float nextAttackTime;
+        [SerializeField, HideInInspector] int basicAttackCharges =
+            MobileCombatRules.BasicAttackChargeCapacity;
+        float basicAttackReloadElapsed;
         float attackLockUntil;
         float nextFlinchTime;
         float staminaRegenAt;
@@ -261,6 +281,7 @@ namespace BrawlArena
             skins = GetComponentsInChildren<SkinnedMeshRenderer>();
             maxStamina = MobileCombatRules.ArcaneFlowCapacity;
             Stamina = maxStamina;
+            ResetBasicAttackCharges();
 
             audioSource = gameObject.AddComponent<AudioSource>();
             audioSource.playOnAwake = false;
@@ -289,6 +310,7 @@ namespace BrawlArena
             spellOrigin = FindSpellOrigin();
             maxStamina = MobileCombatRules.ArcaneFlowCapacity;
             Stamina = maxStamina;
+            ResetBasicAttackCharges();
 
             specialty = specialty.Sanitized();
             InitializeMotor();
@@ -695,6 +717,7 @@ namespace BrawlArena
             if (!initialized) return;
             UpdateSpellStatuses();
             UpdateWardFlow();
+            UpdateBasicAttackCharges();
             UpdateHealthRegen();
 
             if (WardStepping)
@@ -718,6 +741,37 @@ namespace BrawlArena
             if (Time.time < staminaRegenAt || Stamina >= maxStamina) return;
             Stamina = MobileCombatRules.RegenerateWardFlow(Stamina, maxStamina,
                 staminaRegenPerSec, Time.deltaTime);
+        }
+
+        void UpdateBasicAttackCharges()
+        {
+            if (!CanAct || !BasicAttackReloading) return;
+            MobileCombatRules.RegenerateBasicAttackCharges(ref basicAttackCharges,
+                ref basicAttackReloadElapsed, EffectiveBasicAttackReloadInterval,
+                Time.deltaTime);
+        }
+
+        float EffectiveBasicAttackReloadInterval => basicAttackReloadInterval > 0f
+            ? basicAttackReloadInterval
+            : MobileCombatRules.BasicAttackReloadInterval;
+
+        /// <summary>
+        /// Restores the deterministic spawn/respawn/round baseline. Match setup
+        /// may call this on an already-instantiated actor without recreating it.
+        /// </summary>
+        public void ResetBasicAttackCharges()
+        {
+            basicAttackCharges = MobileCombatRules.BasicAttackChargeCapacity;
+            basicAttackReloadElapsed = 0f;
+        }
+
+        bool TryConsumeBasicAttackCharge()
+        {
+            bool wasFull = BasicAttackCharges >= MobileCombatRules.BasicAttackChargeCapacity;
+            if (!MobileCombatRules.TrySpendBasicAttackCharge(ref basicAttackCharges))
+                return false;
+            if (wasFull) basicAttackReloadElapsed = 0f;
+            return true;
         }
 
         /// <summary>
@@ -1203,7 +1257,7 @@ namespace BrawlArena
         {
             // Early-out before the enemy scan. Mobile input invokes this once
             // per completed tap rather than repeatedly while held.
-            if (!CanAct || superInProgress || Time.time < nextAttackTime) return false;
+            if (!BasicAttackReady) return false;
             return TryAttack(FindNearestReachableBasicTarget());
         }
 
@@ -1234,11 +1288,13 @@ namespace BrawlArena
 
         bool BeginAttack(BrawlerController target, Vector3 worldDirection)
         {
-            if (!CanAct || superInProgress || Time.time < nextAttackTime) return false;
-            CancelSpawnProtectionOnOffense();
+            if (!BasicAttackReady) return false;
             worldDirection.y = 0f;
             if (worldDirection.sqrMagnitude <= 0.0001f) worldDirection = transform.forward;
+            if (worldDirection.sqrMagnitude <= 0.0001f) return false;
             worldDirection.Normalize();
+            if (!TryConsumeBasicAttackCharge()) return false;
+            CancelSpawnProtectionOnOffense();
 
             nextAttackTime = Time.time + attackCooldown;
             attackLockUntil = Time.time + attackMoveLock;
@@ -1730,6 +1786,7 @@ namespace BrawlArena
             Health.Revive();
             maxStamina = MobileCombatRules.ArcaneFlowCapacity;
             Stamina = maxStamina;
+            ResetBasicAttackCharges();
             staminaRegenAt = 0f;
             CancelWardStep();
             EndKnockbackDisplacement();

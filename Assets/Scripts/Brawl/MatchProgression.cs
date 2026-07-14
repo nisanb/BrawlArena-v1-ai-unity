@@ -378,6 +378,7 @@ namespace BrawlArena
                 if (brawler == null) continue;
                 HeroMatchProgression progression = EnsureProgression(brawler);
                 progression?.ResetForMatch();
+                brawler.ResetBasicAttackCharges();
                 TrackBrawler(brawler);
             }
 

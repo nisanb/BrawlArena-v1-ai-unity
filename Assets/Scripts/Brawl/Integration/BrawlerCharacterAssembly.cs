@@ -158,6 +158,10 @@ namespace BrawlArena
             controller.attackRange = definition.attackRange;
             controller.attackRadius = definition.attackRadius;
             controller.attackCooldown = definition.cooldown;
+            controller.basicAttackReloadInterval = definition.basicAttackReloadInterval > 0f
+                ? definition.basicAttackReloadInterval
+                : MobileCombatRules.BasicAttackReloadInterval;
+            controller.ResetBasicAttackCharges();
             controller.attackHitDelay = definition.hitDelay;
             controller.attackMoveLock = definition.moveLock;
             controller.autoAimRange = definition.autoAimRange;

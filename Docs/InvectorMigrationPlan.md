@@ -12,7 +12,7 @@ The cutover changes character execution without replacing BrawlArena's game rule
 
 - Invector owns locomotion execution and locomotion animation through project adapters.
 - Invector supplies visual combat/lifecycle animation and guarded weapon IK.
-- BrawlArena owns input meaning, AI decisions, camera, attacks, projectiles, damage, health, status effects, resources, death/respawn rules, match flow, roster data, equipment data, and telemetry.
+- BrawlArena owns input meaning, AI decisions, camera, attacks, three-charge basic-attack reloads, projectiles, damage, health, status effects, resources, death/respawn rules, match flow, roster data, equipment data, and telemetry.
 - Production, menu previews, portraits, and generated scenes all consume the same exact Invector Human identities.
 - Vendor health, damage, projectile, ammo, reload, inventory UI, camera, ragdoll, and sample AI remain inert.
 
@@ -71,6 +71,7 @@ The child planner never writes the actor transform. The root Invector motor/Rigi
 | Physical locomotion | `InvectorBrawlerMotor` | Invector controller/Rigidbody stack |
 | Locomotion Animator writes | One guarded Invector scheduler | Complete project-owned controller graph |
 | Attack acceptance/timing | `BrawlerController` | Semantic animation request only |
+| Basic-attack charges/reload | `BrawlerController` / `MobileCombatRules` | None; vendor ammo/reload stays inert |
 | Projectiles/melee selection | Brawl combat code | Presentation only |
 | Health/damage | Brawl `Health` | Vendor health/damage disabled |
 | Status/knockback/Super charge | Brawl combat code | Motor displacement/presentation only |
@@ -202,7 +203,7 @@ Death and victory hold visually. Respawn exits motionless. Root motion remains d
 Brawl combat remains deterministic and authoritative:
 
 - tap/drag aim and action acceptance;
-- attack cooldowns, movement locks, and Super charge;
+- three sequentially reloading basic-attack charges, attack cooldowns, movement locks, and Super charge;
 - projectile pooling, travel, sweeps, impact, explosions, and target selection;
 - melee selection;
 - damage, team filtering, obstruction, status effects, knockback, healing, hazards, and telemetry;

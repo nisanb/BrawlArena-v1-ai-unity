@@ -9,6 +9,8 @@ namespace BrawlArena
     /// </summary>
     public static class MobileCombatRules
     {
+        public const int BasicAttackChargeCapacity = 3;
+        public const float BasicAttackReloadInterval = 2.25f;
         public const float ArcaneFlowCapacity = 60f;
         public const float WardStepCost = 20f;
         public const float WardStepDistance = 2.75f;
@@ -17,6 +19,46 @@ namespace BrawlArena
         public const float WardRegenDelay = 0.75f;
         public const float CastMovementMultiplier = 0.8f;
         public const float AutoAimCorrectionDegrees = 12f;
+
+        public static bool TrySpendBasicAttackCharge(ref int current)
+        {
+            current = Mathf.Clamp(current, 0, BasicAttackChargeCapacity);
+            if (current <= 0) return false;
+            current--;
+            return true;
+        }
+
+        /// <summary>
+        /// Advances the one-at-a-time basic-attack reload clock. The partial
+        /// clock is retained while more shots are spent, so firing a second
+        /// charge cannot restart or accelerate the charge already reloading.
+        /// </summary>
+        public static void RegenerateBasicAttackCharges(ref int current,
+            ref float reloadElapsed, float reloadInterval, float deltaSeconds)
+        {
+            current = Mathf.Clamp(current, 0, BasicAttackChargeCapacity);
+            reloadElapsed = Mathf.Max(0f, reloadElapsed);
+            if (current >= BasicAttackChargeCapacity)
+            {
+                reloadElapsed = 0f;
+                return;
+            }
+
+            reloadInterval = reloadInterval > 0f
+                ? reloadInterval
+                : BasicAttackReloadInterval;
+            if (deltaSeconds <= 0f) return;
+
+            reloadElapsed += deltaSeconds;
+            while (current < BasicAttackChargeCapacity &&
+                   reloadElapsed + 0.0001f >= reloadInterval)
+            {
+                reloadElapsed = Mathf.Max(0f, reloadElapsed - reloadInterval);
+                current++;
+            }
+
+            if (current >= BasicAttackChargeCapacity) reloadElapsed = 0f;
+        }
 
         public static bool TrySpendWardFlow(ref float current, float cost = WardStepCost)
         {

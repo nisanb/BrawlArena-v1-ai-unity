@@ -171,6 +171,7 @@ MonoBehaviour:
   attackRange: 2.2
   attackRadius: 1.5
   attackCooldown: 0.9
+  basicAttackReloadInterval: 2.25
   attackHitDelay: 0.35
   attackMoveLock: 0.45
   autoAimRange: 3.5
@@ -239,6 +240,7 @@ MonoBehaviour:
   animationDriverLocked: 0
   weaponPresentationSource: {fileID: 6637537747175556051}
   weaponPresentationLocked: 0
+  basicAttackCharges: 3
 --- !u!114 &4254893016597595997
 MonoBehaviour:
   m_ObjectHideFlags: 0

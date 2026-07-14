@@ -119,14 +119,15 @@ namespace BrawlArena.EditorAutomation.Tests
             string automatic = Extract(source,
                 "public bool TryAttackAuto()", "public bool TryAttack(BrawlerController target)");
             AssertOrdered(automatic,
-                "if (!CanAct || superInProgress || Time.time < nextAttackTime) return false;",
+                "if (!BasicAttackReady) return false;",
                 "FindNearestReachableBasicTarget()");
 
             string begin = Extract(source,
                 "bool BeginAttack(BrawlerController target, Vector3 worldDirection)",
                 "public bool TrySuperAuto()");
             AssertOrdered(begin,
-                "if (!CanAct || superInProgress || Time.time < nextAttackTime) return false;",
+                "if (!BasicAttackReady) return false;",
+                "if (!TryConsumeBasicAttackCharge()) return false;",
                 "nextAttackTime = Time.time + attackCooldown;",
                 "attackLockUntil = Time.time + attackMoveLock;",
                 "AttacksUsed++;",

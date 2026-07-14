@@ -196,6 +196,10 @@ namespace BrawlArena.EditorAutomation
                             result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
                                 .RunFullEditModeSafely();
                             break;
+                        case "basic-attack-charges":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunBasicAttackChargesSafely();
+                            break;
                         case "thorn-presentation":
                             result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
                                 .RunThornPresentationSafely();

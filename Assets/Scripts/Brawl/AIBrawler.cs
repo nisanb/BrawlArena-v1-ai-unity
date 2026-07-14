@@ -158,7 +158,8 @@ namespace BrawlArena
                     engaging = true;
                     FaceTarget();
                     bool usedSuper = !retreating && self.SuperReady && self.TrySuper(target);
-                    if (!usedSuper && !retreating && Time.time >= attackReadyAt && self.TryAttack(target))
+                    if (!usedSuper && !retreating && self.BasicAttackReady &&
+                        Time.time >= attackReadyAt && self.TryAttack(target))
                         attackReadyAt = Time.time + self.attackCooldown + Random.Range(0.05f, 0.35f);
                 }
             }

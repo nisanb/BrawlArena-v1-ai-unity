@@ -1456,6 +1456,8 @@ namespace BrawlArena.EditorAutomation.Tests
         public const string FullEditModeResultPath = "Temp/BrawlArenaFullEditModeResults.xml";
         public const string InvectorOnlyCutoverResultPath =
             "Temp/InvectorOnlyCutoverEditModeResults.xml";
+        public const string BasicAttackChargesResultPath =
+            "Temp/BasicAttackChargesEditModeResults.xml";
         public const string Phase3CCBufferedMotorResultPath =
             "Temp/Phase3CCBufferedMotorEditModeResults.xml";
         public const string Phase3DBLifecycleResultPath =
@@ -1496,6 +1498,8 @@ namespace BrawlArena.EditorAutomation.Tests
             "ProductionThornResolvesBowRecordsAndPresentsBrawlArrowsWithoutVendorCombat";
         const string InvectorOnlyCutoverFixture =
             "BrawlArena.EditorAutomation.Tests.InvectorOnlyCutoverEditModeTests";
+        const string BasicAttackChargesFixture =
+            "BrawlArena.EditorAutomation.Tests.BasicAttackChargesEditModeTests";
         const string FocusedFixture =
             "BrawlArena.EditorAutomation.Tests.InvectorMigrationPilotEditModeTests";
         const string RimeProductionFixture =
@@ -1514,6 +1518,7 @@ namespace BrawlArena.EditorAutomation.Tests
         const string FocusedRunKind = "focused";
         const string FullRunKind = "full";
         const string InvectorOnlyCutoverRunKind = "invector-only-cutover";
+        const string BasicAttackChargesRunKind = "basic-attack-charges";
         const string Phase3CCRunKind = "phase3cc";
         const string Phase3DBLifecycleRunKind = "phase3db-lifecycle";
         const string Phase3DCWeaponIKRunKind = "phase3dc-weapon-ik";
@@ -1581,6 +1586,15 @@ namespace BrawlArena.EditorAutomation.Tests
                 testMode = UnityEditor.TestTools.TestRunner.Api.TestMode.EditMode,
                 categoryNames = new[] { "InvectorOnlyCutover" },
             }, InvectorOnlyCutoverRunKind);
+        }
+
+        public static string RunBasicAttackChargesSafely()
+        {
+            return RunSafelyAgainstCurrentScene(new Filter
+            {
+                testMode = UnityEditor.TestTools.TestRunner.Api.TestMode.EditMode,
+                categoryNames = new[] { "BasicAttackCharges" },
+            }, BasicAttackChargesRunKind);
         }
 
         public static string RunPhase3CCBufferedMotorSafely()
@@ -1822,6 +1836,7 @@ namespace BrawlArena.EditorAutomation.Tests
             {
                 if (runKind == FocusedRunKind) return FocusedFixture;
                 if (runKind == InvectorOnlyCutoverRunKind) return InvectorOnlyCutoverFixture;
+                if (runKind == BasicAttackChargesRunKind) return BasicAttackChargesFixture;
                 if (runKind == Phase3CCRunKind) return Phase3CCBufferedMotorTargetMethod;
                 if (runKind == Phase3DBLifecycleRunKind) return Phase3DBLifecycleTargetMethod;
                 if (runKind == Phase3DCWeaponIKRunKind) return Phase3DCWeaponIKTargetMethod;
@@ -1841,6 +1856,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 if (runKind == FullRunKind) return FullEditModeResultPath;
                 if (runKind == FocusedRunKind) return FocusedResultPath;
                 if (runKind == InvectorOnlyCutoverRunKind) return InvectorOnlyCutoverResultPath;
+                if (runKind == BasicAttackChargesRunKind) return BasicAttackChargesResultPath;
                 if (runKind == Phase3CCRunKind) return Phase3CCBufferedMotorResultPath;
                 if (runKind == Phase3DBLifecycleRunKind) return Phase3DBLifecycleResultPath;
                 if (runKind == Phase3DCWeaponIKRunKind) return Phase3DCWeaponIKResultPath;

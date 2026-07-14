@@ -147,6 +147,8 @@ namespace BrawlArena
         public float attackRange = 2.2f;
         public float attackRadius = 1.5f;
         public float cooldown = 0.9f;
+        [Tooltip("Seconds required to restore one basic-attack charge. Values from older scenes that deserialize as zero use the production default.")]
+        public float basicAttackReloadInterval = MobileCombatRules.BasicAttackReloadInterval;
         public float hitDelay = 0.35f;
         public float moveLock = 0.45f;
         public float moveSpeed = 5f;

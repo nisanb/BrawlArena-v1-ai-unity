@@ -92,7 +92,7 @@ Use Rigidbody plus CapsuleCollider. Reject `CharacterController` on production a
 
 ## Ward Flow and Action Resources
 
-Keep Brawl `Stamina` as Ward Flow for Ward Step, with project spend validation, regeneration delay/rate, HUD, progression modifiers, and reset behavior. Keep basic attacks on cooldown/action locks and Supers on `SuperCharge`.
+Keep Brawl `Stamina` as Ward Flow for Ward Step, with project spend validation, regeneration delay/rate, HUD, progression modifiers, and reset behavior. Keep basic attacks on Brawl's three-charge sequential reload plus cooldown/action locks, and keep Supers on `SuperCharge`. Failed or blocked casts never spend a charge; Ward Step and Supers never touch the basic-attack pool.
 
 Do not enable Invector stamina consumption, recovery, ammo, reload, or inventory resource paths.
 

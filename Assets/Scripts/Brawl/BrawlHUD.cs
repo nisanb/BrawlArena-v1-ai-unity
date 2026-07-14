@@ -78,6 +78,9 @@ namespace BrawlArena
         TextMeshProUGUI wardFeedbackText;
         GameObject gameplayRoot;
         Image cooldownOverlay;
+        readonly Image[] basicAttackChargePips =
+            new Image[MobileCombatRules.BasicAttackChargeCapacity];
+        TextMeshProUGUI basicAttackReloadText;
         Image superChargeOverlay;
         Image superButtonOuter;
         TextMeshProUGUI superAbilityText;
@@ -140,6 +143,8 @@ namespace BrawlArena
         int lastSuperPercent = -1;
         int lastStamina = -1;
         int lastMaxStamina = -1;
+        int lastBasicAttackCharges = -1;
+        int lastBasicAttackReloadTenths = -1;
         int lastMatchLevel = -1;
         int lastMatchExperience = -1;
         int lastMatchExperienceToNext = -1;
@@ -367,6 +372,7 @@ namespace BrawlArena
             UpdateClanRoster(mm);
             if (player != null && cooldownOverlay != null)
                 cooldownOverlay.fillAmount = player.CooldownFraction;
+            UpdateBasicAttackChargeFeedback();
 
             if (player != null && player.Health != null && playerHealthText != null)
             {
@@ -1203,6 +1209,101 @@ namespace BrawlArena
                 new Vector2(-190f, 190f), new Vector2(238f, 238f),
                 theme != null && theme.spellCastIcon != null ? theme.spellCastIcon : theme != null ? theme.swordIcon : null,
                 "CAST", new Color(0.26f, 0.72f, 1f), true, false, attackButton);
+            BuildBasicAttackChargeFeedback(root.Find("CastButton"));
+        }
+
+        void BuildBasicAttackChargeFeedback(Transform castButton)
+        {
+            if (castButton == null) return;
+
+            var row = NewRect("BasicAttackCharges", castButton);
+            var rowRt = (RectTransform)row.transform;
+            rowRt.anchorMin = rowRt.anchorMax = new Vector2(0.5f, 1f);
+            rowRt.pivot = new Vector2(0.5f, 0f);
+            rowRt.anchoredPosition = new Vector2(0f, 8f);
+            rowRt.sizeDelta = new Vector2(210f, 42f);
+
+            for (int i = 0; i < basicAttackChargePips.Length; i++)
+            {
+                var pip = NewRect("Charge" + (i + 1), row.transform);
+                var pipRt = (RectTransform)pip.transform;
+                pipRt.anchorMin = pipRt.anchorMax = new Vector2(0.5f, 0.5f);
+                pipRt.anchoredPosition = new Vector2((i - 1) * 58f, 0f);
+                pipRt.sizeDelta = new Vector2(46f, 22f);
+                var background = pip.AddComponent<Image>();
+                background.sprite = theme != null && theme.resourceCapsule != null
+                    ? theme.resourceCapsule
+                    : GetWhiteSprite();
+                background.type = background.sprite != null && theme != null
+                    ? Image.Type.Sliced
+                    : Image.Type.Simple;
+                background.color = new Color(0.02f, 0.06f, 0.11f, 0.94f);
+                background.raycastTarget = false;
+
+                var fill = NewRect("Fill", pip.transform);
+                var fillRt = (RectTransform)fill.transform;
+                StretchRect(fillRt);
+                fillRt.offsetMin = new Vector2(3f, 3f);
+                fillRt.offsetMax = new Vector2(-3f, -3f);
+                Image image = fill.AddComponent<Image>();
+                image.sprite = theme != null && theme.barFillBlue != null
+                    ? theme.barFillBlue
+                    : GetWhiteSprite();
+                image.type = Image.Type.Filled;
+                image.fillMethod = Image.FillMethod.Horizontal;
+                image.fillOrigin = 0;
+                image.fillAmount = 1f;
+                image.color = new Color(0.24f, 0.82f, 1f);
+                image.raycastTarget = false;
+                basicAttackChargePips[i] = image;
+            }
+
+            basicAttackReloadText = MakeText("ReloadState", castButton,
+                "3 / 3  READY", 18f, Color.white, TextAlignmentOptions.Center,
+                HudTextStyle.Button);
+            var textRt = basicAttackReloadText.rectTransform;
+            textRt.anchorMin = textRt.anchorMax = new Vector2(0.5f, 1f);
+            textRt.anchoredPosition = new Vector2(0f, 66f);
+            textRt.sizeDelta = new Vector2(260f, 30f);
+            basicAttackReloadText.raycastTarget = false;
+        }
+
+        void UpdateBasicAttackChargeFeedback()
+        {
+            if (player == null) return;
+
+            int charges = Mathf.Clamp(player.BasicAttackCharges, 0,
+                MobileCombatRules.BasicAttackChargeCapacity);
+            float progress = player.BasicAttackReloadProgress01;
+            for (int i = 0; i < basicAttackChargePips.Length; i++)
+            {
+                Image pip = basicAttackChargePips[i];
+                if (pip == null) continue;
+                bool loaded = i < charges;
+                bool reloading = player.BasicAttackReloading && i == charges;
+                pip.fillAmount = loaded ? 1f : reloading ? progress : 0f;
+                pip.color = loaded
+                    ? new Color(0.24f, 0.82f, 1f)
+                    : new Color(0.42f, 0.58f, 0.68f);
+            }
+
+            int reloadTenths = player.BasicAttackReloading
+                ? Mathf.CeilToInt(player.BasicAttackReloadSecondsRemaining * 10f)
+                : 0;
+            if (basicAttackReloadText == null ||
+                (charges == lastBasicAttackCharges &&
+                 reloadTenths == lastBasicAttackReloadTenths))
+                return;
+
+            lastBasicAttackCharges = charges;
+            lastBasicAttackReloadTenths = reloadTenths;
+            basicAttackReloadText.text = player.BasicAttackReloading
+                ? charges + " / " + MobileCombatRules.BasicAttackChargeCapacity +
+                  "  RELOAD " + (reloadTenths / 10f).ToString("0.0") + "s"
+                : charges + " / " + MobileCombatRules.BasicAttackChargeCapacity + "  READY";
+            basicAttackReloadText.color = charges > 0
+                ? Color.white
+                : new Color(1f, 0.48f, 0.28f);
         }
 
         void BuildWardStepControls(Transform root)

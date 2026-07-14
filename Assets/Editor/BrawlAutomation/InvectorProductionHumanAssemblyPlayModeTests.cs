@@ -79,9 +79,6 @@ namespace BrawlArena.EditorAutomation.Tests
             manager.redSpawns = new[] { redSpawn.transform };
             matchRoot.SetActive(true);
 
-            GameObject targetRoot = BuildTargetFixture(proofScene);
-            Health targetHealth = targetRoot.GetComponent<Health>();
-
             GameObject projectilePrefab = new GameObject("Proof Brawl Projectile Prefab");
             projectilePrefab.SetActive(false);
             SceneManager.MoveGameObjectToScene(projectilePrefab, proofScene);
@@ -104,6 +101,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 attackRange = 8f,
                 attackRadius = 1.5f,
                 cooldown = 0.08f,
+                basicAttackReloadInterval = 0.18f,
                 hitDelay = 0.05f,
                 moveLock = 0.1f,
                 autoAimRange = 12f,
@@ -111,6 +109,9 @@ namespace BrawlArena.EditorAutomation.Tests
                 projectileSpeed = 18f,
                 specialty = SpellSpecialty.ForSchool(SpellSchool.Fire),
             };
+
+            GameObject targetRoot = BuildTargetFixture(proofScene, definition);
+            Health targetHealth = targetRoot.GetComponent<Health>();
 
             int rootsBeforeInvalid = UnityEngine.Object.FindObjectsByType<BrawlerController>(
                 FindObjectsInactive.Include, FindObjectsSortMode.None).Length;
@@ -215,7 +216,15 @@ namespace BrawlArena.EditorAutomation.Tests
             int aimReleaseBefore = presenter.AimReleaseCount;
             int muzzleBefore = presenter.MuzzlePresentationRequestCount;
             int emissionBefore = presenter.MuzzleEmissionCount;
+            Assert.That(actor.BasicAttackCharges,
+                Is.EqualTo(MobileCombatRules.BasicAttackChargeCapacity));
             Assert.That(actor.TryAttackAuto(), Is.True);
+            Assert.That(actor.BasicAttackCharges,
+                Is.EqualTo(MobileCombatRules.BasicAttackChargeCapacity - 1));
+            Assert.That(actor.TryAttackAuto(), Is.False,
+                "The active cooldown must reject without double-spending a charge.");
+            Assert.That(actor.BasicAttackCharges,
+                Is.EqualTo(MobileCombatRules.BasicAttackChargeCapacity - 1));
             for (int frame = 0;
                  frame < 240 && Mathf.Approximately(targetHealth.Current, targetHealthBefore);
                  frame++)
@@ -233,6 +242,24 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(presenter.AimPresented, Is.False);
             Assert.That(invectorController.currentHealth, Is.GreaterThan(0f));
             float vendorHealthBaseline = invectorController.currentHealth;
+
+            int chargesBeforeSuper = actor.BasicAttackCharges;
+            actor.maxSuperCharge = 1f;
+            Assert.That(actor.SuperReady, Is.True,
+                "Applied Brawl damage should have charged this low-threshold proof Super.");
+            Assert.That(actor.TrySuperDirection(Vector3.forward), Is.True);
+            Assert.That(actor.BasicAttackCharges, Is.EqualTo(chargesBeforeSuper),
+                "The Brawl Super path must remain separate from basic charges.");
+            for (int frame = 0;
+                 frame < 120 && actor.BasicAttackCharges <
+                     MobileCombatRules.BasicAttackChargeCapacity;
+                 frame++)
+            {
+                yield return null;
+            }
+            Assert.That(actor.BasicAttackCharges,
+                Is.EqualTo(MobileCombatRules.BasicAttackChargeCapacity),
+                "The next basic charge should regenerate automatically.");
 
             observedKills = 0;
             manager.Kill += CountKill;
@@ -259,6 +286,9 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(presenter.RespawnResetCount, Is.EqualTo(respawnResets + 1));
             Assert.That(actor.Health.IsDead, Is.False);
             Assert.That(actor.Health.Current, Is.EqualTo(actor.Health.Max).Within(0.001f));
+            Assert.That(actor.BasicAttackCharges,
+                Is.EqualTo(MobileCombatRules.BasicAttackChargeCapacity),
+                "Respawn must restore the deterministic three-charge baseline.");
             Assert.That(actor.Health.Invulnerable, Is.True);
             Assert.That(actor.Health.TakeDamage(5f, targetRoot), Is.Zero);
             Assert.That(motor.IsSuspended, Is.False);
@@ -296,30 +326,31 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(restored.isDirty, Is.EqualTo(expectedOriginalDirty));
         }
 
-        static GameObject BuildTargetFixture(Scene scene)
+        static GameObject BuildTargetFixture(Scene scene, BrawlerDefinition definition)
         {
-            GameObject target = new GameObject("Proof Red Target");
-            target.SetActive(false);
-            SceneManager.MoveGameObjectToScene(target, scene);
-            Health health = target.AddComponent<Health>();
+            BrawlerController controller = GameFlow.Spawn(
+                definition,
+                TeamId.Red,
+                new Vector3(0f, 0f, 5f),
+                true,
+                1f,
+                BrawlerAssemblyContext.ProductionHumanInvector);
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(controller.gameObject.scene, Is.EqualTo(scene));
+
+            controller.gameObject.name = "Proof Red Target";
+            Health health = controller.Health;
+            Assert.That(health, Is.Not.Null);
             health.SetMax(200f);
-            InvectorCutoverTestMotor motor =
-                target.AddComponent<InvectorCutoverTestMotor>();
-            InvectorCutoverTestAnimationDriver animation =
-                target.AddComponent<InvectorCutoverTestAnimationDriver>();
-            BrawlerController controller = target.AddComponent<BrawlerController>();
-            controller.SetMotor(motor);
-            controller.SetAnimationDriver(animation);
             controller.displayName = "Proof Target";
-            controller.team = TeamId.Red;
-            controller.moveSpeed = 0f;
             controller.attackDamage = 1f;
             controller.attackRange = 1f;
             controller.attackRadius = 0.65f;
             controller.autoAimRange = 1f;
-            target.transform.position = new Vector3(0f, 0f, 5f);
-            target.SetActive(true);
-            return target;
+            PlayerBrawlerInput physicalInput = controller.GetComponent<PlayerBrawlerInput>();
+            Assert.That(physicalInput, Is.Not.Null);
+            physicalInput.enabled = false;
+            return controller.gameObject;
         }
 
         static void CountKill(BrawlerController victim, BrawlerController attacker)
