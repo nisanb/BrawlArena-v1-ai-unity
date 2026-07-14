@@ -175,6 +175,7 @@ namespace BrawlArena
             controller.koVfx = definition.koVfx;
             controller.spawnVfx = definition.spawnVfx;
             controller.specialty = definition.specialty.Sanitized();
+            controller.ConfigureProjectileReadability(definition.projectileReadability);
             controller.attackSfx = CombatAudioDefaults.ResolveAttack(definition.attackSfx);
             controller.hitSfx = CombatAudioDefaults.ResolveHit(definition.hitSfx);
             controller.superName = definition.superName;

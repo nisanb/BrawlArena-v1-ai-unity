@@ -497,6 +497,9 @@ namespace BrawlArena
             if (projectile != null) projectile.ResetForPool();
             PooledVfxLease effect = GetComponent<PooledVfxLease>();
             if (effect != null) effect.ResetForPool();
+            ProjectileImpactReadability impactCue =
+                GetComponent<ProjectileImpactReadability>();
+            if (impactCue != null) impactCue.ResetLease();
 
             for (int i = 0; i < particles.Length; i++)
             {

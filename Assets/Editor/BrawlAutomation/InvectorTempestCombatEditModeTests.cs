@@ -67,7 +67,7 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(tempest.displayName, Is.EqualTo("Tempest"));
             Assert.That(tempest.role, Is.EqualTo("Stormcaller"));
             Assert.That(tempest.maxHealth, Is.EqualTo(88f));
-            Assert.That(tempest.damage, Is.EqualTo(17f));
+            Assert.That(tempest.damage, Is.EqualTo(26f));
             Assert.That(tempest.attackRange, Is.EqualTo(9.5f));
             Assert.That(tempest.cooldown, Is.EqualTo(0.82f));
             Assert.That(tempest.hitDelay, Is.EqualTo(0.32f));
@@ -76,6 +76,8 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(tempest.autoAimRange, Is.EqualTo(12f));
             Assert.That(tempest.projectileSpeed, Is.EqualTo(21f));
             Assert.That(tempest.projectilePrefab, Is.Not.Null);
+            Assert.That(tempest.projectileReadability.threat,
+                Is.EqualTo(ProjectileThreatType.Chain));
 
             Assert.That(tempest.specialty.school, Is.EqualTo(SpellSchool.Storm));
             Assert.That(tempest.specialty.chainTargets, Is.EqualTo(2));
@@ -267,7 +269,8 @@ namespace BrawlArena.EditorAutomation.Tests
             SpellSpecialty payload = ReadField<SpellSpecialty>(shot, "specialty");
 
             Assert.That(ReadField<BrawlerController>(shot, "owner"), Is.SameAs(owner));
-            Assert.That(ReadField<float>(shot, "damage"), Is.EqualTo(27.54f).Within(0.0001f));
+            Assert.That(ReadField<float>(shot, "damage"),
+                Is.EqualTo(tempest.damage * tempest.superDamageMultiplier).Within(0.0001f));
             Assert.That(ReadField<float>(shot, "speed"), Is.EqualTo(26.25f));
             Assert.That(ReadField<GameObject>(shot, "impactVfx"), Is.SameAs(superImpact));
             Assert.That(ReadField<GameObject>(shot, "secondaryImpactVfx"),
@@ -283,6 +286,14 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(payload.chainRange, Is.EqualTo(4.25f));
             Assert.That(payload.chainDamageMultiplier, Is.EqualTo(0.55f));
             Assert.That(shot.gameObject.layer, Is.EqualTo(CombatPhysics.ProjectileLayer));
+            ProjectileReadabilityLease readability =
+                shot.GetComponent<ProjectileReadabilityLease>();
+            Assert.That(readability, Is.Not.Null);
+            Assert.That(readability.Threat, Is.EqualTo(ProjectileThreatType.Chain));
+            Assert.That(readability.AttackTier, Is.EqualTo(ProjectileAttackTier.Super));
+            Assert.That(readability.SplashRadius, Is.EqualTo(2.3f));
+            Assert.That(readability.WorldInteraction,
+                Is.EqualTo(ProjectileWorldInteraction.StopsOnWorld));
         }
 
         BrawlerController CreateBrawler(

@@ -528,6 +528,7 @@ namespace BrawlArena.EditorAutomation
                 autoAimRange = aim,
                 projectilePrefab = LoadMagic($"Missiles & Explosions/{element}/{element}MissileNormal"),
                 projectileSpeed = projectileSpeed,
+                projectileReadability = ProjectileReadabilityProfile.ForRoster(id, school),
                 swingVfx = LoadMagic($"Muzzleflash/Normal/{element}MuzzleNormal"),
                 impactVfx = LoadMagic($"Missiles & Explosions/{element}/{element}ExplosionSmall"),
                 koVfx = LoadMagic($"Nova/Nova{element}"),
@@ -572,7 +573,7 @@ namespace BrawlArena.EditorAutomation
                 invectorAIPrefab = Load(
                     InvectorThornMigrationBuilder.ProductionAIPrefabPath),
                 maxHealth = 96f,
-                damage = 23f,
+                damage = 30f,
                 attackRange = 10.5f,
                 attackRadius = 0.8f,
                 cooldown = 1.1f,
@@ -583,6 +584,8 @@ namespace BrawlArena.EditorAutomation
                 autoAimRange = 12.5f,
                 projectilePrefab = Load(Weapons + "Arrow01.prefab"),
                 projectileSpeed = 24f,
+                projectileReadability = ProjectileReadabilityProfile.ForRoster(
+                    "thorn", SpellSchool.None),
                 impactVfx = LoadMagic("Slash Hit/EarthSlashHit"),
                 koVfx = LoadMagic("Nova/NovaEarth"),
                 spawnVfx = LoadMagic("Aura/AuraCast/AuraCastEarth"),
@@ -633,23 +636,77 @@ namespace BrawlArena.EditorAutomation
             {
                 WizardDef("fire", "Cinder", "Pyromancer",
                     "A volatile artillery mage whose hits ignite enemies and leave burning ground behind.",
-                    SpellSchool.Fire, "Fire", 92f, 22f, 9.2f, 1.16f, 0.43f, 4.9f, 11.5f, 17f,
+                    SpellSchool.Fire, "Fire", 96f, 27f, 9.2f, 1.16f, 0.43f, 4.9f, 11.5f, 17f,
                     "INFERNO", 1.92f, 2.65f, 7f,
                     "Effect13_Hand", "Effect13_Collision", "Rain/RainFire"),
                 WizardDef("frost", "Rime", "Cryomancer",
                     "A control specialist who layers chill, slows advances, and locks down crowded lanes.",
-                    SpellSchool.Frost, "Frost", 112f, 16f, 8.7f, 1.08f, 0.42f, 4.75f, 10.5f, 16f,
+                    SpellSchool.Frost, "Frost", 112f, 23f, 8.7f, 1.08f, 0.42f, 4.75f, 10.5f, 16f,
                     "ABSOLUTE ZERO", 1.58f, 2.8f, 4.5f,
                     "Effect16_Hand", "Effect16_Explosion", "Pillar Blast/FrostPillarBlast"),
                 WizardDef("storm", "Tempest", "Stormcaller",
                     "A lightning-fast skirmisher whose charged bolts arc through clustered enemies.",
-                    SpellSchool.Storm, "Storm", 88f, 17f, 9.5f, 0.82f, 0.32f, 5.55f, 12f, 21f,
+                    SpellSchool.Storm, "Storm", 88f, 26f, 9.5f, 0.82f, 0.32f, 5.55f, 12f, 21f,
                     "EYE OF THE STORM", 1.62f, 2.3f, 5f,
                     "Effect10_Hand", "Effect10_Collision", "Rain/RainStorm"),
                 ArcherDef(),
             };
             foreach (var definition in roster) definition.EnsureSuperConfiguration();
             return roster;
+        }
+
+        /// <summary>
+        /// Refreshes only the Task 2 roster payload in the two generated scenes.
+        /// This preserves scene topology, object file ids, post-processing, and
+        /// all Invector builder outputs when combat data alone changes.
+        /// </summary>
+        public static string RefreshCombatCadenceReadabilityData()
+        {
+            BrawlerDefinition[] sourceRoster = BuildRosterFromExistingAssets();
+            string[] paths = { ScenePath, "Assets/Scenes/MainMenu.unity" };
+            var report = new StringBuilder();
+            for (int sceneIndex = 0; sceneIndex < paths.Length; sceneIndex++)
+            {
+                string path = paths[sceneIndex];
+                var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                GameFlow flow = UnityEngine.Object.FindFirstObjectByType<GameFlow>(
+                    FindObjectsInactive.Include);
+                MainMenuFlow menuFlow =
+                    UnityEngine.Object.FindFirstObjectByType<MainMenuFlow>(
+                        FindObjectsInactive.Include);
+                BrawlerDefinition[] targetRoster = flow != null
+                    ? flow.roster
+                    : menuFlow != null ? menuFlow.roster : null;
+                if (targetRoster == null)
+                    throw new InvalidOperationException(path + " has no generated roster owner.");
+
+                int updated = 0;
+                for (int i = 0; i < targetRoster.Length; i++)
+                {
+                    BrawlerDefinition target = targetRoster[i];
+                    if (target == null) continue;
+                    BrawlerDefinition source = sourceRoster.FirstOrDefault(candidate =>
+                        candidate != null && string.Equals(candidate.id, target.id,
+                            StringComparison.Ordinal));
+                    if (source == null) continue;
+                    target.maxHealth = source.maxHealth;
+                    target.damage = source.damage;
+                    target.projectileReadability = source.projectileReadability;
+                    updated++;
+                }
+
+                if (updated != sourceRoster.Length)
+                    throw new InvalidOperationException(path + " refreshed " + updated +
+                        " of " + sourceRoster.Length + " roster entries.");
+                EditorUtility.SetDirty(flow != null
+                    ? (UnityEngine.Object)flow
+                    : menuFlow);
+                if (!EditorSceneManager.SaveScene(scene, path))
+                    throw new InvalidOperationException("Could not save " + path + ".");
+                report.AppendLine(path + ": refreshed " + updated + " roster entries");
+            }
+            AssetDatabase.SaveAssets();
+            return report.ToString();
         }
 
         static void BuildCamera()

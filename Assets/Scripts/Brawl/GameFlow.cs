@@ -155,6 +155,8 @@ namespace BrawlArena
         public float autoAimRange = 3.5f;
         public GameObject projectilePrefab;
         public float projectileSpeed = 16f;
+        [Header("Projectile readability")]
+        public ProjectileReadabilityProfile projectileReadability;
         [Header("Spell presentation")]
         public GameObject castVfx;
         public GameObject secondaryCastVfx;
@@ -192,6 +194,7 @@ namespace BrawlArena
         {
             EnsureRpgIdentityConfiguration();
             EnsureSpecialtyConfiguration();
+            EnsureProjectileReadabilityConfiguration();
             string heroId = (id ?? string.Empty).ToLowerInvariant();
             bool legacyLifeSuper = heroId == "arcane" &&
                 (string.IsNullOrEmpty(superName) || superName == "ASTRAL CONVERGENCE" ||
@@ -250,6 +253,17 @@ namespace BrawlArena
             }
 
             if (superVfx == null) superVfx = koVfx;
+        }
+
+        /// <summary>
+        /// Older generated Arena scenes predate the presentation payload. The
+        /// fallback is deterministic from roster id and specialty and changes
+        /// no combat value.
+        /// </summary>
+        public void EnsureProjectileReadabilityConfiguration()
+        {
+            projectileReadability = projectileReadability.Sanitized(id,
+                specialty.school);
         }
 
         public void EnsureSpecialtyConfiguration()

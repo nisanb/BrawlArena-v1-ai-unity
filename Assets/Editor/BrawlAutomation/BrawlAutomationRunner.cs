@@ -200,6 +200,14 @@ namespace BrawlArena.EditorAutomation
                             result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
                                 .RunBasicAttackChargesSafely();
                             break;
+                        case "combat-cadence-readability":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunCombatCadenceReadabilitySafely();
+                            break;
+                        case "task2-combat-regression":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunTask2CombatRegressionSafely();
+                            break;
                         case "thorn-presentation":
                             result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
                                 .RunThornPresentationSafely();

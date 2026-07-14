@@ -43,6 +43,10 @@ namespace BrawlArena
         bool launched;
         bool destroyRequested;
         bool specialtyChainTriggered;
+        TeamId sourceTeam;
+        ProjectileReadabilityProfile readabilityProfile;
+        ProjectileAttackTier attackTier;
+        ProjectileReadabilityLease readabilityLease;
 
         public void Launch(BrawlerController owner, Vector3 direction, float damage, float speed,
             GameObject impactVfx)
@@ -108,6 +112,22 @@ namespace BrawlArena
             SpellSpecialty specialty, GameObject secondaryImpactVfx, float maxTravelDistance,
             BrawlerController lockedTarget)
         {
+            Launch(owner, direction, damage, speed, impactVfx, blastRadius, knockback,
+                minimumHitRadius, specialty, secondaryImpactVfx, maxTravelDistance,
+                lockedTarget, blastRadius > 0f
+                    ? ProjectileAttackTier.Super
+                    : ProjectileAttackTier.Basic);
+        }
+
+        /// <summary>
+        /// Explicit attack tier keeps combat presentation independent from
+        /// splash mechanics. Older callers retain their established inference.
+        /// </summary>
+        public void Launch(BrawlerController owner, Vector3 direction, float damage, float speed,
+            GameObject impactVfx, float blastRadius, float knockback, float minimumHitRadius,
+            SpellSpecialty specialty, GameObject secondaryImpactVfx, float maxTravelDistance,
+            BrawlerController lockedTarget, ProjectileAttackTier launchTier)
+        {
             ClearRuntimeState();
             destroyRequested = false;
             this.owner = owner;
@@ -131,6 +151,16 @@ namespace BrawlArena
             dieAt = Time.time + Mathf.Max(0f, lifeTime);
             transform.rotation = Quaternion.LookRotation(dir);
             CombatPhysics.SetLayerRecursively(gameObject, CombatPhysics.ProjectileLayer);
+
+            sourceTeam = owner != null ? owner.team : TeamId.Blue;
+            readabilityProfile = owner != null
+                ? owner.ProjectileReadability.Sanitized(string.Empty, this.specialty.school)
+                : ProjectileReadabilityProfile.ForRoster(string.Empty, this.specialty.school);
+            attackTier = launchTier;
+            readabilityLease = ProjectileReadabilityLease.GetOrCreate(gameObject);
+            if (readabilityLease != null)
+                readabilityLease.Configure(sourceTeam, readabilityProfile, attackTier,
+                    this.blastRadius, ProjectileWorldInteraction.StopsOnWorld);
 
             matchManager = MatchManager.Instance;
             if (matchManager != null)
@@ -206,6 +236,13 @@ namespace BrawlArena
             nextHomingAcquireAt = 0f;
             launched = false;
             specialtyChainTriggered = false;
+            sourceTeam = TeamId.Blue;
+            readabilityProfile = default;
+            attackTier = ProjectileAttackTier.Basic;
+            if (readabilityLease == null)
+                readabilityLease = GetComponent<ProjectileReadabilityLease>();
+            if (readabilityLease != null) readabilityLease.ResetLease();
+            readabilityLease = null;
         }
 
         bool MatchAllowsDamage()
@@ -238,7 +275,7 @@ namespace BrawlArena
             {
                 Vector3 impactPoint = position + dir * targetDistance;
                 if (blastRadius <= 0f) DamageTarget(target, impactPoint);
-                Explode(impactPoint);
+                Explode(impactPoint, ProjectileImpactOutcome.DirectHit);
                 return;
             }
 
@@ -247,14 +284,14 @@ namespace BrawlArena
                 Vector3 impactPoint = worldHit.distance > 0f
                     ? worldHit.point
                     : position;
-                Explode(impactPoint);
+                Explode(impactPoint, ProjectileImpactOutcome.WorldBlocked);
                 return;
             }
 
             transform.position = position + dir * step;
             remainingTravelDistance -= step;
             if (remainingTravelDistance <= 0.0001f || Time.time >= dieAt)
-                Explode(transform.position);
+                Explode(transform.position, ProjectileImpactOutcome.RangeExpired);
         }
 
         void UpdateHoming(float deltaTime)
@@ -351,7 +388,7 @@ namespace BrawlArena
             return target != null;
         }
 
-        void Explode(Vector3 at)
+        void Explode(Vector3 at, ProjectileImpactOutcome outcome)
         {
             if (!launched || !MatchAllowsDamage())
             {
@@ -398,6 +435,9 @@ namespace BrawlArena
             if (MatchAllowsDamage() && secondaryImpactVfx != null &&
                 secondaryImpactVfx != impactVfx)
                 BrawlerController.SpawnVfx(secondaryImpactVfx, at, Quaternion.identity, 2.5f);
+            if (MatchAllowsDamage())
+                ProjectileReadabilityRuntime.SpawnImpactCue(at, outcome, sourceTeam,
+                    readabilityProfile, attackTier, blastRadius);
             Despawn();
         }
 

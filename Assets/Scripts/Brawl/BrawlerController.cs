@@ -63,6 +63,14 @@ namespace BrawlArena
         public float projectileSpeed = 16f;
         public SpellSpecialty specialty;
 
+        /// <summary>Brawl-owned presentation data applied by character assembly.</summary>
+        public ProjectileReadabilityProfile ProjectileReadability { get; private set; }
+
+        internal void ConfigureProjectileReadability(ProjectileReadabilityProfile profile)
+        {
+            ProjectileReadability = profile.Sanitized(string.Empty, specialty.school);
+        }
+
         [Header("Super")]
         public string superName = "POWER BURST";
         public BrawlerSuperStyle superStyle = BrawlerSuperStyle.Burst;
@@ -1468,7 +1476,8 @@ namespace BrawlArena
             // Basic shots use only the authored projectile and compact primary
             // hit. The secondary collision layer is reserved for Supers.
             proj.Launch(this, dir, attackDamage, projectileSpeed, impactVfx,
-                0f, specialty.knockback, 0f, specialty, null, attackRange, target);
+                0f, specialty.knockback, 0f, specialty, null, attackRange, target,
+                ProjectileAttackTier.Basic);
         }
 
         void FireSuperProjectile(BrawlerController target, Vector3 worldDirection)
@@ -1495,7 +1504,7 @@ namespace BrawlArena
                 superProjectileSpeed > 0f ? superProjectileSpeed : projectileSpeed * 1.4f,
                 superImpact, superProjectileBlastRadius,
                 Mathf.Max(superKnockback, specialty.knockback), 0.48f,
-                specialty, secondaryImpactVfx, 0f, target);
+                specialty, secondaryImpactVfx, 0f, target, ProjectileAttackTier.Super);
         }
 
         void MeleeStrike(Vector3 worldDirection)

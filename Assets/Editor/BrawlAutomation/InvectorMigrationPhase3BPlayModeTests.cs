@@ -1458,6 +1458,10 @@ namespace BrawlArena.EditorAutomation.Tests
             "Temp/InvectorOnlyCutoverEditModeResults.xml";
         public const string BasicAttackChargesResultPath =
             "Temp/BasicAttackChargesEditModeResults.xml";
+        public const string CombatCadenceReadabilityResultPath =
+            "Temp/CombatCadenceReadabilityEditModeResults.xml";
+        public const string Task2CombatRegressionResultPath =
+            "Temp/Task2CombatRegressionEditModeResults.xml";
         public const string Phase3CCBufferedMotorResultPath =
             "Temp/Phase3CCBufferedMotorEditModeResults.xml";
         public const string Phase3DBLifecycleResultPath =
@@ -1500,6 +1504,10 @@ namespace BrawlArena.EditorAutomation.Tests
             "BrawlArena.EditorAutomation.Tests.InvectorOnlyCutoverEditModeTests";
         const string BasicAttackChargesFixture =
             "BrawlArena.EditorAutomation.Tests.BasicAttackChargesEditModeTests";
+        const string CombatCadenceReadabilityFixture =
+            "BrawlArena.EditorAutomation.Tests.CombatCadenceReadabilityEditModeTests";
+        const string Task2CombatRegressionFixture =
+            "BrawlArena.EditorAutomation.CombatObjectPoolEditModeTests";
         const string FocusedFixture =
             "BrawlArena.EditorAutomation.Tests.InvectorMigrationPilotEditModeTests";
         const string RimeProductionFixture =
@@ -1519,6 +1527,9 @@ namespace BrawlArena.EditorAutomation.Tests
         const string FullRunKind = "full";
         const string InvectorOnlyCutoverRunKind = "invector-only-cutover";
         const string BasicAttackChargesRunKind = "basic-attack-charges";
+        const string CombatCadenceReadabilityRunKind =
+            "combat-cadence-readability";
+        const string Task2CombatRegressionRunKind = "task2-combat-regression";
         const string Phase3CCRunKind = "phase3cc";
         const string Phase3DBLifecycleRunKind = "phase3db-lifecycle";
         const string Phase3DCWeaponIKRunKind = "phase3dc-weapon-ik";
@@ -1595,6 +1606,29 @@ namespace BrawlArena.EditorAutomation.Tests
                 testMode = UnityEditor.TestTools.TestRunner.Api.TestMode.EditMode,
                 categoryNames = new[] { "BasicAttackCharges" },
             }, BasicAttackChargesRunKind);
+        }
+
+        public static string RunCombatCadenceReadabilitySafely()
+        {
+            return RunSafelyAgainstCurrentScene(new Filter
+            {
+                testMode = UnityEditor.TestTools.TestRunner.Api.TestMode.EditMode,
+                categoryNames = new[] { "CombatCadenceReadability" },
+            }, CombatCadenceReadabilityRunKind);
+        }
+
+        public static string RunTask2CombatRegressionSafely()
+        {
+            return RunSafelyAgainstCurrentScene(new Filter
+            {
+                testMode = UnityEditor.TestTools.TestRunner.Api.TestMode.EditMode,
+                testNames = new[]
+                {
+                    Task2CombatRegressionFixture,
+                    "BrawlArena.EditorAutomation.CombatRuntimeCorrectnessEditModeTests",
+                    "BrawlArena.EditorAutomation.RpgCombatSliceEditModeTests",
+                },
+            }, Task2CombatRegressionRunKind);
         }
 
         public static string RunPhase3CCBufferedMotorSafely()
@@ -1837,6 +1871,10 @@ namespace BrawlArena.EditorAutomation.Tests
                 if (runKind == FocusedRunKind) return FocusedFixture;
                 if (runKind == InvectorOnlyCutoverRunKind) return InvectorOnlyCutoverFixture;
                 if (runKind == BasicAttackChargesRunKind) return BasicAttackChargesFixture;
+                if (runKind == CombatCadenceReadabilityRunKind)
+                    return CombatCadenceReadabilityFixture;
+                if (runKind == Task2CombatRegressionRunKind)
+                    return Task2CombatRegressionFixture;
                 if (runKind == Phase3CCRunKind) return Phase3CCBufferedMotorTargetMethod;
                 if (runKind == Phase3DBLifecycleRunKind) return Phase3DBLifecycleTargetMethod;
                 if (runKind == Phase3DCWeaponIKRunKind) return Phase3DCWeaponIKTargetMethod;
@@ -1857,6 +1895,10 @@ namespace BrawlArena.EditorAutomation.Tests
                 if (runKind == FocusedRunKind) return FocusedResultPath;
                 if (runKind == InvectorOnlyCutoverRunKind) return InvectorOnlyCutoverResultPath;
                 if (runKind == BasicAttackChargesRunKind) return BasicAttackChargesResultPath;
+                if (runKind == CombatCadenceReadabilityRunKind)
+                    return CombatCadenceReadabilityResultPath;
+                if (runKind == Task2CombatRegressionRunKind)
+                    return Task2CombatRegressionResultPath;
                 if (runKind == Phase3CCRunKind) return Phase3CCBufferedMotorResultPath;
                 if (runKind == Phase3DBLifecycleRunKind) return Phase3DBLifecycleResultPath;
                 if (runKind == Phase3DCWeaponIKRunKind) return Phase3DCWeaponIKResultPath;

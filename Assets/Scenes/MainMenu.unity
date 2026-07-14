@@ -1608,17 +1608,26 @@ MonoBehaviour:
     portrait: {fileID: 21300000, guid: 1974510b323b0654381f479194c452f8, type: 3}
     invectorHumanPrefab: {fileID: 6215850469901778175, guid: 6aaadd902b169c74098d8c2bfa77ea0a, type: 3}
     invectorAIPrefab: {fileID: 1217625541980929687, guid: f4276398668df80439bea5f2e6c90808, type: 3}
-    maxHealth: 92
-    damage: 22
+    maxHealth: 96
+    damage: 27
     attackRange: 9.2
     attackRadius: 1.15
     cooldown: 1.16
+    basicAttackReloadInterval: 2.25
     hitDelay: 0.43
     moveLock: 0.42
     moveSpeed: 4.9
     autoAimRange: 11.5
     projectilePrefab: {fileID: 100010, guid: b32f835e658efa1419ad0ae6b033b81f, type: 3}
     projectileSpeed: 17
+    projectileReadability:
+      configured: 1
+      threat: 0
+      accent: {r: 1, g: 0.48, b: 0.08, a: 1}
+      cueScale: 1.08
+      trailWidth: 0.09
+      trailDuration: 0.42
+      pulseSpeed: 4.4
     castVfx: {fileID: 139178, guid: 6b3488aa97f1d514d8a4fa45cc3b2dad, type: 3}
     secondaryCastVfx: {fileID: 1242068248825616, guid: 1e28422a094b1684aa3f5016a44b1c4a, type: 3}
     swingVfx: {fileID: 104278, guid: aa93d6fd1636c314db42f1758e084bfa, type: 3}
@@ -1671,16 +1680,25 @@ MonoBehaviour:
     invectorHumanPrefab: {fileID: 4507023107282245903, guid: 8210e5a32e5408841a88fa4e647fa5c1, type: 3}
     invectorAIPrefab: {fileID: 4400196431709436480, guid: 0fc7c55cc0dc49e4680705d232d15334, type: 3}
     maxHealth: 112
-    damage: 16
+    damage: 23
     attackRange: 8.7
     attackRadius: 1.15
     cooldown: 1.08
+    basicAttackReloadInterval: 2.25
     hitDelay: 0.42
     moveLock: 0.42
     moveSpeed: 4.75
     autoAimRange: 10.5
     projectilePrefab: {fileID: 100012, guid: 9055f3f4e592d1247b2a06b192f248a7, type: 3}
     projectileSpeed: 16
+    projectileReadability:
+      configured: 1
+      threat: 1
+      accent: {r: 0.38, g: 0.95, b: 1, a: 1}
+      cueScale: 1.12
+      trailWidth: 0.1
+      trailDuration: 0.52
+      pulseSpeed: 2.8
     castVfx: {fileID: 139782, guid: 4016dcb540ea2da469c212ee1f27f43a, type: 3}
     secondaryCastVfx: {fileID: 1197813074179366, guid: 5e75658b064a03947952f07bc8b0f0d1, type: 3}
     swingVfx: {fileID: 126618, guid: e5d376577e02c0049bdbb2457d586eba, type: 3}
@@ -1733,16 +1751,25 @@ MonoBehaviour:
     invectorHumanPrefab: {fileID: 3372663792302616220, guid: c1cee4eff40942a439165c232872cb91, type: 3}
     invectorAIPrefab: {fileID: 8772924099643843071, guid: faec4d591ae92a74184207ebd513d3f4, type: 3}
     maxHealth: 88
-    damage: 17
+    damage: 26
     attackRange: 9.5
     attackRadius: 1.15
     cooldown: 0.82
+    basicAttackReloadInterval: 2.25
     hitDelay: 0.32
     moveLock: 0.35999998
     moveSpeed: 5.55
     autoAimRange: 12
     projectilePrefab: {fileID: 100014, guid: fcb5c083659d20643a5041a3ffa7b584, type: 3}
     projectileSpeed: 21
+    projectileReadability:
+      configured: 1
+      threat: 2
+      accent: {r: 0.86, g: 0.68, b: 1, a: 1}
+      cueScale: 1.04
+      trailWidth: 0.075
+      trailDuration: 0.34
+      pulseSpeed: 6.2
     castVfx: {fileID: 193998, guid: be9c49d40577af94fa21cbb1dc0dc38d, type: 3}
     secondaryCastVfx: {fileID: 139548, guid: 8ec3c7cf5743aba4d8e254b8bdf0aa8e, type: 3}
     swingVfx: {fileID: 107242, guid: 4f01e09274ab093448d46ac4916288cf, type: 3}
@@ -1795,16 +1822,25 @@ MonoBehaviour:
     invectorHumanPrefab: {fileID: 4254777887847498187, guid: 7ed49b2535df65944800febb0ea37e36, type: 3}
     invectorAIPrefab: {fileID: 172272381781189111, guid: bf2fd05f5d4342f4da6b72ec97f8ebb1, type: 3}
     maxHealth: 96
-    damage: 23
+    damage: 30
     attackRange: 10.5
     attackRadius: 0.8
     cooldown: 1.1
+    basicAttackReloadInterval: 2.25
     hitDelay: 0.48
     moveLock: 0.42
     moveSpeed: 5.15
     autoAimRange: 12.5
     projectilePrefab: {fileID: 115832, guid: 397f6f572306f984aac6cf61d2361268, type: 3}
     projectileSpeed: 24
+    projectileReadability:
+      configured: 1
+      threat: 3
+      accent: {r: 0.72, g: 1, b: 0.3, a: 1}
+      cueScale: 0.94
+      trailWidth: 0.055
+      trailDuration: 0.28
+      pulseSpeed: 3.6
     castVfx: {fileID: 0}
     secondaryCastVfx: {fileID: 0}
     swingVfx: {fileID: 0}

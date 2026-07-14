@@ -430,7 +430,10 @@ namespace BrawlArena.EditorAutomation.Tests
                     InvectorThornMigrationBuilder.ProductionAIPrefabPath)));
             Assert.That(thorn.projectilePrefab, Is.Not.Null);
             Assert.That(thorn.projectilePrefab.name, Is.EqualTo("Arrow01"));
-            Assert.That(thorn.damage, Is.EqualTo(23f));
+            Assert.That(thorn.damage, Is.EqualTo(30f));
+            Assert.That(thorn.projectileReadability.configured, Is.True);
+            Assert.That(thorn.projectileReadability.threat,
+                Is.EqualTo(ProjectileThreatType.Precision));
             Assert.That(thorn.hitDelay,
                 Is.EqualTo(0.48f).Within(0.0001f));
             Assert.That(thorn.superStyle,

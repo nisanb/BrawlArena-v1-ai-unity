@@ -500,7 +500,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 role = "Stormcaller",
                 invectorHumanPrefab = productionPrefab,
                 maxHealth = 88f,
-                damage = 17f,
+                damage = 26f,
                 attackRange = 9.5f,
                 attackRadius = 1.15f,
                 cooldown = TempestCooldown,
@@ -522,26 +522,22 @@ namespace BrawlArena.EditorAutomation.Tests
 
         static Health BuildChargeTarget(Scene scene)
         {
-            GameObject target = new GameObject("Tempest Brawl Charge Target");
-            target.SetActive(false);
-            SceneManager.MoveGameObjectToScene(target, scene);
-            target.transform.position = new Vector3(100f, 0f, 100f);
-            Health health = target.AddComponent<Health>();
-            health.SetMax(1000f);
-            InvectorCutoverTestMotor motor =
-                target.AddComponent<InvectorCutoverTestMotor>();
-            InvectorCutoverTestAnimationDriver animation =
-                target.AddComponent<InvectorCutoverTestAnimationDriver>();
-            BrawlerController controller = target.AddComponent<BrawlerController>();
-            controller.SetMotor(motor);
-            controller.SetAnimationDriver(animation);
-            controller.team = TeamId.Red;
-            controller.moveSpeed = 0f;
-            // Run Awake/OnEnable once so the production Health.Damaged binding
-            // exists, then keep this direct-charge fixture out of Update loops.
-            target.SetActive(true);
-            target.SetActive(false);
-            return health;
+            BrawlerDefinition targetDefinition =
+                ArenaSceneBuilder.BuildRosterFromExistingAssets()
+                    .Single(definition =>
+                        definition.id == InvectorTempestMigrationBuilder.RosterId);
+            targetDefinition.maxHealth = 1000f;
+            BrawlerController controller = GameFlow.Spawn(targetDefinition,
+                TeamId.Red, new Vector3(100f, 0f, 100f), true, 1f,
+                BrawlerAssemblyContext.ProductionHumanInvector);
+            controller.gameObject.name = "Tempest Brawl Charge Target";
+            if (controller.gameObject.scene != scene)
+                SceneManager.MoveGameObjectToScene(controller.gameObject, scene);
+            controller.Health.SetMax(1000f);
+            // Assembly activates the exact human prefab once, establishing the
+            // production Health.Damaged binding. Keep it out of Update loops.
+            controller.gameObject.SetActive(false);
+            return controller.Health;
         }
 
         static void BuildGround(Scene scene)
