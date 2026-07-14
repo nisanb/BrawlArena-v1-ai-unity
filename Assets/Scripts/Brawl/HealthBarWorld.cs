@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,16 +11,20 @@ namespace BrawlArena
     public class HealthBarWorld : MonoBehaviour
     {
         BrawlerController owner;
+        HeroMatchProgression progression;
         Image fill;
+        TextMeshProUGUI identity;
         CanvasGroup group;
         Camera cam;
         float displayed = 1f;
+        int shownLevel = -1;
+        string shownName;
 
         public static HealthBarWorld Create(BrawlerController owner)
         {
             var root = new GameObject("HealthBar", typeof(RectTransform));
             root.transform.SetParent(owner.transform, false);
-            root.transform.localPosition = new Vector3(0f, 2.45f, 0f);
+            root.transform.localPosition = new Vector3(0f, 2.55f, 0f);
             var bar = root.AddComponent<HealthBarWorld>();
             bar.owner = owner;
             bar.Build();
@@ -33,17 +38,36 @@ namespace BrawlArena
             var canvas = canvasGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             var rt = (RectTransform)canvasGo.transform;
-            rt.sizeDelta = new Vector2(120f, 14f);
+            rt.sizeDelta = new Vector2(170f, 36f);
             canvasGo.transform.localScale = Vector3.one * 0.012f;
             group = canvasGo.GetComponent<CanvasGroup>();
 
+            var nameBackground = NewImage("NameBG", canvasGo.transform,
+                new Color(0.025f, 0.04f, 0.075f, 0.82f));
+            var nameBgRt = nameBackground.rectTransform;
+            nameBgRt.anchorMin = new Vector2(0.04f, 0.43f);
+            nameBgRt.anchorMax = new Vector2(0.96f, 1f);
+            nameBgRt.offsetMin = Vector2.zero;
+            nameBgRt.offsetMax = Vector2.zero;
+
+            identity = NewText("Identity", canvasGo.transform);
+            var identityRt = identity.rectTransform;
+            identityRt.anchorMin = new Vector2(0.04f, 0.43f);
+            identityRt.anchorMax = new Vector2(0.96f, 1f);
+            identityRt.offsetMin = Vector2.zero;
+            identityRt.offsetMax = Vector2.zero;
+
             var bg = NewImage("BG", canvasGo.transform, new Color(0.06f, 0.06f, 0.09f, 0.8f));
-            Stretch(bg.rectTransform);
+            var bgRt = bg.rectTransform;
+            bgRt.anchorMin = new Vector2(0.08f, 0.04f);
+            bgRt.anchorMax = new Vector2(0.92f, 0.37f);
+            bgRt.offsetMin = Vector2.zero;
+            bgRt.offsetMax = Vector2.zero;
 
             fill = NewImage("Fill", canvasGo.transform, TeamUtil.Color(owner.team));
             var frt = fill.rectTransform;
-            frt.anchorMin = Vector2.zero;
-            frt.anchorMax = Vector2.one;
+            frt.anchorMin = new Vector2(0.08f, 0.04f);
+            frt.anchorMax = new Vector2(0.92f, 0.37f);
             frt.offsetMin = new Vector2(2f, 2f);
             frt.offsetMax = new Vector2(-2f, -2f);
             // Image.Type.Filled is ignored when the Image has no sprite.
@@ -67,6 +91,18 @@ namespace BrawlArena
             float target = owner.Health.Max > 0f ? owner.Health.Current / owner.Health.Max : 0f;
             displayed = Mathf.MoveTowards(displayed, target, Time.deltaTime * 2.5f);
             fill.fillAmount = displayed;
+
+            if (progression == null) progression = owner.GetComponent<HeroMatchProgression>();
+            int level = progression != null ? progression.Level : 1;
+            string heroName = string.IsNullOrWhiteSpace(owner.displayName)
+                ? "HERO"
+                : owner.displayName.Trim().ToUpperInvariant();
+            if (shownLevel != level || shownName != heroName)
+            {
+                shownLevel = level;
+                shownName = heroName;
+                identity.text = heroName + "  •  LV " + level;
+            }
         }
 
         static Sprite whiteSprite;
@@ -87,6 +123,23 @@ namespace BrawlArena
             img.color = color;
             img.raycastTarget = false;
             return img;
+        }
+
+        static TextMeshProUGUI NewText(string name, Transform parent)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
+            go.transform.SetParent(parent, false);
+            var text = go.GetComponent<TextMeshProUGUI>();
+            TMP_FontAsset font = UiTheme.Instance != null ? UiTheme.Instance.buttonFont : null;
+            if (font == null) font = TMP_Settings.defaultFontAsset;
+            if (font != null) text.font = font;
+            text.fontSize = 12f;
+            text.color = Color.white;
+            text.alignment = TextAlignmentOptions.Center;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.overflowMode = TextOverflowModes.Ellipsis;
+            text.raycastTarget = false;
+            return text;
         }
 
         static void Stretch(RectTransform rt)

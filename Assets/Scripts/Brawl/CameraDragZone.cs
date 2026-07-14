@@ -5,7 +5,7 @@ namespace BrawlArena
 {
     /// <summary>
     /// Invisible drag surface covering the right side of the screen: dragging
-    /// orbits the BrawlCamera (yaw + clamped pitch). The attack/sprint buttons
+    /// orbits the BrawlCamera (yaw + clamped pitch). The action buttons
     /// are later siblings on the canvas, so they keep receiving their own
     /// pointer events; this zone only sees touches that start on empty space.
     /// </summary>

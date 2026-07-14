@@ -32,13 +32,27 @@ namespace BrawlArena
             Changed?.Invoke();
         }
 
-        public void TakeDamage(float amount, GameObject attacker)
+        /// <summary>
+        /// Applies damage and returns the amount of health actually removed.
+        /// Events receive this applied delta as well, so overkill, invulnerability
+        /// and post-match damage can never inflate combat stats or Super charge.
+        /// </summary>
+        public float TakeDamage(float amount, GameObject attacker)
         {
-            if (IsDead || Invulnerable || amount <= 0f) return;
+            if (IsDead || Invulnerable || amount <= 0f) return 0f;
+            if (MatchManager.Instance != null && MatchManager.Instance.State == MatchState.Ended)
+                return 0f;
+
+            float before = Current;
             Current = Mathf.Max(0f, Current - amount);
+            float applied = before - Current;
+            if (applied <= 0f) return 0f;
+
+            BalanceTelemetryRuntime.RecordDamage(this, attacker, applied);
             Changed?.Invoke();
-            Damaged?.Invoke(amount, attacker);
+            Damaged?.Invoke(applied, attacker);
             if (Current <= 0f) Died?.Invoke(attacker);
+            return applied;
         }
 
         public void Heal(float amount)
@@ -46,6 +60,7 @@ namespace BrawlArena
             if (IsDead || amount <= 0f || Current >= maxHealth) return;
             float restored = Mathf.Min(amount, maxHealth - Current);
             Current += restored;
+            BalanceTelemetryRuntime.RecordHealing(this, restored);
             Changed?.Invoke();
             Healed?.Invoke(restored);
         }

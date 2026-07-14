@@ -1,0 +1,456 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &3333462846124598430
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7530505881333711251}
+  - component: {fileID: 6606375573872467114}
+  m_Layer: 0
+  m_Name: InvectorNavigationPlanner_DISABLED
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7530505881333711251
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3333462846124598430}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1219591655303544397}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!195 &6606375573872467114
+NavMeshAgent:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3333462846124598430}
+  m_Enabled: 0
+  m_AgentTypeID: 0
+  m_Radius: 0.375
+  m_Speed: 3.5
+  m_Acceleration: 40
+  avoidancePriority: 50
+  m_AngularSpeed: 0
+  m_StoppingDistance: 0.5
+  m_AutoTraverseOffMeshLink: 0
+  m_AutoBraking: 1
+  m_AutoRepath: 1
+  m_Height: 1.8
+  m_BaseOffset: 0
+  m_WalkableMask: 4294967295
+  m_ObstacleAvoidanceType: 4
+--- !u!1001 &8124815977114930375
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 784520551388863639, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: movementFeedMode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3468477231618477347, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: configuredNavigationPlanner
+      value: 
+      objectReference: {fileID: 3968646574858008513}
+    - target: {fileID: 6927938031985734224, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_Name
+      value: CinderInvectorAI
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.48
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9997195
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.023685575
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7530505881333711251}
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 6927938031985734224, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7616465665244503775}
+    - targetCorrespondingSourceObject: {fileID: 6927938031985734224, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1329073999200519319}
+    - targetCorrespondingSourceObject: {fileID: 6927938031985734224, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4842811792196394101}
+    - targetCorrespondingSourceObject: {fileID: 6927938031985734224, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3968646574858008513}
+    - targetCorrespondingSourceObject: {fileID: 6927938031985734224, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2186777495118940865}
+    - targetCorrespondingSourceObject: {fileID: 6927938031985734224, guid: 12b31ba25708e04489318559f291b366, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4561480998540824591}
+  m_SourcePrefab: {fileID: 100100000, guid: 12b31ba25708e04489318559f291b366, type: 3}
+--- !u!114 &356463251834209102 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8373120132516777865, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8eae4461da03f6a4380b797d66f1589a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!1 &1217625541980929687 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 6927938031985734224, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &7616465665244503775
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45718270e4e1ea84f8829bf47536fedd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.Health
+  maxHealth: 100
+--- !u!114 &1329073999200519319
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbef978689a00c44f8cb777fc82066c5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.BrawlerController
+  displayName: Brawler
+  playerTag: 
+  role: 
+  portrait: {fileID: 0}
+  team: 0
+  moveSpeed: 5
+  attackDamage: 20
+  attackRange: 2.2
+  attackRadius: 1.5
+  attackCooldown: 0.9
+  attackHitDelay: 0.35
+  attackMoveLock: 0.45
+  autoAimRange: 3.5
+  maxStamina: 60
+  wardStepCost: 20
+  wardStepDistance: 2.75
+  wardStepDuration: 0.16
+  staminaRegenPerSec: 8
+  staminaRegenDelay: 0.75
+  healthRegenDelay: 3
+  healthRegenTickFraction: 0.08
+  healthRegenTickInterval: 0.8
+  respawnDelayMultiplier: 1
+  projectilePrefab: {fileID: 0}
+  projectileSpeed: 16
+  specialty:
+    school: 0
+    burnDamageFraction: 0
+    burnDuration: 0
+    burnTickInterval: 0
+    slowMultiplier: 0
+    slowDuration: 0
+    chainTargets: 0
+    chainRange: 0
+    chainDamageMultiplier: 0
+    knockback: 0
+    sustainFraction: 0
+    voidPullDistance: 0
+    poisonDamageFraction: 0
+    poisonDuration: 0
+    poisonTickInterval: 0
+    groundEffectRadius: 0
+    groundEffectDuration: 0
+    groundBurnFraction: 0
+    allyHealFraction: 0
+    allyHealRadius: 0
+    ritualHealFraction: 0
+  superName: POWER BURST
+  superStyle: 0
+  maxSuperCharge: 150
+  superDamageMultiplier: 1.6
+  superRange: 3.2
+  superKnockback: 6
+  superDashDistance: 4.8
+  superProjectileSpeed: 22
+  superProjectileBlastRadius: 2
+  superProjectilePrefab: {fileID: 0}
+  superImpactVfx: {fileID: 0}
+  superVfx: {fileID: 0}
+  secondarySuperVfx: {fileID: 0}
+  superChargeFromDamageDealt: 0.55
+  superChargeFromDamageTaken: 0.24
+  superChargeOnKO: 12
+  castVfx: {fileID: 0}
+  secondaryCastVfx: {fileID: 0}
+  swingVfx: {fileID: 0}
+  impactVfx: {fileID: 0}
+  secondaryImpactVfx: {fileID: 0}
+  koVfx: {fileID: 0}
+  spawnVfx: {fileID: 0}
+  attackSfx: {fileID: 0}
+  hitSfx: {fileID: 0}
+  motorSource: {fileID: 4675761981934584292}
+  motorLocked: 0
+  animationDriverSource: {fileID: 3013844226625045479}
+  animationDriverLocked: 0
+  weaponPresentationSource: {fileID: 3135704688539474284}
+  weaponPresentationLocked: 0
+--- !u!114 &4842811792196394101
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11611eff15c0fa34791bb6674c91d9b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.AIBrawler
+  thinkInterval: 0.25
+  preferredRange: 0
+  retreatBelowPct: 0.28
+  resumeAbovePct: 0.5
+  experienceBoxSeekRange: 12
+  navigationSource: {fileID: 3968646574858008513}
+  navigationLocked: 0
+--- !u!114 &3968646574858008513
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2c7df65d8d34225af765f8ca01a85bf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorBrawlerNavigation
+  plannerAgent: {fileID: 6606375573872467114}
+  plannerTransformNeutralConfigured: 1
+--- !u!114 &2186777495118940865
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e293680e464a46339ef30b3d4bdc0b1e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorAIRuntimeGate
+  facade: {fileID: 1329073999200519319}
+  health: {fileID: 7616465665244503775}
+  controller: {fileID: 7329234927076328348}
+  input: {fileID: 8800605819337723984}
+  motor: {fileID: 4675761981934584292}
+  animationDriver: {fileID: 3013844226625045479}
+  weaponPresenter: {fileID: 3135704688539474284}
+  animator: {fileID: 1274877490269459641}
+  body: {fileID: 7945245517591143784}
+  capsule: {fileID: 8184805428536585506}
+  hitProxy: {fileID: 7287408431191964995}
+  ai: {fileID: 4842811792196394101}
+  navigation: {fileID: 3968646574858008513}
+  shooterManager: {fileID: 1525130827880939499}
+  meleeManager: {fileID: 2149004909275628600}
+  ammoManager: {fileID: 1495471182603875130}
+  collectControl: {fileID: 356463251834209102}
+--- !u!114 &4561480998540824591
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d4b988bda374581a392a40d51df8e7c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorBrawlerPrefabIdentity
+  rosterId: fire
+  role: 2
+--- !u!4 &1219591655303544397 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6930469401653113482, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &1274877490269459641 stripped
+Animator:
+  m_CorrespondingSourceObject: {fileID: 7021220976318584958, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1495471182603875130 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7206285019872329725, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d48792010207c394f9890a9c148beb3a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &1525130827880939499 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7344103795603649324, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c53b06e64363f74ca9377ee0b41842b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &2149004909275628600 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7859882518049933567, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9c76713cde3c2f48830b2ef9a8ff0cd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.BrawlInvectorMeleePresentationManager
+--- !u!114 &3013844226625045479 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 6418322499238596384, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2c1515f23edaf747a16ce63a7aaa17a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorBrawlerAnimationDriver
+--- !u!114 &3135704688539474284 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 6576777014524941739, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6e631a465ed4027ab48c255ded34200, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorBrawlerWeaponPresentation
+--- !u!114 &4675761981934584292 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3468477231618477347, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e4ed92a672df4c47b8ffef21aab72db8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorBrawlerMotor
+--- !u!114 &7287408431191964995 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1577164003668963716, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ac96cf7fedc414ab4ad6f3ffdf13388, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.BrawlerHitProxy
+--- !u!114 &7329234927076328348 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1546855905174212443, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 607d3e547cb8a0d47a4ccc2741a6e6b1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.BrawlInvectorThirdPersonController
+--- !u!54 &7945245517591143784 stripped
+Rigidbody:
+  m_CorrespondingSourceObject: {fileID: 2198332377247410607, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+--- !u!136 &8184805428536585506 stripped
+CapsuleCollider:
+  m_CorrespondingSourceObject: {fileID: 96651717604942309, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &8800605819337723984 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 784520551388863639, guid: 12b31ba25708e04489318559f291b366, type: 3}
+  m_PrefabInstance: {fileID: 8124815977114930375}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1217625541980929687}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0eb9c8bcaac0b3340a10f57f085dcca8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorShooterMeleeInputAdapter

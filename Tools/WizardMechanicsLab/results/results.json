@@ -1,0 +1,450 @@
+{
+  "SchemaVersion": "1.0",
+  "GeneratedAtUtc": "2026-07-11T18:48:55.9014109+00:00",
+  "Settings": {
+    "MatchesPerOrderedPair": 1000,
+    "Seed": 20260711,
+    "Simulation": {
+      "StepSeconds": 0.025,
+      "TimeLimitSeconds": 45,
+      "ArenaRadius": 10.5,
+      "StartingSeparation": 8,
+      "ThinkInterval": 0.1,
+      "HitRadius": 1.05,
+      "AimErrorDegrees": 1.75
+    }
+  },
+  "Roster": [
+    {
+      "Id": "arcane",
+      "Name": "Aether",
+      "MaxHealth": 108,
+      "Damage": 19,
+      "AttackRange": 9,
+      "Cooldown": 1.02,
+      "HitDelay": 0.4,
+      "MoveSpeed": 5,
+      "AutoAimRange": 11,
+      "ProjectileSpeed": 18
+    },
+    {
+      "Id": "fire",
+      "Name": "Cinder",
+      "MaxHealth": 92,
+      "Damage": 22,
+      "AttackRange": 9.2,
+      "Cooldown": 1.16,
+      "HitDelay": 0.43,
+      "MoveSpeed": 4.9,
+      "AutoAimRange": 11.5,
+      "ProjectileSpeed": 17
+    },
+    {
+      "Id": "frost",
+      "Name": "Rime",
+      "MaxHealth": 112,
+      "Damage": 16,
+      "AttackRange": 8.7,
+      "Cooldown": 1.08,
+      "HitDelay": 0.42,
+      "MoveSpeed": 4.75,
+      "AutoAimRange": 10.5,
+      "ProjectileSpeed": 16
+    },
+    {
+      "Id": "storm",
+      "Name": "Tempest",
+      "MaxHealth": 88,
+      "Damage": 17,
+      "AttackRange": 9.5,
+      "Cooldown": 0.82,
+      "HitDelay": 0.32,
+      "MoveSpeed": 5.55,
+      "AutoAimRange": 12,
+      "ProjectileSpeed": 21
+    },
+    {
+      "Id": "earth",
+      "Name": "Terra",
+      "MaxHealth": 138,
+      "Damage": 20,
+      "AttackRange": 8.3,
+      "Cooldown": 1.28,
+      "HitDelay": 0.47,
+      "MoveSpeed": 4.45,
+      "AutoAimRange": 10,
+      "ProjectileSpeed": 15
+    },
+    {
+      "Id": "void",
+      "Name": "Nyx",
+      "MaxHealth": 98,
+      "Damage": 20,
+      "AttackRange": 9,
+      "Cooldown": 1.08,
+      "HitDelay": 0.39,
+      "MoveSpeed": 5.2,
+      "AutoAimRange": 11,
+      "ProjectileSpeed": 18
+    }
+  ],
+  "Mechanics": [
+    {
+      "Mechanic": "Baseline",
+      "Calibration": {
+        "SelectedGreedy": "GreedyRapid",
+        "RapidScore": 0.5,
+        "RapidScoreInterval": {
+          "Estimate": 0.5,
+          "Lower": 0.5,
+          "Upper": 0.5,
+          "Samples": 7200
+        },
+        "PairedSamples": 7200
+      },
+      "NeutralCohort": {
+        "Matches": 36000,
+        "DecisiveMatches": 36000,
+        "Timeouts": 0,
+        "DoubleKos": 267,
+        "MeanCappedDuration": 8.838127083333312,
+        "MeanDecisiveTtk": 8.838127083333312,
+        "CloseFinishRate": 0.39916666666666667,
+        "ComebackConversionRate": 0.20740397286348772,
+        "ComebackOpportunities": 40978,
+        "MeanLeadChanges": 1.3628888888888888,
+        "Actions": {
+          "Casts": 598977,
+          "QuickCasts": 0,
+          "MediumCasts": 0,
+          "FullCasts": 0,
+          "Dodges": 318740,
+          "RangeChanges": 805994,
+          "FocusWaits": 0,
+          "FocusReserveHolds": 0,
+          "Interruptions": 0,
+          "ChargeHitsReceived": 0,
+          "Hits": 350373,
+          "Misses": 221375,
+          "FocusStarvedSeconds": 0,
+          "FocusReserveSeconds": 0
+        },
+        "HitRate": 0.6128101891042907,
+        "InterruptionsPerChargedCast": 0,
+        "InterruptEligibilityRate": 0,
+        "Profiles": {
+          "arcane": {
+            "Appearances": 12000,
+            "CombatSeconds": 107387.4250000004,
+            "CastsPerMinute": 56.866434780422175,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "fire": {
+            "Appearances": 12000,
+            "CombatSeconds": 94825.42500000061,
+            "CastsPerMinute": 53.48312438357083,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "frost": {
+            "Appearances": 12000,
+            "CombatSeconds": 119695.19999999994,
+            "CastsPerMinute": 56.43985723738298,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "storm": {
+            "Appearances": 12000,
+            "CombatSeconds": 93109.5500000002,
+            "CastsPerMinute": 69.44787081454035,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "earth": {
+            "Appearances": 12000,
+            "CombatSeconds": 122444.95000000046,
+            "CastsPerMinute": 48.13918418031922,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "void": {
+            "Appearances": 12000,
+            "CombatSeconds": 98882.60000000068,
+            "CastsPerMinute": 57.07859623432193,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          }
+        }
+      },
+      "Strategy": {
+        "BestGreedy": "GreedyRapid",
+        "AdaptiveScore": {
+          "Estimate": 0.5,
+          "Lower": 0.5,
+          "Upper": 0.5,
+          "Samples": 36000
+        },
+        "AdaptiveAdvantage": 0,
+        "AdaptiveWins": 35734,
+        "GreedyWins": 35734,
+        "Draws": 532
+      },
+      "MirrorFairness": {
+        "LeftSideScore": {
+          "Estimate": 0.49271875,
+          "Lower": 0.4896087341498118,
+          "Upper": 0.49582876585018815,
+          "Samples": 24000
+        },
+        "LeftWins": 23056,
+        "RightWins": 23755,
+        "Draws": 1189
+      }
+    },
+    {
+      "Mechanic": "FocusEconomy",
+      "Calibration": {
+        "SelectedGreedy": "GreedyRapid",
+        "RapidScore": 0.5,
+        "RapidScoreInterval": {
+          "Estimate": 0.5,
+          "Lower": 0.5,
+          "Upper": 0.5,
+          "Samples": 7200
+        },
+        "PairedSamples": 7200
+      },
+      "NeutralCohort": {
+        "Matches": 36000,
+        "DecisiveMatches": 35995,
+        "Timeouts": 5,
+        "DoubleKos": 326,
+        "MeanCappedDuration": 13.861851388888915,
+        "MeanDecisiveTtk": 13.857526045284093,
+        "CloseFinishRate": 0.3411029309626337,
+        "ComebackConversionRate": 0.20992193281925178,
+        "ComebackOpportunities": 41887,
+        "MeanLeadChanges": 1.3280277777777778,
+        "Actions": {
+          "Casts": 571344,
+          "QuickCasts": 0,
+          "MediumCasts": 0,
+          "FullCasts": 0,
+          "Dodges": 310054,
+          "RangeChanges": 1256747,
+          "FocusWaits": 125578,
+          "FocusReserveHolds": 341360,
+          "Interruptions": 0,
+          "ChargeHitsReceived": 0,
+          "Hits": 341720,
+          "Misses": 205882,
+          "FocusStarvedSeconds": 402189.9249999985,
+          "FocusReserveSeconds": 331266.2500000156
+        },
+        "HitRate": 0.6240298611035022,
+        "InterruptionsPerChargedCast": 0,
+        "InterruptEligibilityRate": 0,
+        "Profiles": {
+          "arcane": {
+            "Appearances": 12000,
+            "CombatSeconds": 172069.57499999914,
+            "CastsPerMinute": 34.09830006263472,
+            "FocusStarvedFraction": 0.4004397639733893,
+            "FocusReserveFraction": 0.3407659372669471
+          },
+          "fire": {
+            "Appearances": 12000,
+            "CombatSeconds": 138578.675,
+            "CastsPerMinute": 36.199509051446775,
+            "FocusStarvedFraction": 0.36691251377602263,
+            "FocusReserveFraction": 0.26093390631711183
+          },
+          "frost": {
+            "Appearances": 12000,
+            "CombatSeconds": 199353.52499999912,
+            "CastsPerMinute": 32.78286651816179,
+            "FocusStarvedFraction": 0.40130592122712777,
+            "FocusReserveFraction": 0.369247295727521
+          },
+          "storm": {
+            "Appearances": 12000,
+            "CombatSeconds": 155647.30000000098,
+            "CastsPerMinute": 35.092031792391936,
+            "FocusStarvedFraction": 0.461113042115085,
+            "FocusReserveFraction": 0.44514954644249977
+          },
+          "earth": {
+            "Appearances": 12000,
+            "CombatSeconds": 174053.6250000001,
+            "CastsPerMinute": 33.73512042624793,
+            "FocusStarvedFraction": 0.39122985803944726,
+            "FocusReserveFraction": 0.24130135181039772
+          },
+          "void": {
+            "Appearances": 12000,
+            "CombatSeconds": 158350.5999999992,
+            "CastsPerMinute": 34.90861417639105,
+            "FocusStarvedFraction": 0.39515132876036463,
+            "FocusReserveFraction": 0.3256980080909104
+          }
+        }
+      },
+      "Strategy": {
+        "BestGreedy": "GreedyRapid",
+        "AdaptiveScore": {
+          "Estimate": 0.4978680555555556,
+          "Lower": 0.49577066143497633,
+          "Upper": 0.4999654496761348,
+          "Samples": 36000
+        },
+        "AdaptiveAdvantage": -0.0021319444444444224,
+        "AdaptiveWins": 35478,
+        "GreedyWins": 35785,
+        "Draws": 737
+      },
+      "MirrorFairness": {
+        "LeftSideScore": {
+          "Estimate": 0.50690625,
+          "Lower": 0.5037210079683618,
+          "Upper": 0.5100914920316382,
+          "Samples": 24000
+        },
+        "LeftWins": 23785,
+        "RightWins": 23122,
+        "Draws": 1093
+      }
+    },
+    {
+      "Mechanic": "CommittedCharge",
+      "Calibration": {
+        "SelectedGreedy": "GreedyRapid",
+        "RapidScore": 0.8269444444444445,
+        "RapidScoreInterval": {
+          "Estimate": 0.8269444444444445,
+          "Lower": 0.8204712122825392,
+          "Upper": 0.8334176766063498,
+          "Samples": 7200
+        },
+        "PairedSamples": 7200
+      },
+      "NeutralCohort": {
+        "Matches": 36000,
+        "DecisiveMatches": 22806,
+        "Timeouts": 13194,
+        "DoubleKos": 123,
+        "MeanCappedDuration": 26.565795833333333,
+        "MeanDecisiveTtk": 15.901019468560952,
+        "CloseFinishRate": 0.3844163816539507,
+        "ComebackConversionRate": 0.08845298736385895,
+        "ComebackOpportunities": 35533,
+        "MeanLeadChanges": 1.0281666666666667,
+        "Actions": {
+          "Casts": 1312180,
+          "QuickCasts": 513186,
+          "MediumCasts": 782559,
+          "FullCasts": 16435,
+          "Dodges": 548623,
+          "RangeChanges": 2392691,
+          "FocusWaits": 0,
+          "FocusReserveHolds": 0,
+          "Interruptions": 22265,
+          "ChargeHitsReceived": 24592,
+          "Hits": 358901,
+          "Misses": 898113,
+          "FocusStarvedSeconds": 0,
+          "FocusReserveSeconds": 0
+        },
+        "HitRate": 0.285518697484674,
+        "InterruptionsPerChargedCast": 0.016967946470758586,
+        "InterruptEligibilityRate": 0.905375731945348,
+        "Profiles": {
+          "arcane": {
+            "Appearances": 12000,
+            "CombatSeconds": 319971.3499999994,
+            "CastsPerMinute": 42.31072563215433,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "fire": {
+            "Appearances": 12000,
+            "CombatSeconds": 301496.9249999997,
+            "CastsPerMinute": 39.084378721275556,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "frost": {
+            "Appearances": 12000,
+            "CombatSeconds": 327284.90000000066,
+            "CastsPerMinute": 39.9444642878421,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "storm": {
+            "Appearances": 12000,
+            "CombatSeconds": 340151.6750000006,
+            "CastsPerMinute": 48.40705253031598,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "earth": {
+            "Appearances": 12000,
+            "CombatSeconds": 318369.87499999907,
+            "CastsPerMinute": 36.48737180300125,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          },
+          "void": {
+            "Appearances": 12000,
+            "CombatSeconds": 305462.5750000012,
+            "CastsPerMinute": 40.11398122994266,
+            "FocusStarvedFraction": 0,
+            "FocusReserveFraction": 0
+          }
+        }
+      },
+      "Strategy": {
+        "BestGreedy": "GreedyRapid",
+        "AdaptiveScore": {
+          "Estimate": 0.37656944444444446,
+          "Lower": 0.37284629773327504,
+          "Upper": 0.38029259115561387,
+          "Samples": 36000
+        },
+        "AdaptiveAdvantage": -0.12343055555555554,
+        "AdaptiveWins": 24690,
+        "GreedyWins": 42464,
+        "Draws": 4846
+      },
+      "MirrorFairness": {
+        "LeftSideScore": {
+          "Estimate": 0.48165625,
+          "Lower": 0.4781412006823486,
+          "Upper": 0.4851712993176514,
+          "Samples": 24000
+        },
+        "LeftWins": 17036,
+        "RightWins": 18797,
+        "Draws": 12167
+      }
+    }
+  ],
+  "Recommendation": {
+    "Selected": "FocusEconomy",
+    "Verdict": "No variant passed every pre-registered gate; this is the strongest candidate, not a ship recommendation.",
+    "Gates": {
+      "FocusEconomy": {
+        "Pace": false,
+        "Strategy": false,
+        "Fairness": true,
+        "Passed": false
+      },
+      "CommittedCharge": {
+        "Pace": false,
+        "Strategy": false,
+        "Fairness": true,
+        "Passed": false
+      }
+    }
+  }
+}

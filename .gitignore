@@ -16,6 +16,7 @@
 /[Oo]bj/
 /[Bb]uild/
 /[Bb]uilds/
+/bin/
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 *.log
@@ -108,3 +109,7 @@ InitTestScene*.unity*
 
 # Local editor automation channel
 /Automation/
+
+# Local scene safety backups created by editor automation
+/Assets/Scenes/*.CodexUnsavedBackup.unity*
+/Assets/Scenes/*.CodexFailedBuildBackup.unity*

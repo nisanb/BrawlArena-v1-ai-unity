@@ -1,15 +1,14 @@
 using UnityEngine;
-using UnityEngine.AI;
 
 namespace BrawlArena
 {
     /// <summary>
-    /// NavMeshAgent-driven brawler brain used for both AI teammates and enemies.
+    /// Backend-independent brawler brain used for both AI teammates and enemies.
     /// Melee units chase with a small flank offset; ranged units hold a firing
-    /// band and kite. Everyone retreats briefly when badly hurt.
+    /// band and kite. Everyone retreats briefly when badly hurt. One selected
+    /// navigation component owns path translation; Brawl retains all tactics.
     /// </summary>
     [RequireComponent(typeof(BrawlerController))]
-    [RequireComponent(typeof(NavMeshAgent))]
     public class AIBrawler : MonoBehaviour
     {
         public float thinkInterval = 0.25f;
@@ -17,45 +16,130 @@ namespace BrawlArena
         public float preferredRange = 0f;
         public float retreatBelowPct = 0.28f;
         public float resumeAbovePct = 0.5f;
+        [Min(2f)] public float experienceBoxSeekRange = 12f;
 
         BrawlerController self;
-        NavMeshAgent agent;
+        [SerializeField, HideInInspector] MonoBehaviour navigationSource;
+        [SerializeField, HideInInspector] bool navigationLocked;
+        IBrawlerNavigation navigation;
         BrawlerController target;
         float nextThink;
         float attackReadyAt;
+        float nextWardStepAt;
         bool retreating;
         float strafeSign;
 
         bool Ranged => self.projectilePrefab != null;
 
+        public IBrawlerNavigation Navigation
+        {
+            get
+            {
+                RestoreNavigationReference();
+                return navigation;
+            }
+        }
+
         void Awake()
         {
             self = GetComponent<BrawlerController>();
-            agent = GetComponent<NavMeshAgent>();
+            DiscoverNavigationComponents();
             strafeSign = Random.value < 0.5f ? -1f : 1f;
+        }
+
+        void OnEnable()
+        {
+            RestoreNavigationReference();
         }
 
         void Start()
         {
-            agent.speed = self.moveSpeed;
-            agent.acceleration = 40f;
-            agent.angularSpeed = 720f;
-            agent.stoppingDistance = Ranged ? 0.5f : Mathf.Max(0.5f, self.attackRange * 0.65f);
+            InitializeNavigation();
             if (preferredRange <= 0f)
                 preferredRange = Ranged ? 7.5f : self.attackRange * 0.8f;
             nextThink = Time.time + Random.Range(0f, thinkInterval);
+        }
+
+        /// <summary>
+        /// Installs the sole navigation planner before Start locks ownership.
+        /// Production planners must be component-backed and share this root.
+        /// </summary>
+        public void SetNavigation(IBrawlerNavigation selectedNavigation)
+        {
+            if (selectedNavigation == null)
+                throw new System.ArgumentNullException(nameof(selectedNavigation));
+            if (navigationLocked)
+                throw new System.InvalidOperationException(
+                    "Brawler navigation must be selected before Start.");
+            if (navigation != null &&
+                !object.ReferenceEquals(navigation, selectedNavigation))
+                throw new System.InvalidOperationException(
+                    "An AI brawler can have only one navigation component.");
+            if (!(selectedNavigation is MonoBehaviour source))
+                throw new System.ArgumentException(
+                    "Production brawler navigation must be a MonoBehaviour on the AI root.",
+                    nameof(selectedNavigation));
+            if (source.gameObject != gameObject)
+                throw new System.ArgumentException(
+                    "Component-backed brawler navigation must live on the AI root.",
+                    nameof(selectedNavigation));
+
+            navigation = selectedNavigation;
+            navigationSource = source;
+        }
+
+        void InitializeNavigation()
+        {
+            EnsureNavigationSelected();
+            float stoppingDistance = Ranged
+                ? 0.5f
+                : Mathf.Max(0.5f, self.attackRange * 0.65f);
+            navigation.Initialize(self.moveSpeed, stoppingDistance);
+            navigationLocked = true;
+        }
+
+        void EnsureNavigationSelected()
+        {
+            RestoreNavigationReference();
+            DiscoverNavigationComponents();
+
+            if (navigation == null)
+                throw new System.InvalidOperationException(
+                    "An Invector-backed AI brawler requires one configured navigation component before Start.");
+        }
+
+        void DiscoverNavigationComponents()
+        {
+            RestoreNavigationReference();
+            MonoBehaviour[] components = GetComponents<MonoBehaviour>();
+            for (int i = 0; i < components.Length; i++)
+            {
+                if (!(components[i] is IBrawlerNavigation candidate)) continue;
+                if (navigation != null && !object.ReferenceEquals(navigation, candidate))
+                    throw new System.InvalidOperationException(
+                        "An AI brawler can have only one navigation component.");
+                navigation = candidate;
+                navigationSource = components[i];
+            }
+        }
+
+        void RestoreNavigationReference()
+        {
+            if (navigation == null && navigationSource is IBrawlerNavigation restored)
+                navigation = restored;
         }
 
         void Update()
         {
             if (!self.CanAct)
             {
-                if (agent.enabled && agent.isOnNavMesh && agent.hasPath) agent.ResetPath();
+                self.SetMoveInput(Vector3.zero);
+                if (navigation != null && navigation.HasPath) navigation.ClearPath();
                 return;
             }
 
-            // Attacks don't interrupt movement (swings re-aim when damage
-            // lands), so bots keep pathing straight through their swings.
+            // Cast windups slow rather than root movement, so bots keep their
+            // committed path while obeying the same 80% speed rule as players.
             if (Time.time >= nextThink)
             {
                 Think();
@@ -68,18 +152,32 @@ namespace BrawlArena
             {
                 distToTarget = PlanarDistance(transform.position, target.transform.position);
                 float engageRange = Ranged ? preferredRange + 1.5f : self.attackRange + 0.4f;
+                if (self.SuperReady) engageRange = Mathf.Max(engageRange, self.SuperAimRange);
                 if (distToTarget <= engageRange)
                 {
                     engaging = true;
                     FaceTarget();
-                    if (!retreating && Time.time >= attackReadyAt && self.TryAttack(target))
+                    bool usedSuper = !retreating && self.SuperReady && self.TrySuper(target);
+                    if (!usedSuper && !retreating && Time.time >= attackReadyAt && self.TryAttack(target))
                         attackReadyAt = Time.time + self.attackCooldown + Random.Range(0.05f, 0.35f);
                 }
             }
-            agent.updateRotation = !engaging;
+            navigation.SetExternalFacing(engaging);
+            BufferNavigationIntent();
+        }
 
-            // Sprint to escape when retreating, or to close big gaps.
-            self.SetSprintInput(retreating || (!engaging && distToTarget > 9f && distToTarget < 100f));
+        void BufferNavigationIntent()
+        {
+            if (navigation == null || !navigation.IsReady)
+            {
+                self.SetMoveInput(Vector3.zero);
+                return;
+            }
+
+            Vector3 desired = navigation.DesiredVelocity;
+            desired.y = 0f;
+            self.SetMoveInput(Vector3.ClampMagnitude(
+                desired / Mathf.Max(0.1f, self.CurrentSpeed), 1f));
         }
 
         void Think()
@@ -97,11 +195,14 @@ namespace BrawlArena
                 PlanarDistance(transform.position, target.transform.position) > 12f))
                 retreating = false;
 
-            if (!agent.enabled || !agent.isOnNavMesh) return;
+            TryTacticalWardStep();
+
+            if (!navigation.IsReady) return;
             if (!retreating && ThinkGems()) return;
+            if (!retreating && ThinkExperienceBox()) return;
             if (target == null)
             {
-                if (agent.hasPath) agent.ResetPath();
+                if (navigation.HasPath) navigation.ClearPath();
                 return;
             }
 
@@ -130,9 +231,43 @@ namespace BrawlArena
                 dest = tPos + flank;
             }
 
-            if (NavMesh.SamplePosition(dest, out NavMeshHit hit, 3f, NavMesh.AllAreas))
-                dest = hit.position;
-            agent.SetDestination(dest);
+            if (navigation.TrySamplePosition(dest, 3f, out Vector3 sampledDestination))
+                dest = sampledDestination;
+            navigation.SetDestination(dest);
+        }
+
+        void TryTacticalWardStep()
+        {
+            if (target == null || target.IsDead || Time.time < nextWardStepAt) return;
+
+            Vector3 toTarget = target.transform.position - transform.position;
+            toTarget.y = 0f;
+            float distance = toTarget.magnitude;
+            if (distance <= 0.01f) return;
+
+            Vector3 direction = Vector3.zero;
+            bool protectingLead = GemGrabManager.Instance != null &&
+                                  GemGrabManager.Instance.ActiveMode &&
+                                  GemGrabManager.Instance.CountdownTeam == self.team &&
+                                  CarriedGems() > 0;
+            if ((retreating || protectingLead) && distance < 7f)
+            {
+                direction = -toTarget.normalized;
+            }
+            else if (!Ranged && distance > self.attackRange + 2.2f &&
+                     self.WardFlow >= self.wardStepCost * 2f)
+            {
+                // Melee bots reserve one charge instead of dumping all three
+                // with frame-perfect reactions.
+                direction = toTarget.normalized;
+            }
+            else if (Ranged && distance < preferredRange * 0.48f)
+            {
+                direction = -toTarget.normalized;
+            }
+
+            if (direction.sqrMagnitude <= 0.01f || !self.TryWardStep(direction)) return;
+            nextWardStepAt = Time.time + Random.Range(0.65f, 0.9f);
         }
 
         int CarriedGems()
@@ -154,11 +289,11 @@ namespace BrawlArena
             // Protect the lead: countdown running for us and we hold gems.
             if (mgr.CountdownTeam == self.team && CarriedGems() > 0)
             {
-                float homeZ = self.team == TeamId.Blue ? -14f : 14f;
-                Vector3 home = new Vector3(transform.position.x * 0.5f, 0f, homeZ);
-                if (NavMesh.SamplePosition(home, out NavMeshHit safeHit, 4f, NavMesh.AllAreas))
+                Vector3 home = ArenaLayout.TeamHomePosition(self.team, transform.position.x);
+                if (navigation.TrySamplePosition(
+                        home, 4f, out Vector3 sampledHome))
                 {
-                    agent.SetDestination(safeHit.position);
+                    navigation.SetDestination(sampledHome);
                     return true;
                 }
             }
@@ -174,7 +309,39 @@ namespace BrawlArena
             // Fight instead when an enemy is close and the gem isn't a snap grab.
             if (enemyDist < 5f && gemDist > 3f) return false;
 
-            agent.SetDestination(gem.transform.position);
+            navigation.SetDestination(gem.transform.position);
+            return true;
+        }
+
+        /// <summary>
+        /// XP boxes are a secondary opportunity. Bots only divert when no mode
+        /// objective already claimed the tick and no enemy is close enough to
+        /// demand an immediate combat response.
+        /// </summary>
+        bool ThinkExperienceBox()
+        {
+            MatchExperienceSystem system = MatchExperienceSystem.Instance;
+            if (system == null || !system.Active) return false;
+
+            HeroMatchProgression progression = self.GetComponent<HeroMatchProgression>();
+            if (progression == null || progression.Level >= HeroMatchProgression.MaxLevel)
+                return false;
+
+            ExperienceBox box = system.NearestExperienceBox(transform.position);
+            if (box == null) return false;
+
+            float boxDistance = PlanarDistance(transform.position, box.transform.position);
+            if (boxDistance > experienceBoxSeekRange) return false;
+
+            float enemyDistance = target != null && !target.IsDead
+                ? PlanarDistance(transform.position, target.transform.position)
+                : float.MaxValue;
+            float immediateCombatRange = Ranged
+                ? Mathf.Max(preferredRange + 1f, 6f)
+                : self.attackRange + 2.5f;
+            if (enemyDistance <= immediateCombatRange) return false;
+
+            navigation.SetDestination(box.transform.position);
             return true;
         }
 
@@ -204,8 +371,7 @@ namespace BrawlArena
             Vector3 dir = target.transform.position - transform.position;
             dir.y = 0f;
             if (dir.sqrMagnitude < 0.01f) return;
-            Quaternion look = Quaternion.LookRotation(dir.normalized, Vector3.up);
-            transform.rotation = Quaternion.Slerp(transform.rotation, look, 12f * Time.deltaTime);
+            self.Motor?.Face(dir, false);
         }
 
         static float PlanarDistance(Vector3 a, Vector3 b)

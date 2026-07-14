@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1c0ea0fac45f574f9fa870c7e2ed7a4, type: 3}
+  m_Name: CombatAudioPalette
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.CombatAudioPalette
+  defaultAttack: {fileID: 8300000, guid: acda67df77654d84d93fc2bfd887c533, type: 3}
+  defaultHit: {fileID: 8300000, guid: b4b0832d141b91e4289c3ef385cabab9, type: 3}

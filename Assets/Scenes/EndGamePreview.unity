@@ -1,0 +1,442 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!29 &1
+OcclusionCullingSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_OcclusionBakeSettings:
+    smallestOccluder: 5
+    smallestHole: 0.25
+    backfaceThreshold: 100
+  m_SceneGUID: 00000000000000000000000000000000
+  m_OcclusionCullingData: {fileID: 0}
+--- !u!104 &2
+RenderSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 10
+  m_Fog: 0
+  m_FogColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  m_FogMode: 3
+  m_FogDensity: 0.01
+  m_LinearFogStart: 0
+  m_LinearFogEnd: 300
+  m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
+  m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
+  m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
+  m_AmbientIntensity: 1
+  m_AmbientMode: 0
+  m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
+  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+  m_HaloStrength: 0.5
+  m_FlareStrength: 1
+  m_FlareFadeSpeed: 3
+  m_HaloTexture: {fileID: 0}
+  m_SpotCookie: {fileID: 10001, guid: 0000000000000000e000000000000000, type: 0}
+  m_DefaultReflectionMode: 0
+  m_DefaultReflectionResolution: 128
+  m_ReflectionBounces: 1
+  m_ReflectionIntensity: 1
+  m_CustomReflection: {fileID: 0}
+  m_Sun: {fileID: 0}
+  m_UseRadianceAmbientProbe: 0
+--- !u!157 &3
+LightmapSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 13
+  m_BakeOnSceneLoad: 0
+  m_GISettings:
+    serializedVersion: 2
+    m_BounceScale: 1
+    m_IndirectOutputScale: 1
+    m_AlbedoBoost: 1
+    m_EnvironmentLightingMode: 0
+    m_EnableBakedLightmaps: 1
+    m_EnableRealtimeLightmaps: 0
+  m_LightmapEditorSettings:
+    serializedVersion: 12
+    m_Resolution: 2
+    m_BakeResolution: 40
+    m_AtlasSize: 1024
+    m_AO: 0
+    m_AOMaxDistance: 1
+    m_CompAOExponent: 1
+    m_CompAOExponentDirect: 0
+    m_ExtractAmbientOcclusion: 0
+    m_Padding: 2
+    m_LightmapParameters: {fileID: 0}
+    m_LightmapsBakeMode: 1
+    m_TextureCompression: 1
+    m_ReflectionCompression: 2
+    m_MixedBakeMode: 2
+    m_BakeBackend: 2
+    m_PVRSampling: 1
+    m_PVRDirectSampleCount: 32
+    m_PVRSampleCount: 512
+    m_PVRBounces: 2
+    m_PVREnvironmentSampleCount: 256
+    m_PVREnvironmentReferencePointCount: 2048
+    m_PVRFilteringMode: 1
+    m_PVRDenoiserTypeDirect: 1
+    m_PVRDenoiserTypeIndirect: 1
+    m_PVRDenoiserTypeAO: 1
+    m_PVRFilterTypeDirect: 0
+    m_PVRFilterTypeIndirect: 0
+    m_PVRFilterTypeAO: 0
+    m_PVREnvironmentMIS: 1
+    m_PVRCulling: 1
+    m_PVRFilteringGaussRadiusDirect: 1
+    m_PVRFilteringGaussRadiusIndirect: 1
+    m_PVRFilteringGaussRadiusAO: 1
+    m_PVRFilteringAtrousPositionSigmaDirect: 0.5
+    m_PVRFilteringAtrousPositionSigmaIndirect: 2
+    m_PVRFilteringAtrousPositionSigmaAO: 1
+    m_ExportTrainingData: 0
+    m_TrainingDataDestination: TrainingData
+    m_LightProbeSampleCountMultiplier: 4
+  m_LightingDataAsset: {fileID: 20201, guid: 0000000000000000f000000000000000, type: 0}
+  m_LightingSettings: {fileID: 0}
+--- !u!196 &4
+NavMeshSettings:
+  serializedVersion: 2
+  m_ObjectHideFlags: 0
+  m_BuildSettings:
+    serializedVersion: 3
+    agentTypeID: 0
+    agentRadius: 0.5
+    agentHeight: 2
+    agentSlope: 45
+    agentClimb: 0.4
+    ledgeDropHeight: 0
+    maxJumpAcrossDistance: 0
+    minRegionArea: 2
+    manualCellSize: 0
+    cellSize: 0.16666667
+    manualTileSize: 0
+    tileSize: 256
+    buildHeightMesh: 0
+    maxJobWorkers: 0
+    preserveTilesOutsideBounds: 0
+    debug:
+      m_Flags: 0
+  m_NavMeshData: {fileID: 0}
+--- !u!1 &83807813
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 83807815}
+  - component: {fileID: 83807814}
+  m_Layer: 0
+  m_Name: HUD
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &83807814
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 83807813}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0fa810418bf8dc8478c5a85f90cb7d10, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.BrawlHUD
+--- !u!4 &83807815
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 83807813}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &425007317
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 425007319}
+  - component: {fileID: 425007318}
+  m_Layer: 0
+  m_Name: UiTheme
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &425007318
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 425007317}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f510097113a4654c89bc5c49ef5392b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.UiTheme
+  headingFont: {fileID: 11400000, guid: 7659f6d6ec9b642db8be29bc45fe97cc, type: 2}
+  buttonFont: {fileID: 11400000, guid: 605433b68313d491a8ab88bc03a41651, type: 2}
+  bodyFont: {fileID: 11400000, guid: c1482dbce654844b9ba1c753cbea5d80, type: 2}
+  panel: {fileID: 21300000, guid: 5908892b8c8314bba9b29d850192f786, type: 3}
+  frame: {fileID: 21300000, guid: ae9f55855d9b54bcd943f6d9c50c6bab, type: 3}
+  topBar: {fileID: 21300000, guid: 30b1a3b4a6f4749c5ad29bdce9aee4c6, type: 3}
+  bottomBar: {fileID: 21300000, guid: 27edbf1782e85458d817d1a25c8e2eb8, type: 3}
+  ribbon: {fileID: 21300000, guid: 5931a765ea31941c692754e88d36121f, type: 3}
+  labelChip: {fileID: 21300000, guid: 396cc9dd609d64538a3f5bfb17ab9566, type: 3}
+  card: {fileID: 21300000, guid: a4594cf46cc344df2bc8dbbdfd0847c0, type: 3}
+  cardFocus: {fileID: 21300000, guid: a62b74cf5e0d843df92213d37c22e0bd, type: 3}
+  cardGlow: {fileID: 21300000, guid: dfe5fecff395d408a87be32bbd41f27e, type: 3}
+  cardGreen: {fileID: 21300000, guid: c1149bc1568124c86a752314b78000ab, type: 3}
+  cardYellow: {fileID: 21300000, guid: 28554fc966eb749e587c11db562e7eeb, type: 3}
+  stageCard: {fileID: 21300000, guid: 3794f280dbc1a43e0b04594ca6a1a998, type: 3}
+  stageFocus: {fileID: 21300000, guid: c965160d8643b4ceb8a96e344d4fe2ff, type: 3}
+  profileFrame: {fileID: 21300000, guid: 427ac1f9e8f5d4fb6b2366559519f8fd, type: 3}
+  levelFrame: {fileID: 21300000, guid: b4a4b8f5c2d49459891adf4008f22aeb, type: 3}
+  glow: {fileID: 21300000, guid: 73d8983007ddd4830baf7ecba1debd74, type: 3}
+  lobbyBackgroundLeft: {fileID: 21300000, guid: 71f80f23111114970abec67fe4ae800d, type: 3}
+  lobbyBackgroundMiddle: {fileID: 21300000, guid: 660832cd74aed4c2c97b80b96457f6a1, type: 3}
+  lobbyBackgroundRight: {fileID: 21300000, guid: 2cb0c617c8ea94bc59e68b83c8c05405, type: 3}
+  lobbyBottomGlowGreen: {fileID: 21300000, guid: c07684e29b48d4467b4cbc26388dfa98, type: 3}
+  lobbyBottomGlowBlue: {fileID: 21300000, guid: c601b7c22cd154c75af02188245414f0, type: 3}
+  lobbyScreenGlow: {fileID: 21300000, guid: 4ee91d319886c4e4b8a4155b88bc8e7f, type: 3}
+  additiveMaterial: {fileID: 2100000, guid: 728fa64fe6dd24aa5ae13b1da2514961, type: 2}
+  buttonYellow: {fileID: 21300000, guid: dba1778089a2a435a8497d66016e7437, type: 3}
+  buttonGreen: {fileID: 21300000, guid: 80749877ce7194ff996f8ca281ba6b17, type: 3}
+  buttonBlue: {fileID: 21300000, guid: 92e9dafa8c8e54873b9ed82e19246239, type: 3}
+  buttonRed: {fileID: 21300000, guid: 4af2d7bc39eeb4314916b2b879e40ae6, type: 3}
+  buttonPurple: {fileID: 21300000, guid: bc24e99fda5dd4195877764282aae823, type: 3}
+  buttonNavy: {fileID: 21300000, guid: fb4ddd419e9fb4bcd8d3c4ded642e4f4, type: 3}
+  buttonRound: {fileID: 21300000, guid: 04cd773d68781407a9b88958a474e347, type: 3}
+  buttonRoundDark: {fileID: 21300000, guid: d57994a69e680444b95c92e917a9c843, type: 3}
+  buttonSquareNavy: {fileID: 21300000, guid: fb4ddd419e9fb4bcd8d3c4ded642e4f4, type: 3}
+  buttonSquareBlue: {fileID: 21300000, guid: a5a4c7809bc8a4bad8dca1aebba59b46, type: 3}
+  buttonSquareSky: {fileID: 21300000, guid: 12cfc2b0181f64634bb2c971f1562978, type: 3}
+  menuTopButton: {fileID: 21300000, guid: 1c72bf871f2614c4a8e129267b425912, type: 3}
+  menuTopButtonFocus: {fileID: 21300000, guid: 9f6ca5b28b1e34e2d8d7e51015e1a6f9, type: 3}
+  arrowLeft: {fileID: 21300000, guid: 9be338601f2df46fdb4de32cda440c67, type: 3}
+  arrowRight: {fileID: 21300000, guid: 83c4252c97d8e4daeba99d69cfa5cb32, type: 3}
+  homeIcon: {fileID: 21300000, guid: 8ce7d0e9cb5184e2298eedeb3266e9be, type: 3}
+  pauseIcon: {fileID: 21300000, guid: 5a350ac1f8e0a416499529612b3f7dab, type: 3}
+  playIcon: {fileID: 21300000, guid: 9e8e2254e0d704081931984187b98db6, type: 3}
+  settingsIcon: {fileID: 21300000, guid: bb686ea4c141046129a10074d93b72fd, type: 3}
+  inboxIcon: {fileID: 21300000, guid: 41f24042ad65e460b9f1a1780d117a50, type: 3}
+  newsIcon: {fileID: 21300000, guid: 7aa159cd1954546159ef6240b3953221, type: 3}
+  clanIcon: {fileID: 21300000, guid: bb64c20ed77d24114a7abe1065533a0b, type: 3}
+  chatIcon: {fileID: 21300000, guid: 3d2be76d8e30e4c40a186541a8f16e28, type: 3}
+  lockIcon: {fileID: 21300000, guid: 15f649e8f23314a72a516901b7f4403a, type: 3}
+  addIcon: {fileID: 21300000, guid: a32a1409bcf5a4d5d81ea614cdd08f84, type: 3}
+  alertDot: {fileID: 21300000, guid: d5f23cc2454824f4cae49e656a2c6aa2, type: 3}
+  barBg: {fileID: 21300000, guid: 2d22f56b817e94a6e843ab175af687bc, type: 3}
+  barFillYellow: {fileID: 21300000, guid: 41f68bec7506344f19c4a2960cda7eb0, type: 3}
+  barFillGreen: {fileID: 21300000, guid: 85d4c4e89ec894c7f8d5fffd9823e803, type: 3}
+  barFillBlue: {fileID: 21300000, guid: 3da068978045a400cb4954722a0dbe2e, type: 3}
+  barFillRed: {fileID: 21300000, guid: 3171e19e560724a729e9cd9dd131ee36, type: 3}
+  gemIcon: {fileID: 21300000, guid: 7b6827dc950bb48278ef822641f23849, type: 3}
+  trophyIcon: {fileID: 21300000, guid: ecb1889fcd79d4365999c3f814fa913f, type: 3}
+  swordIcon: {fileID: 21300000, guid: 455d317bd36c5444483f77940660f34b, type: 3}
+  timerIcon: {fileID: 21300000, guid: fbcf87eb3b7cb4dacbe30fb3e397f4be, type: 3}
+  coinIcon: {fileID: 21300000, guid: 808fbd9aa05d24d049320db1a0b7176b, type: 3}
+  energyIcon: {fileID: 21300000, guid: dd50370016aa3427cbffd86ff9d349ea, type: 3}
+  mapIcon: {fileID: 21300000, guid: 40f8ecd1b27d34a80813bf14c543baba, type: 3}
+  shopIcon: {fileID: 21300000, guid: 58dd4e92dd1e2427bb5d418a3e58d159, type: 3}
+  inventoryIcon: {fileID: 21300000, guid: d756a7bcbb54b496aa528f21c3ddc7af, type: 3}
+  cardsIcon: {fileID: 21300000, guid: 7d877a8e68df94f189dbed38255bd202, type: 3}
+  rewardsIcon: {fileID: 21300000, guid: 2488f3177b9074b289245f674de36887, type: 3}
+  rankingIcon: {fileID: 21300000, guid: e0d205e33f577419cb357631ec486da0, type: 3}
+  missionIcon: {fileID: 21300000, guid: 0caa4313e456e4e37916fa64b01d6bae, type: 3}
+  friendsIcon: {fileID: 21300000, guid: 3b69453a43cce4dee871c06ef801abbb, type: 3}
+  hpIcon: {fileID: 21300000, guid: 9876fcfabd3b2425687da38e45dedbc2, type: 3}
+  damageIcon: {fileID: 21300000, guid: 413710b631bd5493ebbf1a29b2d82eb3, type: 3}
+  speedIcon: {fileID: 21300000, guid: c3189121f7e3342a3b2fcc2f495c9e31, type: 3}
+  starOnIcon: {fileID: 21300000, guid: 479b862926e3947de8e20b85fe6f2afc, type: 3}
+  starOffIcon: {fileID: 21300000, guid: 758dfb8648edb4bf1b998174c2ecab26, type: 3}
+  resourceCapsule: {fileID: 21300000, guid: 3a057b166165546afb4bab7fbec93a29, type: 3}
+  resourcePlusButton: {fileID: 21300000, guid: 5064c7eb6e1564556a60f7240f897c9b, type: 3}
+  resourcePlusIcon: {fileID: 21300000, guid: 97ea867b6568b4bcbb2f969d2fad341a, type: 3}
+  levelUpPanelPrefab: {fileID: 2499070863986507983, guid: a9b74f959810c42fd96fbe080bd3d50c, type: 3}
+  rewardPopupPrefab: {fileID: 106424900952959306, guid: fe6de67a2e38847689b8b9275d01a69c, type: 3}
+  fxSpreadStar: {fileID: 5563892033390257488, guid: a16da033cc05545339a24b6cd397b174, type: 3}
+  fxSpreadCircle: {fileID: 796810422280815289, guid: 10946a8e3fb2543ca87b9ab8465e46fa, type: 3}
+  fxRotateLight: {fileID: 8792090482953444565, guid: ffde5f937f43e45f48b9c4e7094b1daa, type: 3}
+  fxSparkleYellow: {fileID: 1942969018554009084, guid: 670f74eb019d54f83be52c178c883c40, type: 3}
+  fxSparkleBlue: {fileID: 6262897069630474460, guid: b5db5df78c92b4d95902c8eca6ce2d50, type: 3}
+  giftIcon: {fileID: 21300000, guid: 3188a7319861a4b01b73f879f5271452, type: 3}
+  passiveSkillIcon: {fileID: 21300000, guid: bd76787ed8d1343b484338868b821683, type: 3}
+  levelFrameHighlight: {fileID: 21300000, guid: 89caffa740fc3490a8701183368f5cb1, type: 3}
+  minimapBackground: {fileID: 21300000, guid: 9e2009766b43436428372bac7a08258a, type: 3}
+--- !u!4 &425007319
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 425007317}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1778192110
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1778192112}
+  - component: {fileID: 1778192111}
+  m_Layer: 0
+  m_Name: Preview Camera
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!20 &1778192111
+Camera:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1778192110}
+  m_Enabled: 1
+  serializedVersion: 2
+  m_ClearFlags: 2
+  m_BackGroundColor: {r: 0.025, g: 0.06, b: 0.12, a: 1}
+  m_projectionMatrixMode: 1
+  m_GateFitMode: 2
+  m_FOVAxisMode: 0
+  m_Iso: 200
+  m_ShutterSpeed: 0.005
+  m_Aperture: 16
+  m_FocusDistance: 10
+  m_FocalLength: 50
+  m_BladeCount: 5
+  m_Curvature: {x: 2, y: 11}
+  m_BarrelClipping: 0.25
+  m_Anamorphism: 0
+  m_SensorSize: {x: 36, y: 24}
+  m_LensShift: {x: 0, y: 0}
+  m_NormalizedViewPortRect:
+    serializedVersion: 2
+    x: 0
+    y: 0
+    width: 1
+    height: 1
+  near clip plane: 0.3
+  far clip plane: 1000
+  field of view: 60
+  orthographic: 1
+  orthographic size: 5
+  m_Depth: 0
+  m_CullingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_RenderingPath: -1
+  m_TargetTexture: {fileID: 0}
+  m_TargetDisplay: 0
+  m_TargetEye: 3
+  m_HDR: 1
+  m_AllowMSAA: 1
+  m_AllowDynamicResolution: 0
+  m_ForceIntoRT: 0
+  m_OcclusionCulling: 1
+  m_StereoConvergence: 10
+  m_StereoSeparation: 0.022
+--- !u!4 &1778192112
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1778192110}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -10}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1946280510
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1946280512}
+  - component: {fileID: 1946280511}
+  m_Layer: 0
+  m_Name: EndGamePreview
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1946280511
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1946280510}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 58e18910fa66fca40852986f1b79a887, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.EndGamePreviewController
+  winningTeam: 0
+  eliminations: 3
+  brawlerPoints: 54
+  coins: 40
+  brawlerLevel: 1
+  pointsBefore: 18
+  pointsAfter: 72
+  pointsNeeded: 50
+--- !u!4 &1946280512
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1946280510}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1660057539 &9223372036854775807
+SceneRoots:
+  m_ObjectHideFlags: 0
+  m_Roots:
+  - {fileID: 1778192112}
+  - {fileID: 425007319}
+  - {fileID: 83807815}
+  - {fileID: 1946280512}

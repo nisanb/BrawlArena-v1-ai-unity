@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -24,6 +25,7 @@ namespace BrawlArena.EditorAutomation
         static double nextPoll;
         static int lastPumpFrame = -1;
         static int stallTicks;
+        static MenuReviewSession menuReviewSession;
 
         static AutomationRunner()
         {
@@ -70,6 +72,12 @@ namespace BrawlArena.EditorAutomation
                 {
                     EditorApplication.QueuePlayerLoopUpdate();
                 }
+            }
+
+            if (menuReviewSession != null)
+            {
+                menuReviewSession.Tick();
+                if (menuReviewSession.Done) menuReviewSession = null;
             }
 
             if (EditorApplication.timeSinceStartup < nextPoll) return;
@@ -141,6 +149,71 @@ namespace BrawlArena.EditorAutomation
                 case "build_menu":
                     result.message = MenuSceneBuilder.BuildMenuScene();
                     break;
+                case "build_invector_cutover":
+                {
+                    // Scene builders replace the loaded scene. Preserve any
+                    // unsaved caller state as an explicit copy before clearing
+                    // the dirty bit and regenerating the two builder-owned
+                    // production scenes.
+                    var active = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+                    string backup = string.Empty;
+                    if (active.IsValid() && active.isLoaded && active.isDirty)
+                    {
+                        bool untitled = string.IsNullOrEmpty(active.path);
+                        backup = untitled
+                            ? "Assets/Scenes/Untitled.CodexFailedBuildBackup.unity"
+                            : string.IsNullOrWhiteSpace(cmd.arg)
+                                ? "Assets/Scenes/MainMenu.CodexUnsavedBackup.unity"
+                                : cmd.arg;
+                        Directory.CreateDirectory(Path.GetDirectoryName(backup));
+                        if (!UnityEditor.SceneManagement.EditorSceneManager.SaveScene(
+                                active, backup, !untitled))
+                            throw new InvalidOperationException(
+                                "Could not snapshot dirty scene before Invector regeneration: " +
+                                active.path);
+                        if (!untitled &&
+                            !UnityEditor.SceneManagement.EditorSceneManager.SaveScene(active))
+                            throw new InvalidOperationException(
+                                "Could not checkpoint the original dirty scene before replacement: " +
+                                active.path);
+                    }
+
+                    string arenaReport = ArenaSceneBuilder.BuildArenaScene();
+                    string menuReport = MenuSceneBuilder.BuildMenuScene();
+                    result.message = "Dirty-scene backup: " +
+                                     (string.IsNullOrEmpty(backup) ? "not required" : backup) +
+                                     "\n" + arenaReport + "\n" + menuReport;
+                    break;
+                }
+                case "run_invector_test":
+                    switch (cmd.arg)
+                    {
+                        case "cutover":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunInvectorOnlyCutoverSafely();
+                            break;
+                        case "full-editmode":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunFullEditModeSafely();
+                            break;
+                        case "thorn-presentation":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunThornPresentationSafely();
+                            break;
+                        case "tempest-presentation":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunTempestPresentationSafely();
+                            break;
+                        case "ai-hardening":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunPhase3GAIHardeningSafely();
+                            break;
+                        default:
+                            result.ok = false;
+                            result.message = "unknown Invector test: " + cmd.arg;
+                            break;
+                    }
+                    break;
                 case "open_scene":
                 {
                     string path = string.IsNullOrEmpty(cmd.arg) ? "Assets/Scenes/Arena.unity" : cmd.arg;
@@ -180,11 +253,198 @@ namespace BrawlArena.EditorAutomation
                     result.message = "capturing to " + file + " (written a frame later)";
                     break;
                 }
+                case "menu_review":
+                {
+                    if (!EditorApplication.isPlaying)
+                    {
+                        result.ok = false;
+                        result.message = "menu_review requires Play Mode";
+                        break;
+                    }
+                    menuReviewSession = new MenuReviewSession(Dir, cmd.arg);
+                    result.message = "started menu review capture: " + menuReviewSession.OutputDir;
+                    break;
+                }
+                case "menu_nav":
+                {
+                    if (!EditorApplication.isPlaying)
+                    {
+                        result.ok = false;
+                        result.message = "menu_nav requires Play Mode";
+                        break;
+                    }
+
+                    var flow = UnityEngine.Object.FindFirstObjectByType<MainMenuFlow>();
+                    if (flow == null)
+                    {
+                        result.ok = false;
+                        result.message = "MainMenuFlow not found";
+                        break;
+                    }
+
+                    NavigateMenu(flow, cmd.arg);
+                    EditorApplication.QueuePlayerLoopUpdate();
+                    UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
+                    result.message = "navigated to " + cmd.arg;
+                    break;
+                }
+                case "show_celebration":
+                {
+                    if (!EditorApplication.isPlaying)
+                    {
+                        result.ok = false;
+                        result.message = "show_celebration requires Play Mode";
+                        break;
+                    }
+
+                    var flow = UnityEngine.Object.FindFirstObjectByType<MainMenuFlow>();
+                    if (flow == null)
+                    {
+                        result.ok = false;
+                        result.message = "MainMenuFlow not found";
+                        break;
+                    }
+
+                    ShowCelebrationForReview(flow, cmd.arg);
+                    EditorApplication.QueuePlayerLoopUpdate();
+                    UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
+                    result.message = "prepared celebration review overlay: " + cmd.arg;
+                    break;
+                }
                 default:
                     result.ok = false;
                     result.message = "unknown action: " + cmd.action;
                     break;
             }
+        }
+
+        static void ShowCelebrationForReview(MainMenuFlow flow, string arg)
+        {
+            bool levelUp = !string.Equals(arg, "reward", StringComparison.OrdinalIgnoreCase);
+            var theme = UnityEngine.Object.FindFirstObjectByType<UiTheme>();
+            CallMenu(flow, "OnBackToMain");
+
+            Sprite icon = null;
+            string title = levelUp ? "LEVEL UP" : "REWARD";
+            string body = levelUp ? "NOVA UPGRADED" : "REWARD CLAIMED";
+            if (theme != null)
+                icon = levelUp ? theme.levelFrameHighlight : theme.giftIcon;
+            if (levelUp && flow.roster != null && flow.roster.Length > 0)
+            {
+                BrawlerDefinition selected = null;
+                string selectedId = Progress.SelectedCharacterId;
+                foreach (var def in flow.roster)
+                {
+                    if (def == null) continue;
+                    if (selected == null) selected = def;
+                    if (!string.IsNullOrEmpty(selectedId) && def.id == selectedId)
+                    {
+                        selected = def;
+                        break;
+                    }
+                }
+
+                if (selected != null)
+                {
+                    title = selected.displayName.ToUpperInvariant();
+                    body = "LEVEL UP";
+                    if (selected.portrait != null) icon = selected.portrait;
+                }
+            }
+
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+            var sequence = typeof(MainMenuFlow).GetMethod("CelebrationSequence", flags);
+            var enumerator = (System.Collections.IEnumerator)sequence.Invoke(flow, new object[]
+            {
+                title,
+                body,
+                icon,
+                levelUp
+            });
+            enumerator.MoveNext();
+
+            foreach (var group in UnityEngine.Object.FindObjectsByType<CanvasGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                bool celebration =
+                    group.gameObject.name.Contains("Celebration") ||
+                    (group.transform.parent != null && group.transform.parent.name.Contains("Celebration"));
+                if (celebration) group.alpha = 1f;
+            }
+
+            foreach (var rect in UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (rect.name == "CelebrationCard") rect.localScale = Vector3.one;
+            }
+
+            Canvas.ForceUpdateCanvases();
+        }
+
+        static void NavigateMenu(MainMenuFlow flow, string target)
+        {
+            switch ((target ?? "").Trim().ToLowerInvariant())
+            {
+                case "main":
+                    CallMenu(flow, "OnBackToMain");
+                    break;
+                case "mode":
+                    CallMenu(flow, "OnPlayPressed");
+                    break;
+                case "character":
+                    CallMenu(flow, "OnModePicked", GameMode.Knockout);
+                    break;
+                case "shop_top":
+                    CallMenu(flow, "OnShopPressed");
+                    break;
+                case "shop_sp":
+                    CallMenu(flow, "JumpShop", 0.46f, "SP offers", 1);
+                    break;
+                case "shop_coins":
+                    CallMenu(flow, "JumpShop", 0.22f, "Coin offers", 2);
+                    break;
+                case "shop_gems":
+                    CallMenu(flow, "JumpShop", 0f, "Gem and item offers", 3);
+                    break;
+                case "brawlers":
+                    CallMenu(flow, "OnBrawlersPressed");
+                    break;
+                case "cards":
+                    CallMenu(flow, "OnCardsPressed");
+                    break;
+                case "inventory":
+                    CallMenu(flow, "OnInventoryPressed");
+                    break;
+                case "quests":
+                    CallMenu(flow, "OnMissionsPressed");
+                    break;
+                case "rewards":
+                    CallMenu(flow, "OnRewardsPressed");
+                    break;
+                case "ranking":
+                    CallMenu(flow, "OnRankingPressed");
+                    break;
+                case "friends":
+                    CallMenu(flow, "OnFriendsPressed");
+                    break;
+                case "inbox":
+                    CallMenu(flow, "OnInboxPressed");
+                    break;
+                case "news":
+                    CallMenu(flow, "OnNoticePressed");
+                    break;
+                case "settings":
+                    CallMenu(flow, "OnSettingsPressed");
+                    break;
+                default:
+                    throw new ArgumentException("unknown menu target: " + target);
+            }
+        }
+
+        static void CallMenu(MainMenuFlow flow, string method, params object[] args)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+            var info = typeof(MainMenuFlow).GetMethod(method, flags);
+            if (info == null) throw new MissingMethodException(typeof(MainMenuFlow).FullName, method);
+            info.Invoke(flow, args);
         }
 
         static string StatusDump()
@@ -202,7 +462,7 @@ namespace BrawlArena.EditorAutomation
                 sb.AppendLine($"gems blue={gems.TeamGems(TeamId.Blue)} red={gems.TeamGems(TeamId.Red)} " +
                               $"countdown={(gems.CountdownTeam.HasValue ? gems.CountdownTeam.Value + ":" + gems.CountdownRemaining.ToString("0.0") : "none")}");
             sb.AppendLine("coins=" + Progress.Coins + " chars=[" + string.Join(", ",
-                Progress.Data.characters.ConvertAll(c => $"{c.id}:L{c.level}/{c.points}p")) + "]");
+                Progress.Data.characters.ConvertAll(c => $"{c.id}:L{c.level}/{c.points}sp/S{Progress.TotalSkillLevels(c.id)}")) + "]");
             var mmObj = UnityEngine.Object.FindFirstObjectByType<MatchManager>();
             sb.AppendLine($"mmByFind={(mmObj != null)} mmStatic={(MatchManager.Instance != null)}");
             var mm = MatchManager.Instance;
@@ -220,9 +480,157 @@ namespace BrawlArena.EditorAutomation
                 Vector3 p = b.transform.position;
                 sb.AppendLine(
                     $"{b.displayName} [{b.team}]{(b.IsPlayer ? " PLAYER" : "")} hp={b.Health.Current:0}/{b.Health.Max:0} " +
-                    $"stam={b.Stamina:0} pos=({p.x:0.0},{p.z:0.0}) anim={clip} dead={b.IsDead}");
+                    $"stam={b.Stamina:0} super={b.SuperCharge:0}/{b.maxSuperCharge:0} uses={b.SupersUsed} " +
+                    $"pos=({p.x:0.0},{p.z:0.0}) anim={clip} dead={b.IsDead}");
             }
             return sb.ToString();
+        }
+
+        sealed class MenuReviewSession
+        {
+            readonly List<Step> steps = new List<Step>();
+            readonly MethodCache methods = new MethodCache();
+            int stepIndex = -1;
+            int phase;
+            double nextActionAt;
+            double captureStartedAt;
+            MainMenuFlow flow;
+            string currentCaptureFile;
+
+            public bool Done { get; private set; }
+            public string OutputDir { get; }
+
+            public MenuReviewSession(string automationDir, string arg)
+            {
+                string folder = string.IsNullOrEmpty(arg)
+                    ? "menu_review_" + DateTime.Now.ToString("yyyyMMdd-HHmmss")
+                    : arg;
+                OutputDir = Path.IsPathRooted(folder) ? folder : Path.Combine(automationDir, folder);
+                Directory.CreateDirectory(OutputDir);
+
+                steps.Add(new Step("01_main_lobby.png", f => methods.Call(f, "OnBackToMain")));
+                steps.Add(new Step("02_mode_select.png", f => methods.Call(f, "OnPlayPressed")));
+                steps.Add(new Step("03_character_select.png", f => methods.Call(f, "OnModePicked", GameMode.Knockout)));
+                steps.Add(new Step("04_shop_brawlers_top.png", f => methods.Call(f, "OnShopPressed")));
+                steps.Add(new Step("05_shop_sp_offers.png", f => methods.Call(f, "JumpShop", 0.46f, "SP offers", 1)));
+                steps.Add(new Step("06_shop_coin_offers.png", f => methods.Call(f, "JumpShop", 0.22f, "Coin offers", 2)));
+                steps.Add(new Step("07_shop_gems_items.png", f => methods.Call(f, "JumpShop", 0f, "Gem and item offers", 3)));
+                steps.Add(new Step("08_brawlers.png", f => methods.Call(f, "OnBrawlersPressed")));
+                steps.Add(new Step("09_cards.png", f => methods.Call(f, "OnCardsPressed")));
+                steps.Add(new Step("10_inventory.png", f => methods.Call(f, "OnInventoryPressed")));
+                steps.Add(new Step("11_quests.png", f => methods.Call(f, "OnMissionsPressed")));
+                steps.Add(new Step("12_rewards.png", f => methods.Call(f, "OnRewardsPressed")));
+                steps.Add(new Step("13_ranking.png", f => methods.Call(f, "OnRankingPressed")));
+                steps.Add(new Step("14_friends_clan.png", f => methods.Call(f, "OnFriendsPressed")));
+                steps.Add(new Step("15_inbox.png", f => methods.Call(f, "OnInboxPressed")));
+                steps.Add(new Step("16_news.png", f => methods.Call(f, "OnNoticePressed")));
+                steps.Add(new Step("17_settings.png", f => methods.Call(f, "OnSettingsPressed")));
+
+                File.WriteAllText(Path.Combine(OutputDir, "README.txt"),
+                    "Menu/submenu screenshots captured from Unity Play Mode." + Environment.NewLine);
+                nextActionAt = EditorApplication.timeSinceStartup + 0.75;
+            }
+
+            public void Tick()
+            {
+                if (Done || !EditorApplication.isPlaying) return;
+                if (EditorApplication.timeSinceStartup < nextActionAt) return;
+
+                if (flow == null)
+                {
+                    flow = UnityEngine.Object.FindFirstObjectByType<MainMenuFlow>();
+                    if (flow == null)
+                    {
+                        nextActionAt = EditorApplication.timeSinceStartup + 0.25;
+                        return;
+                    }
+                    stepIndex = 0;
+                    phase = 0;
+                }
+
+                if (stepIndex >= steps.Count)
+                {
+                    File.WriteAllText(Path.Combine(OutputDir, "complete.txt"),
+                        "Captured " + steps.Count + " menu screenshots." + Environment.NewLine);
+                    Done = true;
+                    return;
+                }
+
+                Step step = steps[stepIndex];
+                if (phase == 0)
+                {
+                    step.Apply(flow);
+                    nextActionAt = EditorApplication.timeSinceStartup + 0.45;
+                    phase = 1;
+                    return;
+                }
+
+                if (phase == 1)
+                {
+                    currentCaptureFile = Path.Combine(OutputDir, step.FileName);
+                    captureStartedAt = EditorApplication.timeSinceStartup;
+                    ScreenCapture.CaptureScreenshot(currentCaptureFile);
+                    nextActionAt = EditorApplication.timeSinceStartup + 0.25;
+                    phase = 2;
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(currentCaptureFile) &&
+                    File.Exists(currentCaptureFile) &&
+                    new FileInfo(currentCaptureFile).Length > 0)
+                {
+                    currentCaptureFile = null;
+                    stepIndex++;
+                    phase = 0;
+                    nextActionAt = EditorApplication.timeSinceStartup + 0.2;
+                    return;
+                }
+
+                if (EditorApplication.timeSinceStartup - captureStartedAt < 6.0)
+                {
+                    nextActionAt = EditorApplication.timeSinceStartup + 0.25;
+                    return;
+                }
+
+                Debug.LogWarning("[Automation] menu review capture timed out: " + step.FileName);
+                currentCaptureFile = null;
+                stepIndex++;
+                phase = 0;
+                nextActionAt = EditorApplication.timeSinceStartup + 0.2;
+            }
+
+            sealed class Step
+            {
+                readonly Action<MainMenuFlow> apply;
+                public string FileName { get; }
+
+                public Step(string fileName, Action<MainMenuFlow> apply)
+                {
+                    FileName = fileName;
+                    this.apply = apply;
+                }
+
+                public void Apply(MainMenuFlow flow) => apply(flow);
+            }
+
+            sealed class MethodCache
+            {
+                readonly Dictionary<string, MethodInfo> cache = new Dictionary<string, MethodInfo>();
+                const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+
+                public void Call(MainMenuFlow flow, string method, params object[] args)
+                {
+                    if (flow == null) return;
+                    if (!cache.TryGetValue(method, out MethodInfo info))
+                    {
+                        info = typeof(MainMenuFlow).GetMethod(method, Flags);
+                        cache[method] = info;
+                    }
+                    if (info == null)
+                        throw new MissingMethodException(typeof(MainMenuFlow).FullName, method);
+                    info.Invoke(flow, args);
+                }
+            }
         }
 
         [Serializable]

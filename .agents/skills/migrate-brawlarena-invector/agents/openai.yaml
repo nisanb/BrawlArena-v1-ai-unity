@@ -1,0 +1,4 @@
+interface:
+  display_name: "BrawlArena Invector Architecture"
+  short_description: "Maintain BrawlArena's Invector characters"
+  default_prompt: "Use $migrate-brawlarena-invector to maintain or validate the Invector-only character architecture."

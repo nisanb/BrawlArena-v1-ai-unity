@@ -1,13 +1,12 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BrawlArena
 {
     /// <summary>
-    /// Top-left kill log: "X killed Y" entries with team-colored names that
-    /// slide in, hold for a few seconds and fade out. Mounted and positioned
-    /// by BrawlHUD; listens to MatchManager.Kill.
+    /// Compact, team-colored KO log mounted by BrawlHUD.
     /// </summary>
     public class KillFeed : MonoBehaviour
     {
@@ -16,7 +15,6 @@ namespace BrawlArena
         public float fadeDuration = 0.6f;
 
         readonly List<Entry> entries = new List<Entry>();
-        Font font;
         bool hooked;
 
         class Entry
@@ -24,11 +22,6 @@ namespace BrawlArena
             public GameObject root;
             public CanvasGroup group;
             public float bornAt;
-        }
-
-        void Awake()
-        {
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         }
 
         void Start()
@@ -58,30 +51,30 @@ namespace BrawlArena
 
         void AddEntry(string attackerName, Color attackerColor, string victimName, Color victimColor)
         {
-            var theme = UiTheme.Instance;
             var root = new GameObject("KillEntry", typeof(RectTransform), typeof(CanvasGroup));
             root.transform.SetParent(transform, false);
             var rt = (RectTransform)root.transform;
             rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
             rt.pivot = new Vector2(0f, 1f);
-            rt.sizeDelta = new Vector2(430f, 44f);
+            rt.sizeDelta = new Vector2(470f, 50f);
 
-            var bg = root.AddComponent<Image>();
+            var theme = UiTheme.Instance;
+            var background = root.AddComponent<Image>();
             if (theme != null && theme.labelChip != null)
             {
-                bg.sprite = theme.labelChip;
-                bg.type = Image.Type.Sliced;
-                bg.color = new Color(1f, 1f, 1f, 0.9f);
+                background.sprite = theme.labelChip;
+                background.type = Image.Type.Sliced;
+                background.color = new Color(0.04f, 0.1f, 0.18f, 0.92f);
             }
             else
             {
-                bg.color = new Color(0f, 0f, 0f, 0.45f);
+                background.color = new Color(0f, 0f, 0f, 0.55f);
             }
-            bg.raycastTarget = false;
+            background.raycastTarget = false;
 
-            MakeText(root.transform, attackerName, attackerColor, TextAnchor.MiddleLeft, 0.04f, 0.42f);
-            MakeText(root.transform, "killed", new Color(0.15f, 0.15f, 0.2f, 0.95f), TextAnchor.MiddleCenter, 0.42f, 0.58f);
-            MakeText(root.transform, victimName, victimColor, TextAnchor.MiddleRight, 0.58f, 0.96f);
+            MakeText(root.transform, attackerName, attackerColor, TextAlignmentOptions.MidlineLeft, 0.05f, 0.38f);
+            MakeText(root.transform, "KO", new Color(1f, 0.88f, 0.3f), TextAlignmentOptions.Center, 0.38f, 0.62f);
+            MakeText(root.transform, victimName, victimColor, TextAlignmentOptions.MidlineRight, 0.62f, 0.95f);
 
             entries.Add(new Entry
             {
@@ -97,7 +90,8 @@ namespace BrawlArena
             Relayout();
         }
 
-        void MakeText(Transform parent, string content, Color color, TextAnchor anchor, float xMin, float xMax)
+        void MakeText(Transform parent, string content, Color color, TextAlignmentOptions alignment,
+            float xMin, float xMax)
         {
             var go = new GameObject("Text", typeof(RectTransform));
             go.transform.SetParent(parent, false);
@@ -106,18 +100,22 @@ namespace BrawlArena
             rt.anchorMax = new Vector2(xMax, 1f);
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
-            var txt = go.AddComponent<Text>();
-            txt.font = font;
-            txt.text = content;
-            txt.fontSize = 26;
-            txt.fontStyle = FontStyle.Bold;
-            txt.color = color;
-            txt.alignment = anchor;
-            txt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            txt.raycastTarget = false;
-            var outline = go.AddComponent<Outline>();
-            outline.effectColor = new Color(0f, 0f, 0f, 0.6f);
-            outline.effectDistance = new Vector2(1.5f, -1.5f);
+
+            var theme = UiTheme.Instance;
+            var text = go.AddComponent<TextMeshProUGUI>();
+            text.font = theme != null && theme.bodyFont != null ? theme.bodyFont : TMP_Settings.defaultFontAsset;
+            text.text = content;
+            text.fontSize = 23f;
+            text.color = color;
+            text.alignment = alignment;
+            text.enableWordWrapping = false;
+            text.overflowMode = TextOverflowModes.Ellipsis;
+            text.margin = new Vector4(6f, 2f, 6f, 2f);
+            text.raycastTarget = false;
+
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.7f);
+            shadow.effectDistance = new Vector2(1.5f, -1.5f);
         }
 
         void Relayout()
@@ -125,7 +123,7 @@ namespace BrawlArena
             for (int i = 0; i < entries.Count; i++)
             {
                 var rt = (RectTransform)entries[i].root.transform;
-                rt.anchoredPosition = new Vector2(0f, -(entries.Count - 1 - i) * 50f);
+                rt.anchoredPosition = new Vector2(0f, -(entries.Count - 1 - i) * 58f);
             }
         }
 

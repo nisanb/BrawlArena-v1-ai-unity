@@ -12,8 +12,8 @@ namespace BrawlArena
     /// </summary>
     public class MinimapView : MonoBehaviour
     {
-        [Tooltip("World half-extent mapped to the map edges (arena walls at ±23).")]
-        public float worldHalfExtent = 23f;
+        [Tooltip("World half-extent represented by the captured arena map, including its cliff ring.")]
+        public float worldHalfExtent = ArenaLayout.MinimapHalfExtent;
 
         RectTransform markersRoot;
         float mapHalf;
@@ -127,10 +127,13 @@ namespace BrawlArena
                 var marker = brawlerMarkers[i];
                 if (b == null || b.IsDead)
                 {
-                    marker.enabled = false;
+                    // Hide the whole marker hierarchy: the local-player marker
+                    // owns a child team-colored core that would otherwise keep
+                    // rendering after only the outer Image was disabled.
+                    marker.gameObject.SetActive(false);
                     continue;
                 }
-                marker.enabled = true;
+                marker.gameObject.SetActive(true);
                 if (markerOwners[i] != b)
                 {
                     markerOwners[i] = b;

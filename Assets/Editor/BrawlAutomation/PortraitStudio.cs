@@ -24,30 +24,41 @@ namespace BrawlArena.EditorAutomation
             foreach (var def in roster)
             {
                 string path = PortraitDir + def.id + ".png";
-                if (AssetDatabase.LoadAssetAtPath<Sprite>(path) == null && def.prefab != null)
-                    RenderPortrait(def, path);
+                GameObject previewPrefab = BrawlerPreviewAdapter.ResolvePrefab(def);
+                if (PortraitNeedsRefresh(previewPrefab, path))
+                    RenderPortrait(def, previewPrefab, path);
                 def.portrait = AssetDatabase.LoadAssetAtPath<Sprite>(path);
             }
         }
 
-        static void RenderPortrait(BrawlerDefinition def, string path)
+        static bool PortraitNeedsRefresh(GameObject previewPrefab, string path)
+        {
+            if (AssetDatabase.LoadAssetAtPath<Sprite>(path) == null) return true;
+            if (!PortraitHasVisiblePixels(path)) return true;
+            string prefabPath = AssetDatabase.GetAssetPath(previewPrefab);
+            if (string.IsNullOrEmpty(prefabPath) || !File.Exists(prefabPath) || !File.Exists(path))
+                return false;
+            System.DateTime portraitWriteTime = File.GetLastWriteTimeUtc(path);
+            foreach (string dependency in AssetDatabase.GetDependencies(prefabPath, true))
+                if (File.Exists(dependency) && File.GetLastWriteTimeUtc(dependency) > portraitWriteTime)
+                    return true;
+            return false;
+        }
+
+        static void RenderPortrait(BrawlerDefinition def, GameObject previewPrefab, string path)
         {
             // Far from the arena so no props leak into the frame.
             Vector3 basePos = new Vector3(500f, 500f, 500f);
-            var model = (GameObject)Object.Instantiate(def.prefab, basePos, Quaternion.identity);
+            var model = (GameObject)Object.Instantiate(previewPrefab, basePos, Quaternion.identity);
             var camGo = new GameObject("__PortraitCam");
             try
             {
-                // Pose: sample partway into the idle loop instead of bind pose.
-                // Needs AlwaysAnimate (nothing renders it yet, so it would be
-                // culled) and a nonzero delta to actually evaluate.
-                var animator = model.GetComponentInChildren<Animator>();
-                if (animator != null && animator.runtimeAnimatorController != null)
-                {
-                    animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-                    animator.Play("Idle_" + def.animSuffix, 0, 0.3f);
-                    animator.Update(0.02f);
-                }
+                BrawlerPreviewAdapter.Prepare(model, def);
+                BrawlerPreviewAdapter.ShowIdle(model, def, 0.3f);
+                PrepareModelForPortrait(model);
+
+                Bounds bounds = CalculateBounds(model);
+                float height = Mathf.Max(1f, bounds.size.y);
 
                 var cam = camGo.AddComponent<Camera>();
                 var extra = camGo.AddComponent<UniversalAdditionalCameraData>();
@@ -56,10 +67,21 @@ namespace BrawlArena.EditorAutomation
                 cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
                 cam.fieldOfView = 40f;
                 cam.nearClipPlane = 0.1f;
-                cam.farClipPlane = 20f;
-                // Far enough back for the full chibi body plus margin.
-                camGo.transform.position = basePos + new Vector3(0f, 1.15f, 4.1f);
-                camGo.transform.LookAt(basePos + new Vector3(0f, 1.02f, 0f));
+                // Frame from evaluated renderer bounds so every imported hero
+                // silhouette shares a consistent crop.
+                float verticalHalf = bounds.extents.y * 1.14f;
+                float horizontalHalf = bounds.extents.x * 1.14f;
+                float verticalHalfFov = cam.fieldOfView * 0.5f * Mathf.Deg2Rad;
+                float horizontalHalfFov = Mathf.Atan(Mathf.Tan(verticalHalfFov) * (512f / 640f));
+                float distance = Mathf.Max(
+                    verticalHalf / Mathf.Tan(verticalHalfFov),
+                    horizontalHalf / Mathf.Tan(horizontalHalfFov));
+                distance = Mathf.Max(2.4f, distance);
+                Vector3 focus = bounds.center + Vector3.up * height * 0.03f;
+                cam.nearClipPlane = Mathf.Max(0.05f, distance - bounds.extents.magnitude * 1.5f);
+                cam.farClipPlane = distance + Mathf.Max(10f, bounds.extents.magnitude * 2f);
+                camGo.transform.position = focus + Vector3.forward * distance;
+                camGo.transform.LookAt(focus);
 
                 Capture(cam, 512, 640, path);
             }
@@ -69,6 +91,71 @@ namespace BrawlArena.EditorAutomation
                 Object.DestroyImmediate(camGo);
             }
             ImportAsSprite(path);
+            if (!PortraitHasVisiblePixels(path))
+                Debug.LogError("[PortraitStudio] portrait contains no visible pixels: " + path);
+        }
+
+        static void PrepareModelForPortrait(GameObject model)
+        {
+            foreach (var renderer in model.GetComponentsInChildren<Renderer>(true))
+            {
+                // Spell auras, trails, and particles can report enormous bounds
+                // before their first simulation tick. They were pushing the
+                // camera beyond its clip plane and producing transparent PNGs.
+                if (!(renderer is MeshRenderer) && !(renderer is SkinnedMeshRenderer))
+                    renderer.enabled = false;
+                if (renderer is SkinnedMeshRenderer skinned)
+                    skinned.updateWhenOffscreen = true;
+            }
+        }
+
+        static Bounds CalculateBounds(GameObject model)
+        {
+            Renderer[] renderers = model.GetComponentsInChildren<Renderer>(false);
+            Bounds bounds = default;
+            bool found = false;
+            foreach (var renderer in renderers)
+            {
+                if (!renderer.enabled ||
+                    (!(renderer is MeshRenderer) && !(renderer is SkinnedMeshRenderer)))
+                    continue;
+                if (!found)
+                {
+                    bounds = renderer.bounds;
+                    found = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+            return found
+                ? bounds
+                : new Bounds(model.transform.position + Vector3.up, Vector3.one * 2f);
+        }
+
+        static bool PortraitHasVisiblePixels(string path)
+        {
+            if (!File.Exists(path)) return false;
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            try
+            {
+                if (!texture.LoadImage(File.ReadAllBytes(path), false)) return false;
+                Color32[] pixels = texture.GetPixels32();
+                int minimumVisible = Mathf.Max(32, pixels.Length / 500);
+                int visible = 0;
+                foreach (Color32 pixel in pixels)
+                {
+                    if (pixel.a <= 8) continue;
+                    visible++;
+                    if (visible >= minimumVisible) return true;
+                }
+                return false;
+            }
+            finally
+            {
+                Object.DestroyImmediate(texture);
+            }
         }
 
         /// <summary>

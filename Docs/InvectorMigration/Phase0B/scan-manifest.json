@@ -1,0 +1,129 @@
+{
+  "status": "approved-phase3b-isolated-live-lab",
+  "generatedAt": "2026-07-13T00:42:13+03:00",
+  "rebaselinedAt": "2026-07-13T12:17:52+03:00",
+  "approvedAt": "2026-07-13T08:20:12+03:00",
+  "phase3aRevalidatedOn": "2026-07-13",
+  "phase3aValidationState": "complete-hardened-automated-pass",
+  "phase3bValidationState": "complete-isolated-live-lab-production-selector-closed",
+  "unityVersion": "6000.3.7f1",
+  "invectorPackage": {
+    "name": "Invector Third Person Controller - Shooter Template",
+    "version": "2.6.6",
+    "productId": 84583,
+    "uploadId": 948174
+  },
+  "hashes": {
+    "vProjectSettings.unitypackage": "7BB97DA4CF6EADB8B3336C333F24D78F967F3547385B980F82024275A27779CB",
+    "ProjectSettings.asset": "66E4F4F7AAC7051E3D6B40E77DE56FBAC62330BA8ECD405325DE301087FD7B49",
+    "TagManager.asset": "48128C81F5BE9AFA7577EDD05E95581076B93D7BA67A056A3F3DE5575D7273DD",
+    "InputManager.asset": "7A1BB836A1008D26D0860D143E9D9DF7CA41731D30A72901B518063819C62DF2",
+    "DynamicsManager.asset": "B7C9A9DC08B98990109D4346F68745E15E238DE400F96C583E53E1C83C743A78"
+  },
+  "inventory": {
+    "invectorCSharpFiles": 388,
+    "invectorPrefabs": 320,
+    "invectorAnimatorControllers": 14,
+    "invectorPdfManuals": 3
+  },
+  "manualScanCoverage": {
+    "invectorPrefabs": "all 320",
+    "brawlContent": "representative scenes, generated wizard prefabs, UI prefabs, settings, generated Invector migration assets, and InvectorMigrationLab",
+    "invectorScenes": "covered by automated static YAML scanner",
+    "invectorScriptableObjectYaml": "covered when YAML; 3 binary/non-YAML assets listed separately"
+  },
+  "automatedScan": {
+    "script": ".agents/skills/migrate-brawlarena-invector/scripts/audit-invector-settings.ps1",
+    "schemaVersion": 1,
+    "candidateFiles": 435,
+    "yamlFiles": 432,
+    "skippedNonYamlFiles": 3,
+    "gameObjectLayerAssignments": 9383,
+    "maskAndBitfieldFindings": 14953,
+    "outputBytes": 8084377,
+    "outputSha256": "D9EF22D949E6DDCB2A6468F289B0DA54F921CF47AFC8B4EAA6D9C0C6477553E9",
+    "repeatRunByteIdentical": true,
+    "repeatRunOutputBytes": 8084377,
+    "repeatRunOutputSha256": "D9EF22D949E6DDCB2A6468F289B0DA54F921CF47AFC8B4EAA6D9C0C6477553E9",
+    "outputDisposition": "generated in a temporary validation location; regenerate from the script rather than committing the 8 MB raw report"
+  },
+  "phase3aValidation": {
+    "unityCompilationPassed": true,
+    "twoBuilderRunsStableOutputGuidsAndTopology": true,
+    "controllerAndPrefabBytesStable": true,
+    "sceneYamlBytesStable": false,
+    "sceneYamlVariance": "Unity assigns new local scene object IDs and document order when the generated lab scene is rebuilt; focused tests validate identical intended topology and references.",
+    "focusedEditMode": {
+      "passed": 8,
+      "failed": 0,
+      "skippedOrInconclusive": 0
+    },
+    "fullEditMode": {
+      "discovered": 156,
+      "passed": 156,
+      "failed": 0,
+      "skippedOrInconclusive": 0,
+      "execution": "plain NUnit work items forced onto Unity main thread 1"
+    },
+    "consoleErrorCountAfterTests": 0,
+    "activeSceneAndDirtyFlagPreserved": true,
+    "phase3bImplemented": true
+  },
+  "phase3bValidation": {
+    "unityCompilationPassed": true,
+    "outputGuids": {
+      "overrideController": "073c25839c579d54e95b3afd2edd8f13",
+      "prefab": "12b31ba25708e04489318559f291b366",
+      "scene": "91742eec95d6352499529bebc9dedea0"
+    },
+    "stableByteHashes": {
+      "overrideController": "08A30491109E5126B6C1F55F721A6094D445B005686099A4AFDE49D05A3DD4E6",
+      "prefab": "C028F6D75183A11A059BE44270E7908A295B2369C32A456B5F07100991BC8C3D"
+    },
+    "focusedEditMode": {
+      "discovered": 8,
+      "passed": 8,
+      "failed": 0,
+      "skippedOrInconclusive": 0,
+      "results": "Temp/InvectorMigrationPilotEditModeResults.xml"
+    },
+    "isolatedLiveLab": {
+      "discovered": 1,
+      "passed": 1,
+      "failed": 0,
+      "skippedOrInconclusive": 0,
+      "results": "Temp/InvectorMigrationPhase3BEditModeResults.xml"
+    },
+    "fullEditMode": {
+      "discovered": 157,
+      "passed": 157,
+      "failed": 0,
+      "skippedOrInconclusive": 0,
+      "results": "Temp/BrawlArenaFullEditModeResults.xml"
+    },
+    "consoleWarningAndErrorCountAfterTests": 0,
+    "activeDirtyScenePreserved": true,
+    "productionBackendEnabled": false
+  },
+  "rebaselineNotes": [
+    "The previous 8079959-byte 07D7BBC1 report described the earlier generated pilot and lab bytes.",
+    "Candidate, YAML, skipped-file, layer-assignment, and mask-finding counts are unchanged.",
+    "Normalized GameObject layer assignments are unchanged. The only normalized mask changes are generated autoCrouchLayer 512 to 0 and generated blockAimLayer 1 to 0.",
+    "Builder regeneration changed raw YAML line numbers, local object IDs, and document ordering; the report preserves that evidence metadata, so it also changes the byte hash.",
+    "Phase 3B adds three lab course objects: Step and Slope on Ground plus Collision Wall on WorldBlocker. This raises normalized GameObject layer assignments from 9,380 to 9,383.",
+    "The three primitive course objects add twelve renderer/collider bitfields and BrawlCamera adds obstructionMask 512, raising mask findings from 14,940 to 14,953 without changing ProjectSettings."
+  ],
+  "rules": [
+    "read-only scan",
+    "no raw numeric package-wide replacement",
+    "no vProjectSettings import",
+    "project-owned variants only",
+    "layer 23 InvectorPlayer is root-only",
+    "layers 13 and 15 remain unnamed",
+    "serialized custom tags remain empty; live Ignore Ragdoll presence is neither required nor forbidden, and adapters must not depend on it"
+  ],
+  "hashNotes": {
+    "ProjectSettings.asset": "Re-baselined after the validated Invector define manager added INVECTOR_BASIC, INVECTOR_MELEE, and INVECTOR_SHOOTER and existing user display/mobile/batching changes were present. Phase 0B made no ProjectSettings mutation.",
+    "TagManager.asset": "Phase 0B approved exactly one additive change: previously unused layer 23 is named InvectorPlayer. The serialized custom-tag list remains empty and no other layer changed. Phase 3A made no settings mutation; its project controller removes the absent AutoCrouch path. Live Ignore Ragdoll presence is neither required nor forbidden, and the input adapter does not depend on it."
+  }
+}
