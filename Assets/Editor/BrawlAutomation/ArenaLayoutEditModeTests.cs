@@ -95,6 +95,7 @@ namespace BrawlArena.EditorAutomation
             try
             {
                 var manager = root.AddComponent<MatchManager>();
+                manager.ConfigureMode(GameMode.Knockout);
                 manager.blueSpawns = BuildSpawns(root.transform, TeamId.Blue);
 
                 var selected = new HashSet<Vector3>();

@@ -365,7 +365,8 @@ namespace BrawlArena
 
     /// <summary>
     /// Pre-match flow: character select screen -> loading screen -> spawn the
-    /// picked brawler as the player plus randomized bots, then start the match.
+    /// picked brawler as the player plus a deterministic roster rotation, then
+    /// start the match.
     /// All UI is built in code, like BrawlHUD. When Automation/autopilot.flag
     /// exists (editor test harness), a random character is picked automatically
     /// and the player is bot-driven so the match can run unattended.
@@ -420,10 +421,16 @@ namespace BrawlArena
                 if (!Application.isEditor) return false;
                 string flag = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Automation", "autopilot.flag");
                 if (!File.Exists(flag)) return false;
-                // Flag content selects the mode for unattended tests ("gemgrab").
+                // Flag content may select a secondary mode; Control Zone is
+                // the deterministic primary/default unattended path.
                 try
                 {
-                    if (File.ReadAllText(flag).Contains("gemgrab")) MatchSetup.Mode = GameMode.GemGrab;
+                    string content = File.ReadAllText(flag).ToLowerInvariant();
+                    MatchSetup.Mode = content.Contains("gemgrab")
+                        ? GameMode.GemGrab
+                        : content.Contains("knockout")
+                            ? GameMode.Knockout
+                            : GameMode.ControlZone;
                 }
                 catch { }
                 return true;
@@ -466,7 +473,7 @@ namespace BrawlArena
             yield return new WaitForSeconds(0.8f);
             DebugPhase = "autopick-firing";
             if (selectPanel != null && selectPanel.activeSelf)
-                Pick(UnityEngine.Random.Range(0, roster.Length), true);
+                Pick(0, true);
         }
 
         void Pick(int index, bool autopilot)
@@ -493,6 +500,8 @@ namespace BrawlArena
                 yield return null;
             }
 
+            if (MatchManager.Instance != null)
+                MatchManager.Instance.ConfigureMode(MatchSetup.Mode);
             SpawnAll(lineup, autopilot);
             DebugPhase = "spawned";
             loadingPanel.SetActive(false);
@@ -501,9 +510,6 @@ namespace BrawlArena
             // whole layer once combat begins so it cannot sit invisibly above
             // the live HUD or intercept mobile touches.
             if (canvas != null) canvas.gameObject.SetActive(false);
-            if (MatchManager.Instance != null)
-                MatchManager.Instance.mode = MatchSetup.Mode;
-
             if (GameplayCoachState.ShouldShow(autopilot))
             {
                 DebugPhase = "coach";
@@ -529,21 +535,19 @@ namespace BrawlArena
                 return n;
             }
 
-            int[] blueDefinitions = MatchLineupPlanner.BuildTeamDefinitionIndices(
-                roster.Length, ArenaLayout.TeamSize, playerIndex,
-                UnityEngine.Random.Range(0, int.MaxValue));
-            int[] redDefinitions = MatchLineupPlanner.BuildTeamDefinitionIndices(
-                roster.Length, ArenaLayout.TeamSize, -1,
-                UnityEngine.Random.Range(0, int.MaxValue));
+            int teamSize = ArenaLayout.ActiveTeamSize(MatchSetup.Mode);
+            int[] blueDefinitions = MatchLineupPlanner.BuildRotatedTeamDefinitionIndices(
+                roster.Length, teamSize, playerIndex, playerIndex + 1);
+            int[] redDefinitions = MatchLineupPlanner.BuildRotatedTeamDefinitionIndices(
+                roster.Length, teamSize, -1, playerIndex + 2);
 
-            var lineup = new List<LineupEntry>(ArenaLayout.TeamSize * 2)
+            var lineup = new List<LineupEntry>(teamSize * 2)
             {
                 new LineupEntry { defIndex = playerIndex, team = TeamId.Blue, isPlayer = true, gamertag = "YOU" },
             };
 
-            // The selected player is pinned in blue slot zero. The four-hero
-            // roster is exhausted before one definition is reused to fill the
-            // fifth team slot.
+            // The selected player is pinned in blue slot zero. Production order
+            // is a stable roster rotation, not an implicit random seed.
             for (int i = 1; i < blueDefinitions.Length; i++)
             {
                 lineup.Add(new LineupEntry
@@ -576,9 +580,10 @@ namespace BrawlArena
             BrawlerController player = null;
             foreach (var entry in lineup)
             {
+                int teamSlot = entry.team == TeamId.Blue ? blueSlot++ : redSlot++;
                 Vector3 pos = entry.team == TeamId.Blue
-                    ? SpawnPos(mm.blueSpawns, blueSlot++)
-                    : SpawnPos(mm.redSpawns, redSlot++);
+                    ? SpawnPos(mm.blueSpawns, teamSlot)
+                    : SpawnPos(mm.redSpawns, teamSlot);
                 var def = roster[entry.defIndex];
                 // Only the player's own character benefits from shop levels.
                 float mult = entry.isPlayer
@@ -586,6 +591,7 @@ namespace BrawlArena
                     : 1f;
                 bool asHumanPlayer = entry.isPlayer && !autopilot;
                 var ctrl = Spawn(def, entry.team, pos, asHumanPlayer, mult);
+                ctrl.ConfigureMatchSpawnSlot(teamSlot);
                 ctrl.playerTag = entry.gamertag;
                 ctrl.role = def.role;
                 ctrl.portrait = def.portrait;
@@ -862,17 +868,22 @@ namespace BrawlArena
                 icon.preserveAspect = true;
             }
 
-            string modeName = MatchSetup.Mode == GameMode.GemGrab ? "GEM GRAB" : "KNOCKOUT";
+            string modeName = MatchSetup.Mode == GameMode.ControlZone
+                ? "CONTROL ZONE"
+                : MatchSetup.Mode == GameMode.GemGrab ? "GEM GRAB" : "KNOCKOUT";
+            int activeTeamSize = ArenaLayout.ActiveTeamSize(MatchSetup.Mode);
             var mode = MakeLoadingText("Mode", modeChip.transform,
-                modeName + "  |  " + ArenaLayout.TeamSize + "V" + ArenaLayout.TeamSize,
+                modeName + "  |  " + activeTeamSize + "V" + activeTeamSize,
                 26, Color.white, theme != null ? theme.buttonFont : null);
             Stretch(mode.rectTransform);
             mode.rectTransform.offsetMin = new Vector2(modeIcon != null ? 38f : 12f, 0f);
             mode.rectTransform.offsetMax = new Vector2(-12f, 0f);
 
-            string objective = MatchSetup.Mode == GameMode.GemGrab
-                ? "CONTROL THE NEXUS  |  HOLD 10 ARCANE SHARDS TO WIN"
-                : "FIRST COVEN TO 8 BANISHMENTS WINS";
+            string objective = MatchSetup.Mode == GameMode.ControlZone
+                ? "HOLD THE CENTER  |  FIRST COVEN TO 90"
+                : MatchSetup.Mode == GameMode.GemGrab
+                    ? "CONTROL THE NEXUS  |  HOLD 10 ARCANE SHARDS TO WIN"
+                    : "FIRST COVEN TO 8 BANISHMENTS WINS";
             var objectiveText = MakeLoadingText("Objective", contentRoot, objective, 20,
                 new Color(0.76f, 0.9f, 1f, 0.82f), theme != null ? theme.bodyFont : null);
             var objectiveRt = objectiveText.rectTransform;
@@ -1175,7 +1186,8 @@ namespace BrawlArena
                 Image.Type.Sliced);
             var label = MakeLoadingText("Label", chip.transform,
                 relationship + "  |  " + TeamUtil.CueLabel(team, TeamId.Blue) + "  |  " +
-                TeamUtil.ClanName(team) + "  |  " + ArenaLayout.TeamSize + " READY",
+                TeamUtil.ClanName(team) + "  |  " +
+                ArenaLayout.ActiveTeamSize(MatchSetup.Mode) + " READY",
                 24, Color.white, theme != null ? theme.buttonFont : null);
             Stretch(label.rectTransform);
             label.enableAutoSizing = true;

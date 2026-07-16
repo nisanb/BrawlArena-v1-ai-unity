@@ -103,6 +103,7 @@ namespace BrawlArena
         TextMeshProUGUI objectiveText;
         TextMeshProUGUI objectiveSubText;
         TextMeshProUGUI respawnText;
+        TextMeshProUGUI protectionText;
         TextMeshProUGUI bannerTitle;
         TextMeshProUGUI bannerSub;
         Image bannerIcon;
@@ -124,6 +125,7 @@ namespace BrawlArena
         Button replayButton;
         Button menuButton;
         GameObject respawnRoot;
+        GameObject protectionRoot;
         GameObject clanRosterRoot;
         TextMeshProUGUI clanRosterHeader;
         BrawlerController player;
@@ -137,6 +139,7 @@ namespace BrawlArena
         int lastRed = -1;
         int lastSeconds = -1;
         int lastRespawnTenths = -1;
+        int lastProtectionTenths = -1;
         int lastHealth = -1;
         int lastMaxHealth = -1;
         int lastPersonalGems = -1;
@@ -155,7 +158,9 @@ namespace BrawlArena
         float wardFeedbackUntil;
         MatchState prevState = MatchState.Waiting;
         bool hasModePresentation;
-        bool lastGemMode;
+        GameMode lastPresentedMode = (GameMode)(-1);
+        ControlZoneState lastZoneState = (ControlZoneState)(-1);
+        bool lastZoneOvertime;
         bool matchEnded;
         bool replayLoading;
         bool hasMatchRewardSummary;
@@ -292,22 +297,57 @@ namespace BrawlArena
             if (mm == null) return;
 
             int seconds = Mathf.CeilToInt(mm.TimeRemaining);
-            if (seconds != lastSeconds)
+            if (mm.State == MatchState.Overtime)
+            {
+                if (lastSeconds != -2)
+                {
+                    lastSeconds = -2;
+                    timerText.text = "OT";
+                }
+            }
+            else if (seconds != lastSeconds)
             {
                 lastSeconds = seconds;
-                timerText.text = $"{seconds / 60}:{seconds % 60:00}";
+                timerText.SetText("{0}:{1:00}", seconds / 60, seconds % 60);
             }
 
             bool gemMode = mm.mode == GameMode.GemGrab && GemGrabManager.Instance != null;
             var gems = GemGrabManager.Instance;
-            if (!hasModePresentation || lastGemMode != gemMode)
+            bool controlMode = mm.mode == GameMode.ControlZone;
+            ControlZoneManager zone = ControlZoneManager.Instance;
+            ControlZoneState zoneState = zone != null
+                ? zone.State
+                : ControlZoneState.Inactive;
+            bool zoneOvertime = mm.State == MatchState.Overtime;
+            if (!hasModePresentation || lastPresentedMode != mm.mode ||
+                (controlMode && (lastZoneState != zoneState ||
+                                 lastZoneOvertime != zoneOvertime)))
             {
                 hasModePresentation = true;
-                lastGemMode = gemMode;
-                objectiveText.text = gemMode ? "GEM RUSH" : "BANISHMENT";
-                objectiveSubText.text = gemMode
-                    ? "CHANNEL " + gems.gemsToWin + " CRYSTALS TO WIN"
-                    : "FIRST TO " + mm.scoreToWin + " BANISHMENTS";
+                lastPresentedMode = mm.mode;
+                lastZoneState = zoneState;
+                lastZoneOvertime = zoneOvertime;
+                if (controlMode)
+                {
+                    objectiveText.text = zoneOvertime ? "OVERTIME" : "CONTROL ZONE";
+                    string control = zoneState == ControlZoneState.BlueControlled
+                        ? "BLUE CONTROL"
+                        : zoneState == ControlZoneState.RedControlled
+                            ? "RED CONTROL"
+                            : zoneState == ControlZoneState.Contested
+                                ? "CONTESTED"
+                                : "ZONE EMPTY";
+                    objectiveSubText.text = zoneOvertime
+                        ? control + " - NEXT POINT WINS"
+                        : control + " - FIRST TO " + mm.scoreToWin;
+                }
+                else
+                {
+                    objectiveText.text = gemMode ? "GEM RUSH" : "BANISHMENT";
+                    objectiveSubText.text = gemMode
+                        ? "CHANNEL " + gems.gemsToWin + " CRYSTALS TO WIN"
+                        : "FIRST TO " + mm.scoreToWin + " BANISHMENTS";
+                }
             }
 
             int blueValue = gemMode ? gems.TeamGems(TeamId.Blue) : mm.BlueScore;
@@ -348,6 +388,11 @@ namespace BrawlArena
                 string team = gems.CountdownTeam.Value == TeamId.Blue ? "BLUE" : "RED";
                 ShowAnnouncement(team + " WINS IN " + countdown, TeamUtil.Color(gems.CountdownTeam.Value));
             }
+            else if (controlMode && mm.State == MatchState.Overtime)
+            {
+                ShowAnnouncement("OVERTIME - ZONE EXPANDING",
+                    new Color(1f, 0.42f, 0.82f));
+            }
             else
             {
                 HideAnnouncement();
@@ -367,6 +412,26 @@ namespace BrawlArena
             {
                 var pi = FindFirstObjectByType<PlayerBrawlerInput>();
                 if (pi != null) player = pi.GetComponent<BrawlerController>();
+            }
+            if (protectionRoot != null && player != null)
+            {
+                bool protectedNow = player.IsSpawnProtected;
+                if (protectionRoot.activeSelf != protectedNow)
+                    protectionRoot.SetActive(protectedNow);
+                if (protectedNow)
+                {
+                    int tenths = Mathf.Max(0,
+                        Mathf.CeilToInt(player.SpawnProtectionRemaining * 10f));
+                    if (tenths != lastProtectionTenths)
+                    {
+                        lastProtectionTenths = tenths;
+                        protectionText.SetText("SPAWN SHIELD {0:0.0}", tenths / 10f);
+                    }
+                }
+                else
+                {
+                    lastProtectionTenths = -1;
+                }
             }
             UpdatePlayerMatchProgression();
             UpdateClanRoster(mm);
@@ -715,6 +780,7 @@ namespace BrawlArena
             bannerRoot.SetActive(true);
             ApplyBannerSub();
             HideRespawn();
+            if (protectionRoot != null) protectionRoot.SetActive(false);
 
             TeamId playerTeam = player != null ? player.team : TeamId.Blue;
             if (!winner.HasValue)
@@ -962,6 +1028,7 @@ namespace BrawlArena
             }
             BuildAnnouncement(safeArea.transform);
             BuildRespawnOverlay(safeArea.transform);
+            BuildProtectionIndicator(safeArea.transform);
             BuildEndBanner(canvasGo.transform);
         }
 
@@ -1824,6 +1891,29 @@ namespace BrawlArena
             textRt.offsetMin = Vector2.zero;
             textRt.offsetMax = Vector2.zero;
             respawnRoot.SetActive(false);
+        }
+
+        void BuildProtectionIndicator(Transform root)
+        {
+            protectionRoot = NewRect("SpawnProtection", root);
+            var rt = (RectTransform)protectionRoot.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.26f);
+            rt.sizeDelta = new Vector2(430f, 64f);
+            var image = protectionRoot.AddComponent<Image>();
+            image.sprite = theme != null && theme.labelChip != null
+                ? theme.labelChip
+                : GetWhiteSprite();
+            image.type = image.sprite != null && theme != null
+                ? Image.Type.Sliced
+                : Image.Type.Simple;
+            image.color = new Color(0.18f, 0.68f, 0.94f, 0.9f);
+            image.raycastTarget = false;
+
+            protectionText = MakeText("Text", protectionRoot.transform,
+                "SPAWN SHIELD 1.8", 29f, Color.white,
+                TextAlignmentOptions.Center, HudTextStyle.Button);
+            StretchRect(protectionText.rectTransform);
+            protectionRoot.SetActive(false);
         }
 
         void BuildEndBanner(Transform root)

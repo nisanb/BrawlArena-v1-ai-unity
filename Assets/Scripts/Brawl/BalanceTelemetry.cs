@@ -298,6 +298,7 @@ namespace BrawlArena
             {
                 case GameMode.Knockout: return "Knockout";
                 case GameMode.GemGrab: return "GemGrab";
+                case GameMode.ControlZone: return "ControlZone";
                 default: return "Unknown";
             }
         }
@@ -566,7 +567,7 @@ namespace BrawlArena
         static bool CanRecordCombat()
         {
             return currentManager != null && MatchManager.Instance == currentManager &&
-                   currentManager.State == MatchState.Playing && accumulator != null &&
+                   currentManager.IsCombatActive && accumulator != null &&
                    accumulator.HasBegun && !accumulator.HasEnded;
         }
 

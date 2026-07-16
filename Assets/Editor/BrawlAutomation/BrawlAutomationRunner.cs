@@ -208,6 +208,14 @@ namespace BrawlArena.EditorAutomation
                             result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
                                 .RunTask2CombatRegressionSafely();
                             break;
+                        case "control-zone-match-loop":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunControlZoneMatchLoopSafely();
+                            break;
+                        case "task3-match-regression":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunTask3MatchRegressionSafely();
+                            break;
                         case "thorn-presentation":
                             result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
                                 .RunThornPresentationSafely();

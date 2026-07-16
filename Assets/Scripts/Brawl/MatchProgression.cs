@@ -327,7 +327,7 @@ namespace BrawlArena
         [Tooltip("Optional XP-box visual. A glowing cube is generated when empty.")]
         public GameObject experienceBoxPrefab;
 
-        public bool Active => matchActive && manager != null && manager.State == MatchState.Playing;
+        public bool Active => matchActive && manager != null && manager.IsCombatActive;
 
         MatchManager manager;
         bool hooked;

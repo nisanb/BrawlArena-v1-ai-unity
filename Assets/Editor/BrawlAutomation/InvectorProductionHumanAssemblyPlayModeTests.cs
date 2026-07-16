@@ -70,14 +70,18 @@ namespace BrawlArena.EditorAutomation.Tests
             matchRoot.SetActive(false);
             SceneManager.MoveGameObjectToScene(matchRoot, proofScene);
             MatchManager manager = matchRoot.AddComponent<MatchManager>();
+            manager.mode = GameMode.Knockout;
             manager.autoStart = true;
             manager.introDuration = 0f;
-            manager.respawnDelay = 0.5f;
-            manager.matchDuration = 30f;
-            manager.scoreToWin = 99;
             manager.blueSpawns = new[] { blueSpawn.transform };
             manager.redSpawns = new[] { redSpawn.transform };
             matchRoot.SetActive(true);
+            // Awake installs the selected secondary-mode defaults. These
+            // proof-only timings are then explicit authored overrides rather
+            // than an accidental dependency on the former global default.
+            manager.respawnDelay = 0.5f;
+            manager.matchDuration = 30f;
+            manager.scoreToWin = 99;
 
             GameObject projectilePrefab = new GameObject("Proof Brawl Projectile Prefab");
             projectilePrefab.SetActive(false);

@@ -11,6 +11,33 @@ namespace BrawlArena
     /// </summary>
     public static class MatchLineupPlanner
     {
+        /// <summary>
+        /// Stable roster rotation for production matches. No hidden random seed
+        /// means the same selection always creates the same team order.
+        /// </summary>
+        public static int[] BuildRotatedTeamDefinitionIndices(int rosterCount,
+            int teamSize, int pinnedFirstIndex, int rotationStart)
+        {
+            if (rosterCount <= 0)
+                throw new ArgumentOutOfRangeException(nameof(rosterCount));
+            if (teamSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(teamSize));
+            if (pinnedFirstIndex < -1 || pinnedFirstIndex >= rosterCount)
+                throw new ArgumentOutOfRangeException(nameof(pinnedFirstIndex));
+
+            int[] result = new int[teamSize];
+            int count = 0;
+            if (pinnedFirstIndex >= 0) result[count++] = pinnedFirstIndex;
+            int cursor = ((rotationStart % rosterCount) + rosterCount) % rosterCount;
+            while (count < teamSize)
+            {
+                int candidate = cursor++ % rosterCount;
+                if (candidate == pinnedFirstIndex && count < rosterCount) continue;
+                result[count++] = candidate;
+            }
+            return result;
+        }
+
         public static int[] BuildTeamDefinitionIndices(int rosterCount, int teamSize,
             int pinnedFirstIndex, int seed)
         {

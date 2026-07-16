@@ -232,7 +232,7 @@ namespace BrawlArena.EditorAutomation
                 "Health.Revive()",
                 "TryPresent(AnimationPresentationOperation.PlayRespawn)",
                 "respawning = false",
-                "StartCoroutine(InvulnerabilityRoutine(1.5f))");
+                "BeginSpawnProtection(protectionDuration)");
         }
 
         MatchManager CreatePlayingManager()
@@ -240,6 +240,7 @@ namespace BrawlArena.EditorAutomation
             var go = new GameObject("PresentationIsolationMatchManager");
             created.Add(go);
             MatchManager manager = go.AddComponent<MatchManager>();
+            manager.ConfigureMode(GameMode.Knockout);
             SetStaticAutoPropertyBackingField(typeof(MatchManager), "Instance", manager);
             SetAutoPropertyBackingField(manager, "State", MatchState.Playing);
             return manager;

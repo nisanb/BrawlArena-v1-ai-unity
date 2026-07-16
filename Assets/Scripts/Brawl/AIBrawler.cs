@@ -2,6 +2,16 @@ using UnityEngine;
 
 namespace BrawlArena
 {
+    public enum AIBrawlerObjective
+    {
+        None,
+        Combat,
+        Retreat,
+        ControlZone,
+        GemGrab,
+        Experience,
+    }
+
     /// <summary>
     /// Backend-independent brawler brain used for both AI teammates and enemies.
     /// Melee units chase with a small flank offset; ranged units hold a firing
@@ -30,6 +40,16 @@ namespace BrawlArena
         float strafeSign;
 
         bool Ranged => self.projectilePrefab != null;
+        public AIBrawlerObjective CurrentObjective { get; private set; }
+
+        public static AIBrawlerObjective ResolveModeObjective(GameMode mode,
+            bool retreating)
+        {
+            if (retreating) return AIBrawlerObjective.Retreat;
+            if (mode == GameMode.ControlZone) return AIBrawlerObjective.ControlZone;
+            if (mode == GameMode.GemGrab) return AIBrawlerObjective.GemGrab;
+            return AIBrawlerObjective.Combat;
+        }
 
         public IBrawlerNavigation Navigation
         {
@@ -184,6 +204,7 @@ namespace BrawlArena
         void Think()
         {
             target = PickTarget();
+            CurrentObjective = AIBrawlerObjective.None;
 
             float hpPct = self.Health.Current / Mathf.Max(1f, self.Health.Max);
             // Heavy gem carriers play safer: bail out of fights earlier.
@@ -199,6 +220,8 @@ namespace BrawlArena
             TryTacticalWardStep();
 
             if (!navigation.IsReady) return;
+            if (retreating) CurrentObjective = AIBrawlerObjective.Retreat;
+            if (!retreating && ThinkControlZone()) return;
             if (!retreating && ThinkGems()) return;
             if (!retreating && ThinkExperienceBox()) return;
             if (target == null)
@@ -206,6 +229,10 @@ namespace BrawlArena
                 if (navigation.HasPath) navigation.ClearPath();
                 return;
             }
+
+            CurrentObjective = retreating
+                ? AIBrawlerObjective.Retreat
+                : AIBrawlerObjective.Combat;
 
             Vector3 myPos = transform.position;
             Vector3 tPos = target.transform.position;
@@ -277,6 +304,42 @@ namespace BrawlArena
         }
 
         /// <summary>
+        /// Control Zone is the primary mode objective. Bots return when outside,
+        /// hold a spread tactical point when safe, and keep close combat inside
+        /// the authoritative boundary instead of chasing away from the objective.
+        /// </summary>
+        bool ThinkControlZone()
+        {
+            ControlZoneManager zone = ControlZoneManager.Instance;
+            if (zone == null || !zone.ActiveMode) return false;
+
+            CurrentObjective = AIBrawlerObjective.ControlZone;
+            Vector3 destination = zone.TacticalPoint(self.team, strafeSign);
+            bool inside = zone.Contains(transform.position);
+            float enemyDistance = target != null && !target.IsDead
+                ? PlanarDistance(transform.position, target.transform.position)
+                : float.MaxValue;
+            float immediateCombatRange = Ranged
+                ? Mathf.Max(preferredRange + 1.5f, 6f)
+                : self.attackRange + 3f;
+
+            if (inside && enemyDistance <= immediateCombatRange)
+                destination = zone.ClampInside(target.transform.position, 0.8f);
+            else if (inside &&
+                     ((self.team == TeamId.Blue &&
+                       zone.State == ControlZoneState.BlueControlled) ||
+                      (self.team == TeamId.Red &&
+                       zone.State == ControlZoneState.RedControlled)))
+                destination = zone.TacticalPoint(self.team, strafeSign);
+
+            if (navigation.TrySamplePosition(destination, 3f,
+                    out Vector3 sampledDestination))
+                destination = zone.ClampInside(sampledDestination, 0.55f);
+            navigation.SetDestination(destination);
+            return true;
+        }
+
+        /// <summary>
         /// Gem Grab priorities. True when this think tick already chose a
         /// destination: collect nearby loose gems unless an enemy is breathing
         /// down our neck, and once our team's countdown is running, carriers
@@ -294,6 +357,7 @@ namespace BrawlArena
                 if (navigation.TrySamplePosition(
                         home, 4f, out Vector3 sampledHome))
                 {
+                    CurrentObjective = AIBrawlerObjective.GemGrab;
                     navigation.SetDestination(sampledHome);
                     return true;
                 }
@@ -310,6 +374,7 @@ namespace BrawlArena
             // Fight instead when an enemy is close and the gem isn't a snap grab.
             if (enemyDist < 5f && gemDist > 3f) return false;
 
+            CurrentObjective = AIBrawlerObjective.GemGrab;
             navigation.SetDestination(gem.transform.position);
             return true;
         }
@@ -343,6 +408,7 @@ namespace BrawlArena
             if (enemyDistance <= immediateCombatRange) return false;
 
             navigation.SetDestination(box.transform.position);
+            CurrentObjective = AIBrawlerObjective.Experience;
             return true;
         }
 
@@ -357,6 +423,10 @@ namespace BrawlArena
                 float d = PlanarDistance(transform.position, b.transform.position);
                 float score = -d;
                 score += (1f - b.Health.Current / Mathf.Max(1f, b.Health.Max)) * 3f;
+                if (ControlZoneManager.Instance != null &&
+                    ControlZoneManager.Instance.ActiveMode &&
+                    ControlZoneManager.Instance.Contains(b.transform.position))
+                    score += 4f;
                 if (b.IsPlayer) score += 0.5f;
                 if (score > bestScore)
                 {

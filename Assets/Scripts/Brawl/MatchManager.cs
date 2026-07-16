@@ -10,24 +10,26 @@ namespace BrawlArena
         Waiting,
         Intro,
         Playing,
+        Overtime,
         Ended
     }
 
     /// <summary>
-    /// Match rules for the 5v5 KO brawl: timer, team scores, respawns and the
-    /// end-of-match flow. Also performs a runtime NavMesh bake if the attached
-    /// NavMeshSurface has no baked data yet.
+    /// Brawl-owned match state, timer, score, spawn, respawn, and victory flow.
+    /// Control Zone is the primary 3v3 mode; KO and Gem Grab remain secondary.
+    /// Also performs a runtime NavMesh bake if required.
     /// </summary>
     public class MatchManager : MonoBehaviour
     {
         public static MatchManager Instance { get; private set; }
 
         [Header("Rules")]
-        public GameMode mode = GameMode.Knockout;
-        public float matchDuration = 150f;
-        [Tooltip("KO score that ends a Knockout match. Ignored in Gem Grab.")]
-        public int scoreToWin = 8;
-        public float respawnDelay = 2.5f;
+        public GameMode mode = GameMode.ControlZone;
+        public float matchDuration = ControlZoneRules.RegulationDuration;
+        [Tooltip("Objective score limit. Gem Grab uses its own configured limit.")]
+        public int scoreToWin = ControlZoneRules.ScoreLimit;
+        public float respawnDelay = ControlZoneRules.RespawnDelay;
+        public float spawnProtectionDuration = ControlZoneRules.SpawnProtectionDuration;
         public float introDuration = 1.6f;
         [Tooltip("Start the match immediately on Start. Off when GameFlow drives character select first.")]
         public bool autoStart = true;
@@ -40,6 +42,10 @@ namespace BrawlArena
         public float TimeRemaining { get; private set; }
         public int BlueScore { get; private set; }
         public int RedScore { get; private set; }
+        public bool IsCombatActive => State == MatchState.Playing ||
+                                      State == MatchState.Overtime;
+        public int ActiveTeamSize => ArenaLayout.ActiveTeamSize(mode);
+        public ControlZoneManager ControlZone { get; private set; }
 
         /// <summary>
         /// Best-effort victory animation failures observed during this match.
@@ -67,7 +73,9 @@ namespace BrawlArena
         {
             Instance = this;
             Application.targetFrameRate = 60;
+            ConfigureMode(mode);
             TimeRemaining = matchDuration;
+            ControlZone = GetComponent<ControlZoneManager>();
 
             // RuntimeInitializeOnLoadMethod runs after the initial startup scene,
             // not after a later MainMenu -> Arena transition. Reinforce the
@@ -93,11 +101,42 @@ namespace BrawlArena
             State = MatchState.Intro;
             introEndsAt = Time.time + introDuration;
             TimeRemaining = matchDuration;
+            BlueScore = 0;
+            RedScore = 0;
+            blueSpawnCursor = 0;
+            redSpawnCursor = 0;
+            spawnReservationFrame = -1;
+            blueSpawnReservations.Clear();
+            redSpawnReservations.Clear();
             VictoryPresentationFaultCount = 0;
             LastVictoryPresentationFaultActor = null;
             LastVictoryPresentationFault = null;
+            if (ControlZone == null) ControlZone = GetComponent<ControlZoneManager>();
+            ControlZone?.ResetForMatch();
             EnsureExperienceSystem().BeginMatch();
+            for (int i = 0; i < brawlers.Count; i++)
+                brawlers[i]?.ResetForMatchLifecycle();
             BalanceTelemetryRuntime.BeginMatch(this);
+            ScoreChanged?.Invoke();
+        }
+
+        public void ConfigureMode(GameMode selectedMode)
+        {
+            mode = selectedMode;
+            if (mode == GameMode.ControlZone)
+            {
+                matchDuration = ControlZoneRules.RegulationDuration;
+                scoreToWin = ControlZoneRules.ScoreLimit;
+                respawnDelay = ControlZoneRules.RespawnDelay;
+                spawnProtectionDuration = ControlZoneRules.SpawnProtectionDuration;
+            }
+            else
+            {
+                matchDuration = 150f;
+                scoreToWin = 8;
+                respawnDelay = 2.5f;
+                spawnProtectionDuration = 1.5f;
+            }
         }
 
         MatchExperienceSystem EnsureExperienceSystem()
@@ -116,14 +155,46 @@ namespace BrawlArena
         void Update()
         {
             if (State == MatchState.Intro && Time.time >= introEndsAt)
+            {
                 State = MatchState.Playing;
+                if (mode == GameMode.ControlZone) ControlZone?.BeginRegulation();
+            }
+            AdvanceActiveMatch(Time.deltaTime);
+        }
+
+        /// <summary>
+        /// Advances only authoritative active-match time. Keeping this step
+        /// explicit makes scoring/expiry deterministic and independently testable.
+        /// </summary>
+        public void AdvanceActiveMatch(float deltaTime)
+        {
+            if (!float.IsFinite(deltaTime) || deltaTime <= 0f) return;
+            if (State == MatchState.Overtime)
+            {
+                ControlZone?.Tick(deltaTime, true);
+                return;
+            }
             if (State != MatchState.Playing) return;
 
-            TimeRemaining -= Time.deltaTime;
+            float activeStep = Mathf.Min(Mathf.Max(0f, TimeRemaining), deltaTime);
+            if (mode == GameMode.ControlZone) ControlZone?.Tick(activeStep, false);
+            if (State == MatchState.Ended) return;
+            TimeRemaining -= deltaTime;
             if (TimeRemaining <= 0f)
             {
                 TimeRemaining = 0f;
-                EndMatch(TimeoutWinner());
+                ControlZoneRegulationResult result =
+                    ControlZoneRules.ResolveRegulationResult(BlueScore, RedScore);
+                if (mode == GameMode.ControlZone &&
+                    result == ControlZoneRegulationResult.Overtime)
+                {
+                    State = MatchState.Overtime;
+                    ControlZone?.BeginOvertime();
+                }
+                else
+                {
+                    EndMatch(TimeoutWinner());
+                }
             }
         }
 
@@ -169,6 +240,10 @@ namespace BrawlArena
             if (attacker != null) scoringTeam = attacker.team;
             if (scoringTeam == victim.team) return;
 
+            // KOs matter through death/respawn pressure but never score the
+            // primary objective mode.
+            if (mode == GameMode.ControlZone) return;
+
             if (scoringTeam == TeamId.Blue) BlueScore++;
             else RedScore++;
             ScoreChanged?.Invoke();
@@ -183,11 +258,47 @@ namespace BrawlArena
             EndMatch(winner);
         }
 
+        public void AddControlZoneScore(TeamId team, int points)
+        {
+            if (mode != GameMode.ControlZone || State != MatchState.Playing || points <= 0)
+                return;
+            if (team == TeamId.Blue)
+                BlueScore = ControlZoneRules.ApplyScore(BlueScore, points, scoreToWin);
+            else
+                RedScore = ControlZoneRules.ApplyScore(RedScore, points, scoreToWin);
+            ScoreChanged?.Invoke();
+            if (BlueScore >= scoreToWin || RedScore >= scoreToWin)
+                EndMatch(BlueScore >= scoreToWin ? TeamId.Blue : TeamId.Red);
+        }
+
+        public void AddControlZoneOvertimePoint(TeamId team)
+        {
+            if (mode != GameMode.ControlZone || State != MatchState.Overtime) return;
+            if (team == TeamId.Blue) BlueScore++;
+            else RedScore++;
+            ScoreChanged?.Invoke();
+            EndMatch(team);
+        }
+
+        public float RespawnDelayFor(BrawlerController brawler)
+        {
+            if (mode == GameMode.ControlZone) return ControlZoneRules.RespawnDelay;
+            float multiplier = brawler != null
+                ? Mathf.Max(0.2f, brawler.respawnDelayMultiplier)
+                : 1f;
+            return Mathf.Max(0f, respawnDelay) * multiplier;
+        }
+
         /// <summary>
         /// Pick a safe team spawn while spreading same-frame respawns across
         /// distinct slots and avoiding points already occupied by living allies.
         /// </summary>
         public Vector3 GetSpawnPoint(TeamId team)
+        {
+            return GetSpawnPoint(team, -1);
+        }
+
+        public Vector3 GetSpawnPoint(TeamId team, int preferredSlot)
         {
             Transform[] set = team == TeamId.Blue ? blueSpawns : redSpawns;
             if (set == null || set.Length == 0) return Vector3.zero;
@@ -196,24 +307,35 @@ namespace BrawlArena
             HashSet<Transform> reservations = team == TeamId.Blue
                 ? blueSpawnReservations
                 : redSpawnReservations;
-            int cursor = team == TeamId.Blue ? blueSpawnCursor : redSpawnCursor;
-            Transform best = null;
-            int bestIndex = -1;
+            int candidateCount = Mathf.Min(set.Length, ActiveTeamSize);
+            if (candidateCount <= 0) return Vector3.zero;
 
-            bool FindBest(bool skipReserved)
+            bool Occupied(Transform candidate)
             {
-                float bestScore = float.MinValue;
-                for (int offset = 0; offset < set.Length; offset++)
+                if (candidate == null) return true;
+                for (int i = 0; i < brawlers.Count; i++)
                 {
-                    int index = (cursor + offset) % set.Length;
-                    Transform candidate = set[index];
-                    if (candidate == null || (skipReserved && reservations.Contains(candidate)))
+                    BrawlerController brawler = brawlers[i];
+                    if (brawler == null || brawler.IsDead || !brawler.gameObject.activeInHierarchy)
                         continue;
+                    if ((candidate.position - brawler.transform.position).sqrMagnitude <
+                        1.75f * 1.75f)
+                        return true;
+                }
+                return false;
+            }
 
-                    float nearestEnemy = float.MaxValue;
-                    float nearestAlly = 12f;
-                    bool hasEnemy = false;
-                    bool hasAlly = false;
+            int cursor = team == TeamId.Blue ? blueSpawnCursor : redSpawnCursor;
+            var candidates = new MatchSpawnCandidate[candidateCount];
+            for (int index = 0; index < candidateCount; index++)
+            {
+                Transform candidate = set[index];
+                float nearestEnemy = float.MaxValue;
+                float nearestAlly = 12f;
+                bool hasEnemy = false;
+                bool hasAlly = false;
+                if (candidate != null)
+                {
                     foreach (var b in brawlers)
                     {
                         if (b == null || b.IsDead) continue;
@@ -229,26 +351,22 @@ namespace BrawlArena
                             nearestEnemy = Mathf.Min(nearestEnemy, distance);
                         }
                     }
-
-                    if (!hasEnemy) nearestEnemy = ArenaLayout.PlayableHalfExtent;
-                    float score = nearestEnemy + nearestAlly * 0.35f;
-                    if (hasAlly && nearestAlly < 1.75f) score -= 1000f;
-                    // Preserve the cursor order for exact ties.
-                    if (best != null && score <= bestScore + 0.0001f) continue;
-                    bestScore = score;
-                    best = candidate;
-                    bestIndex = index;
                 }
-                return best != null;
+                if (!hasEnemy) nearestEnemy = ArenaLayout.PlayableHalfExtent;
+                float safety = nearestEnemy + nearestAlly * 0.35f;
+                if (hasAlly && nearestAlly < 1.75f) safety -= 1000f;
+                candidates[index] = new MatchSpawnCandidate(candidate != null,
+                    candidate != null && reservations.Contains(candidate),
+                    Occupied(candidate), safety);
             }
 
-            // There can only be more same-frame requests than slots if custom
-            // content exceeds the authored team size; in that case wrap safely.
-            if (!FindBest(true)) FindBest(false);
-            if (best == null) return Vector3.zero;
+            int bestIndex = MatchSpawnPlanner.SelectSlot(candidates, candidateCount,
+                preferredSlot, cursor);
+            if (bestIndex < 0) return Vector3.zero;
+            Transform best = set[bestIndex];
 
             reservations.Add(best);
-            int nextCursor = (bestIndex + 1) % set.Length;
+            int nextCursor = (bestIndex + 1) % candidateCount;
             if (team == TeamId.Blue) blueSpawnCursor = nextCursor;
             else redSpawnCursor = nextCursor;
             return best.position;
@@ -267,6 +385,7 @@ namespace BrawlArena
         {
             if (State == MatchState.Ended) return;
             State = MatchState.Ended;
+            ControlZone?.EndMode();
             int finalBlueScore = BlueScore;
             int finalRedScore = RedScore;
             if (mode == GameMode.GemGrab && GemGrabManager.Instance != null)
@@ -278,6 +397,7 @@ namespace BrawlArena
             foreach (var b in brawlers)
             {
                 if (b == null) continue;
+                b.ClearSpawnProtection();
                 b.CancelOffensiveActions();
                 if (b.IsDead) continue;
                 if (!winner.HasValue || b.team != winner.Value) continue;

@@ -139,6 +139,16 @@ namespace BrawlArena
         public string LastWeaponPresentationFailureMessage { get; private set; }
         public bool IsDead => Health.IsDead;
         public bool IsPlayer { get; private set; }
+        public int MatchSpawnSlot { get; private set; } = -1;
+        public bool IsRespawning => respawning;
+        public bool CanContestObjective => gameObject.activeInHierarchy && enabled &&
+                                           !IsDead && !respawning;
+        public bool IsSpawnProtected => Health != null && Health.Invulnerable;
+        public float SpawnProtectionRemaining => IsSpawnProtected
+            ? Mathf.Max(0f, spawnProtectionEndsAt - Time.time)
+            : 0f;
+        public bool SpawnProtectionCueVisible => spawnProtectionRing != null &&
+                                                  spawnProtectionRing.enabled;
         public bool MovementLocked => Time.time < attackLockUntil;
         public float Stamina { get; private set; }
         public float WardFlow => Stamina;
@@ -200,7 +210,7 @@ namespace BrawlArena
         }
         public bool CanAct =>
             !IsDead && !respawning &&
-            (MatchManager.Instance == null || MatchManager.Instance.State == MatchState.Playing);
+            (MatchManager.Instance == null || MatchManager.Instance.IsCombatActive);
         public Vector3 CombatAimPoint => transform.position + Vector3.up;
         public float CombatHitRadius
         {
@@ -239,6 +249,9 @@ namespace BrawlArena
         Coroutine superRoutine;
         Coroutine knockbackRoutine;
         Coroutine invulnerabilityRoutine;
+        float spawnProtectionEndsAt;
+        LineRenderer spawnProtectionRing;
+        MaterialPropertyBlock spawnProtectionBlock;
 
         enum AnimationPresentationOperation
         {
@@ -332,6 +345,7 @@ namespace BrawlArena
 
         void OnDestroy()
         {
+            ClearSpawnProtection();
             if (Health != null)
             {
                 Health.Damaged -= OnDamaged;
@@ -342,6 +356,13 @@ namespace BrawlArena
         public void SetMoveInput(Vector3 worldDir)
         {
             moveInput = Vector3.ClampMagnitude(new Vector3(worldDir.x, 0f, worldDir.z), 1f);
+        }
+
+        public void ConfigureMatchSpawnSlot(int slot)
+        {
+            if (slot < 0 || slot >= ArenaLayout.TeamSize)
+                throw new System.ArgumentOutOfRangeException(nameof(slot));
+            MatchSpawnSlot = slot;
         }
 
         /// <summary>
@@ -773,6 +794,22 @@ namespace BrawlArena
             basicAttackReloadElapsed = 0f;
         }
 
+        /// <summary>Restores match-owned transient state without replacing the actor.</summary>
+        public void ResetForMatchLifecycle()
+        {
+            ClearSpawnProtection();
+            ClearSpellStatuses();
+            EndKnockbackDisplacement();
+            CancelWardStep();
+            respawning = false;
+            superInProgress = false;
+            maxStamina = MobileCombatRules.ArcaneFlowCapacity;
+            Stamina = maxStamina;
+            staminaRegenAt = 0f;
+            ResetBasicAttackCharges();
+            PresentWeaponVisibility(true);
+        }
+
         bool TryConsumeBasicAttackCharge()
         {
             bool wasFull = BasicAttackCharges >= MobileCombatRules.BasicAttackChargeCapacity;
@@ -1185,8 +1222,8 @@ namespace BrawlArena
 
         bool IsValidIncomingSpell(BrawlerController source)
         {
-            return source != null && source != this && !IsDead && source.team != team &&
-                   SpecialtyDamageAllowed();
+            return source != null && source != this && !IsDead && !Health.Invulnerable &&
+                   source.team != team && SpecialtyDamageAllowed();
         }
 
         void ChainSpellFrom(BrawlerController first, float firstAppliedDamage,
@@ -1266,7 +1303,8 @@ namespace BrawlArena
             // Early-out before the enemy scan. Mobile input invokes this once
             // per completed tap rather than repeatedly while held.
             if (!BasicAttackReady) return false;
-            return TryAttack(FindNearestReachableBasicTarget());
+            BrawlerController target = FindNearestReachableBasicTarget();
+            return target != null && TryAttack(target);
         }
 
         public bool TryAttack(BrawlerController target)
@@ -1574,7 +1612,7 @@ namespace BrawlArena
                 if (!CombatPhysics.HasLineOfSight(origin, other.CombatAimPoint)) continue;
 
                 float applied = other.Health.TakeDamage(damage, gameObject);
-                if (applied > 0f && manager.State == MatchState.Playing)
+                if (applied > 0f && manager.IsCombatActive)
                 {
                     other.ApplyKnockback(other.transform.position - transform.position,
                         Mathf.Max(superKnockback, specialty.knockback));
@@ -1630,7 +1668,7 @@ namespace BrawlArena
         public void ApplyKnockback(Vector3 direction, float distance)
         {
             if (IsDead || Health.Invulnerable || distance <= 0.01f) return;
-            if (MatchManager.Instance != null && MatchManager.Instance.State != MatchState.Playing)
+            if (MatchManager.Instance != null && !MatchManager.Instance.IsCombatActive)
                 return;
             direction.y = 0f;
             if (direction.sqrMagnitude < 0.001f) return;
@@ -1739,6 +1777,7 @@ namespace BrawlArena
 
         void OnDied(GameObject attacker)
         {
+            ClearSpawnProtection();
             StopAllCoroutines();
             EndKnockbackDisplacement();
             CancelWardStep();
@@ -1774,8 +1813,9 @@ namespace BrawlArena
                 respawning = false;
                 yield break;
             }
-            float delay = MatchManager.Instance != null ? MatchManager.Instance.respawnDelay : 2.5f;
-            delay *= Mathf.Max(0.2f, respawnDelayMultiplier);
+            float delay = MatchManager.Instance != null
+                ? MatchManager.Instance.RespawnDelayFor(this)
+                : ControlZoneRules.RespawnDelay;
             if (IsPlayer && BrawlHUD.Instance != null) BrawlHUD.Instance.ShowRespawn(delay);
 
             yield return new WaitForSeconds(delay);
@@ -1788,7 +1828,7 @@ namespace BrawlArena
             }
 
             Vector3 spawn = MatchManager.Instance != null
-                ? MatchManager.Instance.GetSpawnPoint(team)
+                ? MatchManager.Instance.GetSpawnPoint(team, MatchSpawnSlot)
                 : transform.position;
             Teleport(spawn);
             ClearSpellStatuses();
@@ -1806,20 +1846,16 @@ namespace BrawlArena
             if (spawnVfx != null) SpawnVfx(spawnVfx, spawn, Quaternion.identity, 3f);
             if (IsPlayer && BrawlHUD.Instance != null) BrawlHUD.Instance.HideRespawn();
             respawning = false;
-            if (invulnerabilityRoutine != null) StopCoroutine(invulnerabilityRoutine);
-            invulnerabilityRoutine = StartCoroutine(InvulnerabilityRoutine(1.5f));
+            float protectionDuration = MatchManager.Instance != null
+                ? MatchManager.Instance.spawnProtectionDuration
+                : ControlZoneRules.SpawnProtectionDuration;
+            BeginSpawnProtection(protectionDuration);
         }
 
         void CancelSpawnProtectionOnOffense()
         {
             if (Health == null || !Health.Invulnerable) return;
-            if (invulnerabilityRoutine != null)
-            {
-                StopCoroutine(invulnerabilityRoutine);
-                invulnerabilityRoutine = null;
-            }
-            Health.Invulnerable = false;
-            SetSkinsVisible(true);
+            ClearSpawnProtection();
         }
 
         void AddSuperCharge(float amount)
@@ -1833,20 +1869,105 @@ namespace BrawlArena
             Motor?.Teleport(pos);
         }
 
+        public void BeginSpawnProtection(float duration)
+        {
+            ClearSpawnProtection();
+            duration = Mathf.Max(0f, duration);
+            if (duration <= 0f || Health == null) return;
+            Health.Invulnerable = true;
+            spawnProtectionEndsAt = Time.time + duration;
+            EnsureSpawnProtectionPresentation();
+            SetSpawnProtectionPresentation(true);
+            invulnerabilityRoutine = StartCoroutine(InvulnerabilityRoutine(duration));
+        }
+
+        public void ClearSpawnProtection()
+        {
+            if (invulnerabilityRoutine != null)
+            {
+                StopCoroutine(invulnerabilityRoutine);
+                invulnerabilityRoutine = null;
+            }
+            spawnProtectionEndsAt = 0f;
+            if (Health != null) Health.Invulnerable = false;
+            SetSpawnProtectionPresentation(false);
+        }
+
         IEnumerator InvulnerabilityRoutine(float duration)
         {
-            Health.Invulnerable = true;
-            float end = Time.time + duration;
-            bool visible = true;
-            while (Time.time < end)
+            duration = Mathf.Max(0f, duration);
+            if (Health != null && !Health.Invulnerable && duration > 0f)
             {
-                visible = !visible;
-                SetSkinsVisible(visible);
-                yield return new WaitForSeconds(0.12f);
+                Health.Invulnerable = true;
+                spawnProtectionEndsAt = Time.time + duration;
+                EnsureSpawnProtectionPresentation();
+                SetSpawnProtectionPresentation(true);
             }
-            SetSkinsVisible(true);
-            Health.Invulnerable = false;
+            while (Time.time < spawnProtectionEndsAt)
+            {
+                if (spawnProtectionRing != null)
+                {
+                    float pulse = 1f + Mathf.Sin(Time.time * 9f) * 0.045f;
+                    spawnProtectionRing.transform.localScale =
+                        new Vector3(pulse, 1f, pulse);
+                }
+                yield return null;
+            }
             invulnerabilityRoutine = null;
+            spawnProtectionEndsAt = 0f;
+            if (Health != null) Health.Invulnerable = false;
+            SetSpawnProtectionPresentation(false);
+        }
+
+        void EnsureSpawnProtectionPresentation()
+        {
+            if (spawnProtectionRing != null) return;
+            Transform existing = transform.Find("Brawl Spawn Protection");
+            if (existing != null) spawnProtectionRing = existing.GetComponent<LineRenderer>();
+            if (spawnProtectionRing != null) return;
+
+            GameObject ringObject = new GameObject("Brawl Spawn Protection");
+            ringObject.layer = CombatPhysics.VfxLayer;
+            ringObject.transform.SetParent(transform, false);
+            ringObject.transform.localPosition = new Vector3(0f, 0.12f, 0f);
+            spawnProtectionRing = ringObject.AddComponent<LineRenderer>();
+            spawnProtectionRing.sharedMaterial = ProjectileReadabilityRuntime.SharedCueMaterial;
+            spawnProtectionRing.useWorldSpace = false;
+            spawnProtectionRing.loop = true;
+            spawnProtectionRing.positionCount = 40;
+            spawnProtectionRing.widthMultiplier = 0.13f;
+            spawnProtectionRing.numCornerVertices = 2;
+            spawnProtectionRing.numCapVertices = 2;
+            spawnProtectionRing.shadowCastingMode =
+                UnityEngine.Rendering.ShadowCastingMode.Off;
+            spawnProtectionRing.receiveShadows = false;
+            for (int i = 0; i < spawnProtectionRing.positionCount; i++)
+            {
+                float angle = i * Mathf.PI * 2f / spawnProtectionRing.positionCount;
+                spawnProtectionRing.SetPosition(i,
+                    new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)));
+            }
+            spawnProtectionRing.enabled = false;
+        }
+
+        void SetSpawnProtectionPresentation(bool visible)
+        {
+            if (spawnProtectionRing == null)
+            {
+                if (!visible) return;
+                EnsureSpawnProtectionPresentation();
+            }
+            if (spawnProtectionRing == null) return;
+            spawnProtectionRing.enabled = visible;
+            spawnProtectionRing.transform.localScale = Vector3.one;
+            if (!visible) return;
+            if (spawnProtectionBlock == null)
+                spawnProtectionBlock = new MaterialPropertyBlock();
+            Color color = Color.Lerp(TeamUtil.Color(team), Color.white, 0.42f);
+            spawnProtectionBlock.Clear();
+            spawnProtectionBlock.SetColor("_Color", color);
+            spawnProtectionBlock.SetColor("_BaseColor", color);
+            spawnProtectionRing.SetPropertyBlock(spawnProtectionBlock);
         }
 
         void SetSkinsVisible(bool visible)

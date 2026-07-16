@@ -100,6 +100,23 @@ namespace BrawlArena
 
         const float ToastVisibleSeconds = 2.5f;
 
+        static string ModeTitle(GameMode mode)
+        {
+            switch (mode)
+            {
+                case GameMode.ControlZone: return "CONTROL ZONE";
+                case GameMode.GemGrab: return "GEM GRAB";
+                default: return "KNOCKOUT";
+            }
+        }
+
+        static string ModeTrialTitle(GameMode mode)
+        {
+            return mode == GameMode.ControlZone
+                ? "CONTROL ZONE TRIAL"
+                : mode == GameMode.GemGrab ? "GEM RUSH TRIAL" : "KNOCKOUT TRIAL";
+        }
+
         static bool AutopilotRequested =>
             Application.isEditor &&
             File.Exists(Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Automation", "autopilot.flag"));
@@ -178,8 +195,17 @@ namespace BrawlArena
         IEnumerator Autopilot()
         {
             string flag = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Automation", "autopilot.flag");
-            bool gemGrab = false;
-            try { gemGrab = File.ReadAllText(flag).Contains("gemgrab"); } catch { }
+            GameMode mode = GameMode.ControlZone;
+            try
+            {
+                string content = File.ReadAllText(flag).ToLowerInvariant();
+                mode = content.Contains("gemgrab")
+                    ? GameMode.GemGrab
+                    : content.Contains("knockout")
+                        ? GameMode.Knockout
+                        : GameMode.ControlZone;
+            }
+            catch { }
 
             // Detour through the shop so unattended runs exercise/screenshot it.
             yield return new WaitForSeconds(1.4f);
@@ -193,7 +219,7 @@ namespace BrawlArena
             yield return new WaitForSeconds(0.6f);
             OnPlayPressed();
             yield return new WaitForSeconds(1.6f);
-            OnModePicked(gemGrab ? GameMode.GemGrab : GameMode.Knockout);
+            OnModePicked(mode);
             yield return new WaitForSeconds(1.2f);
             int steps = Random.Range(0, roster.Length);
             for (int i = 0; i < steps; i++)
@@ -701,13 +727,12 @@ namespace BrawlArena
             trt.anchorMin = trt.anchorMax = new Vector2(0.49f, 0.84f);
             trt.sizeDelta = new Vector2(820f, 92f);
 
-            var subtitle = MakeButtonLabel(root, Progress.SelectedMode == GameMode.GemGrab ? "GEM RUSH TRIAL" : "KNOCKOUT TRIAL",
+            var subtitle = MakeButtonLabel(root, ModeTrialTitle(Progress.SelectedMode),
                 30f, new Color(0.72f, 0.95f, 1f));
             var srt = subtitle.rectTransform;
             srt.anchorMin = srt.anchorMax = new Vector2(0.49f, 0.79f);
             srt.sizeDelta = new Vector2(620f, 44f);
-            menuRefreshers.Add(() =>
-                subtitle.text = Progress.SelectedMode == GameMode.GemGrab ? "GEM RUSH TRIAL" : "KNOCKOUT TRIAL");
+            menuRefreshers.Add(() => subtitle.text = ModeTrialTitle(Progress.SelectedMode));
         }
 
         void AddLobbyLeftStack(Transform root)
@@ -1028,13 +1053,13 @@ namespace BrawlArena
             labelRt.sizeDelta = new Vector2(350f, 38f);
             label.alignment = TextAlignmentOptions.Left;
 
-            stageModeText = MakeHeading(stage.transform, MatchSetup.Mode == GameMode.GemGrab ? "GEM GRAB" : "KNOCKOUT", 44f, Color.white);
+            stageModeText = MakeHeading(stage.transform, ModeTitle(MatchSetup.Mode), 44f,
+                Color.white);
             var lrt = stageModeText.rectTransform;
             lrt.anchorMin = lrt.anchorMax = new Vector2(0.33f, 0.5f);
             lrt.sizeDelta = new Vector2(360f, 60f);
             stageModeText.alignment = TextAlignmentOptions.Left;
-            menuRefreshers.Add(() =>
-                stageModeText.text = Progress.SelectedMode == GameMode.GemGrab ? "GEM GRAB" : "KNOCKOUT");
+            menuRefreshers.Add(() => stageModeText.text = ModeTitle(Progress.SelectedMode));
 
             var cost = MakeButtonLabel(stage.transform, "5 ENERGY  /  CHANGE MODE", 24f, new Color(1f, 0.86f, 0.3f));
             var crt = cost.rectTransform;
@@ -1253,11 +1278,15 @@ namespace BrawlArena
             AddScreenTitle(panel.transform, "CHOOSE YOUR TRIAL");
             AddBackButton(panel.transform, OnBackToMain);
 
-            BuildModeCard(panel.transform, -430f, "KNOCKOUT",
+            BuildModeCard(panel.transform, -570f, "CONTROL ZONE",
+                "The primary 3v3 trial.\nHold the center and reach 90.\nTied regulation expands overtime.",
+                theme != null ? theme.mapIcon : null, new Color(0.35f, 0.88f, 1f),
+                () => OnModePicked(GameMode.ControlZone));
+            BuildModeCard(panel.transform, 0f, "KNOCKOUT",
                 "A ruthless 5v5 hero clash.\nFirst clan to 8 banishments wins.",
                 theme != null ? theme.swordIcon : null, new Color(1f, 0.45f, 0.3f),
                 () => OnModePicked(GameMode.Knockout));
-            BuildModeCard(panel.transform, 430f, "GEM GRAB",
+            BuildModeCard(panel.transform, 570f, "GEM GRAB",
                 "Arcane crystals surge from the nexus.\nHold 10 for 15 seconds to win - but\nbanishment scatters every crystal!",
                 theme != null ? theme.gemIcon : null, new Color(0.35f, 0.95f, 0.6f),
                 () => OnModePicked(GameMode.GemGrab));
@@ -1272,7 +1301,7 @@ namespace BrawlArena
             var rt = (RectTransform)card.transform;
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.46f);
             rt.anchoredPosition = new Vector2(x, 0f);
-            rt.sizeDelta = new Vector2(720f, 780f);
+            rt.sizeDelta = new Vector2(520f, 780f);
 
             var bg = card.AddComponent<Image>();
             if (theme != null && theme.stageCard != null)
@@ -1810,7 +1839,7 @@ namespace BrawlArena
                 new Vector2(0.35f, 0.11f), new Vector2(190f, 64f), 24f, () =>
                 {
                     charIndex = index;
-                    MatchSetup.Mode = GameMode.Knockout;
+                    MatchSetup.Mode = Progress.SelectedMode;
                     ShowPanel(charPanel);
                     SetPreviewVisible(true);
                     SetCharacter(charIndex);

@@ -46,12 +46,13 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
-        public void KnockoutDefaultTargetSupportsMultiPushMatches()
+        public void KnockoutConfiguredTargetSupportsMultiPushMatches()
         {
             var go = new GameObject("MatchRuleTest");
             try
             {
                 var manager = go.AddComponent<MatchManager>();
+                manager.ConfigureMode(GameMode.Knockout);
                 Assert.AreEqual(8, manager.scoreToWin);
             }
             finally

@@ -3,7 +3,8 @@ namespace BrawlArena
     public enum GameMode
     {
         Knockout = 0,
-        GemGrab = 1
+        GemGrab = 1,
+        ControlZone = 2,
     }
 
     /// <summary>
@@ -14,7 +15,7 @@ namespace BrawlArena
     /// </summary>
     public static class MatchSetup
     {
-        public static GameMode Mode = GameMode.Knockout;
+        public static GameMode Mode = GameMode.ControlZone;
 
         /// <summary>Roster index picked in the menu, or -1 for "not chosen".</summary>
         public static int CharacterIndex = -1;

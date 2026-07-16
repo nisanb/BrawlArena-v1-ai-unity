@@ -11,6 +11,7 @@ namespace BrawlArena
     public static class ArenaLayout
     {
         public const int TeamSize = 5;
+        public const int ControlZoneTeamSize = ControlZoneRules.TeamSize;
 
         /// <summary>Authoritative wall center on both horizontal axes.</summary>
         public const float PlayableHalfExtent = 40f;
@@ -32,8 +33,16 @@ namespace BrawlArena
         public const float TeamHomeDepth = 30f;
         public const float TeamHomeHalfWidth = 12f;
 
-        static readonly float[] SpawnX = { -12f, -6f, 0f, 6f, 12f };
-        static readonly float[] SpawnDepth = { 32f, 33f, 34f, 33f, 32f };
+        // The first three slots are the primary 3v3 formation: centered and
+        // closer to the objective. Slots three/four retain the secondary 5v5
+        // modes without making a Control Zone respawn choose a remote flank.
+        static readonly float[] SpawnX = { -7f, 0f, 7f, -12f, 12f };
+        static readonly float[] SpawnDepth = { 26f, 25f, 26f, 32f, 32f };
+
+        public static int ActiveTeamSize(GameMode mode)
+        {
+            return mode == GameMode.ControlZone ? ControlZoneTeamSize : TeamSize;
+        }
 
         public static Vector3 SpawnPosition(TeamId team, int slot)
         {

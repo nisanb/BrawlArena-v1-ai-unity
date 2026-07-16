@@ -30,7 +30,7 @@ namespace BrawlArena
         public int lifetimeCoinsEarned;
         public int gems = 45;
         public int energy = 60;
-        public int selectedMode;
+        public int selectedMode = (int)GameMode.ControlZone;
         public string selectedCharacterId = "";
         public int equippedCardMask = 7;
         public int friendInviteMask;
@@ -85,7 +85,19 @@ namespace BrawlArena
         public static int LifetimeCoinsEarned => Data.lifetimeCoinsEarned;
         public static int Gems => Data.gems;
         public static int Energy => Data.energy;
-        public static GameMode SelectedMode => Data.selectedMode == (int)GameMode.GemGrab ? GameMode.GemGrab : GameMode.Knockout;
+        public static GameMode SelectedMode
+        {
+            get
+            {
+                switch ((GameMode)Data.selectedMode)
+                {
+                    case GameMode.Knockout: return GameMode.Knockout;
+                    case GameMode.GemGrab: return GameMode.GemGrab;
+                    case GameMode.ControlZone: return GameMode.ControlZone;
+                    default: return GameMode.ControlZone;
+                }
+            }
+        }
         public static string SelectedCharacterId => Data.selectedCharacterId;
         public static int LoginRewardIndex => Data.loginRewardIndex;
         public static int LoginRewardStreak => Data.loginRewardStreak;

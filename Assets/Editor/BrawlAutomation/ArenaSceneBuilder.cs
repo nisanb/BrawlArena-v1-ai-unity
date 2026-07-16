@@ -442,9 +442,15 @@ namespace BrawlArena.EditorAutomation
         {
             var systems = new GameObject("GameSystems");
             var mm = systems.AddComponent<MatchManager>();
-            // Rule values stay at the script defaults; GameFlow starts the match
-            // after character select.
+            mm.ConfigureMode(GameMode.ControlZone);
+            // GameFlow starts the match after character select.
             mm.autoStart = false;
+
+            var controlZone = systems.AddComponent<ControlZoneManager>();
+            controlZone.regulationRadius = ControlZoneRules.RegulationRadius;
+            controlZone.overtimeRadius = ControlZoneRules.OvertimeRadius;
+            controlZone.overtimeExpansionPerSecond =
+                ControlZoneRules.OvertimeExpansionPerSecond;
 
             var spawnRoot = new GameObject("SpawnPoints").transform;
             spawnRoot.SetParent(systems.transform, false);
@@ -707,6 +713,79 @@ namespace BrawlArena.EditorAutomation
             }
             AssetDatabase.SaveAssets();
             return report.ToString();
+        }
+
+        /// <summary>
+        /// Refreshes only Task 3 match rules, objective component, and authored
+        /// spawn transforms. It leaves arena cover, NavMesh, roster references,
+        /// post-processing, and unrelated local file ids untouched.
+        /// </summary>
+        public static string RefreshControlZoneMatchLoopData()
+        {
+            UnityEngine.SceneManagement.Scene existing =
+                UnityEngine.SceneManagement.SceneManager.GetSceneByPath(ScenePath);
+            bool openedAdditively = !existing.IsValid() || !existing.isLoaded;
+            UnityEngine.SceneManagement.Scene scene = openedAdditively
+                ? EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive)
+                : existing;
+            try
+            {
+                MatchManager manager = scene.GetRootGameObjects()
+                    .Select(root => root.GetComponentInChildren<MatchManager>(true))
+                    .FirstOrDefault(value => value != null);
+                if (manager == null)
+                    throw new InvalidOperationException("Arena has no MatchManager.");
+
+                manager.ConfigureMode(GameMode.ControlZone);
+                manager.autoStart = false;
+                ControlZoneManager zone = manager.GetComponent<ControlZoneManager>();
+                const string zoneScriptPath =
+                    "Assets/Scripts/Brawl/ControlZoneManager.cs";
+                if (zone != null && !string.Equals(
+                        AssetDatabase.GetAssetPath(MonoScript.FromMonoBehaviour(zone)),
+                        zoneScriptPath, StringComparison.Ordinal))
+                {
+                    // A class/file-name mismatch in an earlier Task 3 import
+                    // could serialize a scene-local MonoScript. Recreate only
+                    // that builder-owned component after the normal script has
+                    // imported so the scene retains a stable external GUID.
+                    UnityEngine.Object.DestroyImmediate(zone);
+                    zone = null;
+                }
+                if (zone == null) zone = manager.gameObject.AddComponent<ControlZoneManager>();
+                zone.regulationRadius = ControlZoneRules.RegulationRadius;
+                zone.overtimeRadius = ControlZoneRules.OvertimeRadius;
+                zone.overtimeExpansionPerSecond =
+                    ControlZoneRules.OvertimeExpansionPerSecond;
+
+                if (manager.blueSpawns == null || manager.redSpawns == null ||
+                    manager.blueSpawns.Length < ArenaLayout.TeamSize ||
+                    manager.redSpawns.Length < ArenaLayout.TeamSize)
+                    throw new InvalidOperationException(
+                        "Arena spawn arrays do not contain the five authored secondary-mode slots.");
+                for (int i = 0; i < ArenaLayout.TeamSize; i++)
+                {
+                    if (manager.blueSpawns[i] == null || manager.redSpawns[i] == null)
+                        throw new InvalidOperationException("Arena spawn slot " + i + " is null.");
+                    manager.blueSpawns[i].position =
+                        ArenaLayout.SpawnPosition(TeamId.Blue, i);
+                    manager.redSpawns[i].position =
+                        ArenaLayout.SpawnPosition(TeamId.Red, i);
+                    EditorUtility.SetDirty(manager.blueSpawns[i]);
+                    EditorUtility.SetDirty(manager.redSpawns[i]);
+                }
+
+                EditorUtility.SetDirty(manager);
+                EditorUtility.SetDirty(zone);
+                if (!EditorSceneManager.SaveScene(scene, ScenePath))
+                    throw new InvalidOperationException("Could not save " + ScenePath + ".");
+                return "Arena: refreshed Control Zone rules, objective, and 5 spawn transforms";
+            }
+            finally
+            {
+                if (openedAdditively && scene.IsValid() && scene.isLoaded)
+                    EditorSceneManager.CloseScene(scene, true);
+            }
         }
 
         static void BuildCamera()
