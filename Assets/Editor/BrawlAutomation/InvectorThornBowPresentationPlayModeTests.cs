@@ -1086,72 +1086,73 @@ namespace BrawlArena.EditorAutomation.Tests
                 Vector3.Distance(assetNock.localPosition, nock.localPosition) < 0.0001f &&
                 Quaternion.Angle(
                     assetNock.localRotation, nock.localRotation) < 0.01f;
-            bool proven = presenter.WeaponHeldInLeftHand &&
-                string.Equals(
+
+            var faults = new System.Collections.Generic.List<string>();
+            if (!presenter.WeaponHeldInLeftHand) faults.Add("heldInLeftHand");
+            if (!string.Equals(
                     presenter.WeaponCategory,
                     InvectorThornMigrationBuilder.WeaponCategory,
-                    StringComparison.Ordinal) &&
-                leftSocket != null && rightSocket != null &&
-                presentation != null && presentation.parent == leftSocket &&
-                bow != null && bow.gameObject.activeInHierarchy &&
-                FindDescendant(
+                    StringComparison.Ordinal)) faults.Add("weaponCategory");
+            if (leftSocket == null) faults.Add("leftSocket");
+            if (rightSocket == null) faults.Add("rightSocket");
+            if (presentation == null || presentation.parent != leftSocket)
+                faults.Add("presentationParent");
+            if (bow == null || !bow.gameObject.activeInHierarchy) faults.Add("bowActive");
+            if (FindDescendant(
                     actor.transform,
-                    InvectorThornMigrationBuilder.AuthoredBowName) == null &&
-                arrow != null && arrow.parent == rightSocket &&
-                arrow.gameObject.activeInHierarchy &&
-                nock != null && nockMatchesAsset && rig != null &&
-                rig.gameObject == actor.gameObject && rig.IsConfigured &&
-                rig.RuntimeEnabled && rig.ArrowVisual == arrow &&
-                rig.NockPoint == nock &&
-                muzzle != null && muzzle.parent == nock &&
-                Vector3.Distance(
+                    InvectorThornMigrationBuilder.AuthoredBowName) != null)
+                faults.Add("authoredBowStillPresent");
+            if (arrow == null || arrow.parent != rightSocket ||
+                !arrow.gameObject.activeInHierarchy) faults.Add("arrowSocketActive");
+            if (nock == null || !nockMatchesAsset) faults.Add("nockAssetPose");
+            if (rig == null || rig.gameObject != actor.gameObject ||
+                !rig.IsConfigured || !rig.RuntimeEnabled) faults.Add("rigConfigured");
+            if (rig == null || rig.ArrowVisual != arrow || rig.NockPoint != nock)
+                faults.Add("rigReferences");
+            if (muzzle == null || muzzle.parent != nock) faults.Add("muzzleParent");
+            if (rig != null && arrow != null && nock != null && Vector3.Distance(
                     nock.position,
-                    arrow.TransformPoint(rig.ArrowNockLocalPoint)) < 0.0001f &&
-                Vector3.Distance(
+                    arrow.TransformPoint(rig.ArrowNockLocalPoint)) >= 0.0001f)
+                faults.Add("arrowNockAlignment");
+            if (rig != null && arrow != null && muzzle != null && Vector3.Distance(
                     muzzle.position,
-                    arrow.TransformPoint(rig.ArrowTipLocalPoint)) < 0.0001f &&
-                (muzzle.position - nock.position).sqrMagnitude > 0.000001f &&
-                strings.Length == 1 && rig.BowString == strings[0] &&
-                stringTop != null && stringRest != null && stringBottom != null &&
-                rig.StringTopAnchor == stringTop &&
-                rig.StringRestAnchor == stringRest &&
-                rig.StringBottomAnchor == stringBottom &&
-                strings[0].positionCount == 3 && !strings[0].useWorldSpace &&
-                LinePointMatches(strings[0], 0, stringTop.position) &&
-                LinePointMatches(strings[0], 1, stringRest.position) &&
-                LinePointMatches(strings[0], 2, stringBottom.position) &&
-                supportHand != null && supportHint != null &&
-                bowRenderer != null && arrowRenderer != null &&
-                string.Equals(
+                    arrow.TransformPoint(rig.ArrowTipLocalPoint)) >= 0.0001f)
+                faults.Add("arrowTipAlignment");
+            if (muzzle != null && nock != null &&
+                (muzzle.position - nock.position).sqrMagnitude <= 0.000001f)
+                faults.Add("muzzleNockSeparation");
+            if (strings.Length != 1 || rig == null || rig.BowString != strings[0])
+                faults.Add("stringRenderer");
+            if (stringTop == null || stringRest == null || stringBottom == null)
+                faults.Add("stringAnchors");
+            if (rig == null || rig.StringTopAnchor != stringTop ||
+                rig.StringRestAnchor != stringRest ||
+                rig.StringBottomAnchor != stringBottom) faults.Add("rigStringAnchors");
+            if (strings.Length != 1 || strings[0].positionCount != 3 ||
+                strings[0].useWorldSpace) faults.Add("stringTopology");
+            if (strings.Length == 1 && stringTop != null && stringRest != null &&
+                stringBottom != null &&
+                (!LinePointMatches(strings[0], 0, stringTop.position) ||
+                 !LinePointMatches(strings[0], 1, stringRest.position) ||
+                 !LinePointMatches(strings[0], 2, stringBottom.position)))
+                faults.Add("stringPointAlignment");
+            if (supportHand == null || supportHint == null) faults.Add("supportTargets");
+            if (bowRenderer == null || arrowRenderer == null ||
+                !string.Equals(
                     AssetDatabase.GetAssetPath(bowRenderer.sharedMaterial),
                     InvectorThornMigrationBuilder.WeaponsMaterialPath,
-                    StringComparison.Ordinal) &&
-                string.Equals(
+                    StringComparison.Ordinal) ||
+                !string.Equals(
                     AssetDatabase.GetAssetPath(arrowRenderer.sharedMaterial),
                     InvectorThornMigrationBuilder.WeaponsMaterialPath,
-                    StringComparison.Ordinal) &&
-                effects.Length == 1 && !effects[0].main.playOnAwake &&
-                !effects[0].main.loop;
-            evidence = string.Format(
-                "left={0}, right={1}, presentation={2}, bow={3}, arrow={4}, " +
-                "nock={5}, nockAssetPose={6}, muzzle={7}, rig={8}, " +
-                "string={9}/{10}/{11}/{12}, support={13}/{14}, effects={15}",
-                leftSocket != null,
-                rightSocket != null,
-                presentation != null,
-                bow != null,
-                arrow != null,
-                nock != null,
-                nockMatchesAsset,
-                muzzle != null,
-                rig != null,
-                strings.Length,
-                stringTop != null,
-                stringRest != null,
-                stringBottom != null,
-                supportHand != null,
-                supportHint != null,
-                effects.Length);
+                    StringComparison.Ordinal)) faults.Add("weaponMaterials");
+            if (effects.Length != 1 || effects[0].main.playOnAwake ||
+                effects[0].main.loop) faults.Add("muzzleEffects");
+
+            bool proven = faults.Count == 0;
+            evidence = proven
+                ? "all topology conditions held"
+                : "failed: " + string.Join(", ", faults.ToArray());
             return proven;
         }
 

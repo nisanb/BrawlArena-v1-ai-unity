@@ -65,6 +65,11 @@ namespace BrawlArena.EditorAutomation
         public const string SuperAttackOverrideSourceName = "StrongAttack_PunchA";
         public const string BasicAttackClipName = "Attack01_Bow";
         public const string SuperAttackClipName = "Attack02_Bow";
+        // Thorn deliberately keeps the vendor Idle@Pistol upper-body carry
+        // pose: it is a static single-frame pose, and the authored resting
+        // arrow-to-nock contact (sub-0.1mm, proven by the bow topology test)
+        // depends on the hands never swaying relative to each other. An
+        // animated bow idle cannot satisfy that contract.
 
         public const string RosterId = "thorn";
         public const string WeaponCategory = "BrawlWizardBow";
@@ -391,53 +396,25 @@ namespace BrawlArena.EditorAutomation
             }
         }
 
-        static void ConfigureAttackOverrides(AnimatorOverrideController controller)
+        internal static void ConfigureAttackOverrides(AnimatorOverrideController controller)
         {
-            if (controller == null)
-                throw new ArgumentNullException(nameof(controller));
-
-            AnimationClip basic = RequireAnimationClip(
-                BasicAttackClipPath, BasicAttackClipName);
-            AnimationClip super = RequireAnimationClip(
-                SuperAttackClipPath, SuperAttackClipName);
-            var overrides = new List<KeyValuePair<AnimationClip, AnimationClip>>(
-                controller.overridesCount);
-            controller.GetOverrides(overrides);
-
-            int basicSources = 0;
-            int superSources = 0;
-            for (int i = 0; i < overrides.Count; i++)
-            {
-                AnimationClip source = overrides[i].Key;
-                AnimationClip replacement = null;
-                if (source != null && string.Equals(
-                        source.name,
-                        BasicAttackOverrideSourceName,
-                        StringComparison.Ordinal))
+            InvectorMigrationPilotBuilder.ConfigurePresentationOverrides(
+                controller,
+                new[]
                 {
-                    basicSources++;
-                    replacement = basic;
-                }
-                else if (source != null && string.Equals(
-                             source.name,
-                             SuperAttackOverrideSourceName,
-                             StringComparison.Ordinal))
+                    BasicAttackOverrideSourceName,
+                    SuperAttackOverrideSourceName,
+                },
+                new[]
                 {
-                    superSources++;
-                    replacement = super;
-                }
-                overrides[i] = new KeyValuePair<AnimationClip, AnimationClip>(
-                    source, replacement);
-            }
-
-            if (basicSources != 1 || superSources != 1)
-            {
-                throw new InvalidOperationException(
-                    "The shared lifecycle graph no longer exposes exactly one AttackID-0 weak A and strong A source clip for Thorn.");
-            }
-
-            controller.ApplyOverrides(overrides);
-            EditorUtility.SetDirty(controller);
+                    BasicAttackClipPath,
+                    SuperAttackClipPath,
+                },
+                new[]
+                {
+                    BasicAttackClipName,
+                    SuperAttackClipName,
+                });
             ValidateAttackOverrides(controller);
         }
 
@@ -486,23 +463,6 @@ namespace BrawlArena.EditorAutomation
                 throw new InvalidOperationException(
                     "The Thorn AOC must contain only WeakAttack_UnarmedA -> Attack01_Bow and StrongAttack_PunchA -> Attack02_Bow.");
             }
-        }
-
-        static AnimationClip RequireAnimationClip(string path, string clipName)
-        {
-            AnimationClip[] clips = AssetDatabase.LoadAllAssetsAtPath(path)
-                .OfType<AnimationClip>()
-                .Where(value => !value.name.StartsWith("__preview__", StringComparison.Ordinal))
-                .ToArray();
-            AnimationClip clip = clips.SingleOrDefault(value => string.Equals(
-                value.name, clipName, StringComparison.Ordinal));
-            if (clip == null)
-            {
-                throw new InvalidOperationException(
-                    "The pinned Thorn animation asset does not contain clip '" +
-                    clipName + "'.");
-            }
-            return clip;
         }
 
         static void BuildBowIKAssets(bool includeStaffCompatibilityAlias)
@@ -691,6 +651,9 @@ namespace BrawlArena.EditorAutomation
                 muzzleEffect.layer = 12;
                 muzzleEffect.transform.SetParent(muzzle, false);
                 ParticleSystem particles = muzzleEffect.AddComponent<ParticleSystem>();
+                // A fresh ParticleSystem starts playing immediately; duration
+                // can only be written while it is fully stopped.
+                particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                 var main = particles.main;
                 main.playOnAwake = false;
                 main.loop = false;

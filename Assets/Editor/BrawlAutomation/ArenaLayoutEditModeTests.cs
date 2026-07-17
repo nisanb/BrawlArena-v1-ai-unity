@@ -54,7 +54,13 @@ namespace BrawlArena.EditorAutomation
         [Test]
         public void PlayableRosterContainsThreeElementalMagesAndOneArcher()
         {
-            BrawlerDefinition[] roster = ArenaSceneBuilder.BuildRoster();
+            // Roster-content assertions only need the generated assets, not a
+            // full rebuild: BuildRoster() replaces scenes (lab scene included),
+            // which is illegal from the test runner's untitled scene. The
+            // builder pipeline itself is covered by the per-roster production
+            // tests.
+            BrawlerDefinition[] roster =
+                ArenaSceneBuilder.BuildRosterFromExistingAssets();
 
             CollectionAssert.AreEqual(new[] { "fire", "frost", "storm", "thorn" },
                 roster.Select(definition => definition.id).ToArray());

@@ -119,6 +119,7 @@ namespace BrawlArena.EditorAutomation
                 AnimatorController lifecycleController = BuildLifecycleController();
                 AnimatorOverrideController overrideController =
                     BuildOverrideController(lifecycleController);
+                ConfigureWizardPresentationOverrides(overrideController);
                 BuildWeaponIKAssets();
                 BuildWeaponPresentationPrefab();
                 GameObject prefab = BuildPilotPrefab(overrideController);
@@ -138,7 +139,13 @@ namespace BrawlArena.EditorAutomation
                     .DisableLabRuntime();
                 ValidateProductionAIPrefab(productionAIPrefab);
 
-                BuildLabScene(prefab);
+                // The Phase 3B lab is edit-time authoring: EditorSceneManager
+                // cannot create or save scenes during play mode, so play-mode
+                // roster rebuilds keep the existing lab scene asset.
+                if (Application.isPlaying)
+                    Debug.Log("[InvectorMigrationPilotBuilder] play mode: kept the existing Phase 3B lab scene.");
+                else
+                    BuildLabScene(prefab);
 
                 // Saving/instantiating a prefab can leave nonserialized managed
                 // helper references on Unity's in-memory persistent object. They
@@ -369,6 +376,9 @@ namespace BrawlArena.EditorAutomation
                 muzzleEffect.layer = 12;
                 muzzleEffect.transform.SetParent(muzzle, false);
                 ParticleSystem particles = muzzleEffect.AddComponent<ParticleSystem>();
+                // A fresh ParticleSystem starts playing immediately; duration
+                // can only be written while it is fully stopped.
+                particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                 var main = particles.main;
                 main.playOnAwake = false;
                 main.loop = false;
@@ -922,6 +932,116 @@ namespace BrawlArena.EditorAutomation
             }
 
             return controller;
+        }
+
+        public const string WizardBasicAttackOverrideSourceName = "WeakAttack_UnarmedA";
+        public const string WizardSuperAttackOverrideSourceName = "StrongAttack_PunchA";
+        public const string CarryPoseOverrideSourceName = "Idle@Pistol";
+        public const string WizardBasicAttackClipPath =
+            "Assets/ModularRPGHeroesPBR/Animations/MagicWand/Attack01_MagicWand.fbx";
+        public const string WizardBasicAttackClipName = "Attack01_MagicWand";
+        public const string WizardSuperAttackClipPath =
+            "Assets/ModularRPGHeroesPBR/Animations/MagicWand/Attack02_MagicWand.fbx";
+        public const string WizardSuperAttackClipName = "Attack02_MagicWand";
+        public const string WizardCarryPoseClipPath =
+            "Assets/ModularRPGHeroesPBR/Animations/MagicWand/Idle_MagicWand.fbx";
+        public const string WizardCarryPoseClipName = "Idle_MagicWand";
+
+        /// <summary>
+        /// Shared staff-wizard presentation overrides: MagicWand attack clips
+        /// replace the vendor unarmed AttackID-0 sources, and the MagicWand
+        /// idle replaces the vendor pistol upper-body carry pose.
+        /// </summary>
+        internal static void ConfigureWizardPresentationOverrides(
+            AnimatorOverrideController controller)
+        {
+            ConfigurePresentationOverrides(
+                controller,
+                new[]
+                {
+                    WizardBasicAttackOverrideSourceName,
+                    WizardSuperAttackOverrideSourceName,
+                    CarryPoseOverrideSourceName,
+                },
+                new[]
+                {
+                    WizardBasicAttackClipPath,
+                    WizardSuperAttackClipPath,
+                    WizardCarryPoseClipPath,
+                },
+                new[]
+                {
+                    WizardBasicAttackClipName,
+                    WizardSuperAttackClipName,
+                    WizardCarryPoseClipName,
+                });
+        }
+
+        internal static void ConfigurePresentationOverrides(
+            AnimatorOverrideController controller,
+            string[] sourceNames,
+            string[] clipPaths,
+            string[] clipNames)
+        {
+            if (controller == null)
+                throw new ArgumentNullException(nameof(controller));
+
+            var replacements = new AnimationClip[sourceNames.Length];
+            for (int i = 0; i < sourceNames.Length; i++)
+                replacements[i] = RequirePresentationClip(clipPaths[i], clipNames[i]);
+
+            var overrides = new List<KeyValuePair<AnimationClip, AnimationClip>>(
+                controller.overridesCount);
+            controller.GetOverrides(overrides);
+
+            var sourceCounts = new int[sourceNames.Length];
+            for (int i = 0; i < overrides.Count; i++)
+            {
+                AnimationClip source = overrides[i].Key;
+                AnimationClip replacement = null;
+                if (source != null)
+                {
+                    for (int j = 0; j < sourceNames.Length; j++)
+                    {
+                        if (!string.Equals(source.name, sourceNames[j], StringComparison.Ordinal))
+                            continue;
+                        sourceCounts[j]++;
+                        replacement = replacements[j];
+                        break;
+                    }
+                }
+                overrides[i] = new KeyValuePair<AnimationClip, AnimationClip>(
+                    source, replacement);
+            }
+
+            for (int j = 0; j < sourceCounts.Length; j++)
+            {
+                if (sourceCounts[j] != 1)
+                {
+                    throw new InvalidOperationException(
+                        "The shared lifecycle graph no longer exposes exactly one '" +
+                        sourceNames[j] + "' presentation source clip.");
+                }
+            }
+
+            controller.ApplyOverrides(overrides);
+            EditorUtility.SetDirty(controller);
+        }
+
+        static AnimationClip RequirePresentationClip(string path, string clipName)
+        {
+            AnimationClip clip = AssetDatabase.LoadAllAssetsAtPath(path)
+                .OfType<AnimationClip>()
+                .Where(value => !value.name.StartsWith("__preview__", StringComparison.Ordinal))
+                .SingleOrDefault(value => string.Equals(
+                    value.name, clipName, StringComparison.Ordinal));
+            if (clip == null)
+            {
+                throw new InvalidOperationException(
+                    "The pinned animation asset '" + path +
+                    "' does not contain clip '" + clipName + "'.");
+            }
+            return clip;
         }
 
         static GameObject BuildPilotPrefab(AnimatorOverrideController overrideController)
@@ -1732,34 +1852,65 @@ namespace BrawlArena.EditorAutomation
             var shooter = prefab.GetComponent<vShooterManager>();
             var melee = prefab.GetComponent<BrawlInvectorMeleePresentationManager>();
             var ammo = prefab.GetComponent<vAmmoManager>();
-            if (projectController.freeSpeed == null || projectController.strafeSpeed == null ||
-                projectController.autoCrouchLayer.value != 0 ||
-                projectController.customFixedTimeStep != vThirdPersonMotor.CustomFixedTimeStep.Default ||
-                !projectInput.IsDormantConfigured || !projectInput.HasProjectMoveAction ||
-                projectInput.PresentationAttackId != 0 ||
-                !projectInput.HasConfiguredMotorBridge ||
-                projectInput.MovementFeedMode != InvectorMovementFeedMode.LabProjectAction ||
-                projectInput.ProjectMoveActionEnabled || projectInput.ExternalFixedUpdateSubscriberCount != 0 ||
-                !projectMotor.IsDormantConfigured || projectMotor.IsInitialized ||
-                !projectDriver.IsDormantConfigured ||
-                !weaponPresenter.IsDormantConfigured ||
-                weaponPresenter.HasRuntimeSolvers ||
-                weaponPresenter.ProjectIKAdjustList == null ||
-                !string.Equals(weaponPresenter.WeaponCategory, WeaponCategory, StringComparison.Ordinal) ||
-                weaponPresenter.WeaponHeldInLeftHand || weaponPresenter.RuntimeHelperCount != 0 ||
-                shooter.damageLayer.value != 0 || shooter.blockAimLayer.value != 0 ||
-                shooter.useCancelReload || shooter.useAmmoDisplay || shooter.applyRecoilToCamera ||
-                shooter.useLockOn || shooter.useLockOnMeleeOnly || shooter.hipfireShot ||
-                shooter.alwaysAiming || shooter.weaponIKAdjustList != null ||
-                shooter.rWeapon != null || shooter.lWeapon != null || shooter.AllAmmoInfinity ||
-                melee.Members.Count != 0 || melee.leftWeapon != null || melee.rightWeapon != null ||
-                melee.SuppressedAttackWindowCount != 0 || melee.BlockedDamageHitCount != 0 ||
-                !Mathf.Approximately(melee.defaultStaminaCost, 0f) ||
-                !Mathf.Approximately(melee.defaultStaminaRecoveryDelay, 0f) ||
-                ammo.ammoListData != null || ammo.itemManager != null || ammo.ammos.Count != 0)
+            var dormancyFaults = new List<string>();
+            if (projectController.freeSpeed == null) dormancyFaults.Add("controller.freeSpeed");
+            if (projectController.strafeSpeed == null) dormancyFaults.Add("controller.strafeSpeed");
+            if (projectController.autoCrouchLayer.value != 0) dormancyFaults.Add("controller.autoCrouchLayer");
+            if (projectController.customFixedTimeStep != vThirdPersonMotor.CustomFixedTimeStep.Default)
+                dormancyFaults.Add("controller.customFixedTimeStep");
+            if (!projectInput.IsDormantConfigured) dormancyFaults.Add("input.IsDormantConfigured");
+            if (!projectInput.HasProjectMoveAction) dormancyFaults.Add("input.HasProjectMoveAction");
+            if (projectInput.PresentationAttackId != 0) dormancyFaults.Add("input.PresentationAttackId");
+            if (!projectInput.HasConfiguredMotorBridge) dormancyFaults.Add("input.HasConfiguredMotorBridge");
+            if (projectInput.MovementFeedMode != InvectorMovementFeedMode.LabProjectAction)
+                dormancyFaults.Add("input.MovementFeedMode");
+            // The move action lives on the shared project InputActionAsset, so
+            // its global enabled flag is not evidence about this prefab: any
+            // live actor (or a play-mode test host) enables it project-wide.
+            // Dormancy requires that THIS adapter never enabled it itself.
+            if (projectInput.ProjectMoveActionOwnedByAdapter)
+                dormancyFaults.Add("input.ProjectMoveActionOwnedByAdapter");
+            if (projectInput.ExternalFixedUpdateSubscriberCount != 0)
+                dormancyFaults.Add("input.ExternalFixedUpdateSubscriberCount");
+            if (!projectMotor.IsDormantConfigured) dormancyFaults.Add("motor.IsDormantConfigured");
+            if (projectMotor.IsInitialized) dormancyFaults.Add("motor.IsInitialized");
+            if (!projectDriver.IsDormantConfigured) dormancyFaults.Add("driver.IsDormantConfigured");
+            if (!weaponPresenter.IsDormantConfigured) dormancyFaults.Add("weapon.IsDormantConfigured");
+            if (weaponPresenter.HasRuntimeSolvers) dormancyFaults.Add("weapon.HasRuntimeSolvers");
+            if (weaponPresenter.ProjectIKAdjustList == null) dormancyFaults.Add("weapon.ProjectIKAdjustList");
+            if (!string.Equals(weaponPresenter.WeaponCategory, WeaponCategory, StringComparison.Ordinal))
+                dormancyFaults.Add("weapon.WeaponCategory");
+            if (weaponPresenter.WeaponHeldInLeftHand) dormancyFaults.Add("weapon.WeaponHeldInLeftHand");
+            if (weaponPresenter.RuntimeHelperCount != 0) dormancyFaults.Add("weapon.RuntimeHelperCount");
+            if (shooter.damageLayer.value != 0) dormancyFaults.Add("shooter.damageLayer");
+            if (shooter.blockAimLayer.value != 0) dormancyFaults.Add("shooter.blockAimLayer");
+            if (shooter.useCancelReload) dormancyFaults.Add("shooter.useCancelReload");
+            if (shooter.useAmmoDisplay) dormancyFaults.Add("shooter.useAmmoDisplay");
+            if (shooter.applyRecoilToCamera) dormancyFaults.Add("shooter.applyRecoilToCamera");
+            if (shooter.useLockOn) dormancyFaults.Add("shooter.useLockOn");
+            if (shooter.useLockOnMeleeOnly) dormancyFaults.Add("shooter.useLockOnMeleeOnly");
+            if (shooter.hipfireShot) dormancyFaults.Add("shooter.hipfireShot");
+            if (shooter.alwaysAiming) dormancyFaults.Add("shooter.alwaysAiming");
+            if (shooter.weaponIKAdjustList != null) dormancyFaults.Add("shooter.weaponIKAdjustList");
+            if (shooter.rWeapon != null) dormancyFaults.Add("shooter.rWeapon");
+            if (shooter.lWeapon != null) dormancyFaults.Add("shooter.lWeapon");
+            if (shooter.AllAmmoInfinity) dormancyFaults.Add("shooter.AllAmmoInfinity");
+            if (melee.Members.Count != 0) dormancyFaults.Add("melee.Members");
+            if (melee.leftWeapon != null) dormancyFaults.Add("melee.leftWeapon");
+            if (melee.rightWeapon != null) dormancyFaults.Add("melee.rightWeapon");
+            if (melee.SuppressedAttackWindowCount != 0) dormancyFaults.Add("melee.SuppressedAttackWindowCount");
+            if (melee.BlockedDamageHitCount != 0) dormancyFaults.Add("melee.BlockedDamageHitCount");
+            if (!Mathf.Approximately(melee.defaultStaminaCost, 0f)) dormancyFaults.Add("melee.defaultStaminaCost");
+            if (!Mathf.Approximately(melee.defaultStaminaRecoveryDelay, 0f))
+                dormancyFaults.Add("melee.defaultStaminaRecoveryDelay");
+            if (ammo.ammoListData != null) dormancyFaults.Add("ammo.ammoListData");
+            if (ammo.itemManager != null) dormancyFaults.Add("ammo.itemManager");
+            if (ammo.ammos.Count != 0) dormancyFaults.Add("ammo.ammos");
+            if (dormancyFaults.Count != 0)
             {
                 throw new InvalidOperationException(
-                    "Pilot movement profiles, adapter, tag, scheduler, camera, weapon, ammo, or stamina dormant-safety contract failed.");
+                    "Pilot dormant-safety contract failed: " +
+                    string.Join(", ", dormancyFaults) + ".");
             }
 
             BrawlerHitProxy[] hitProxies = prefab.GetComponentsInChildren<BrawlerHitProxy>(true);
@@ -1936,23 +2087,40 @@ namespace BrawlArena.EditorAutomation
                     "The production-human Animator, physics body, controller, or vendor managers are not dormant.");
             }
 
-            if (!input.IsDormantConfigured || input.RuntimeSchedulingEnabled ||
-                input.MovementFeedMode != InvectorMovementFeedMode.BufferedMotor ||
-                !input.HasConfiguredMotorBridge || !input.HasProjectMoveAction ||
-                input.PresentationAttackId != 0 || input.ProjectMoveActionEnabled ||
-                input.ProjectMoveActionOwnedByAdapter ||
-                input.ExternalFixedUpdateSubscriberCount != 0 ||
-                !motor.IsDormantConfigured || motor.IsInitialized ||
-                motor.HasConfiguredNavigationPlanner ||
-                !animationDriver.IsDormantConfigured ||
-                !weaponPresenter.IsDormantConfigured ||
-                weaponPresenter.HasRuntimeSolvers ||
-                !runtimeGate.IsDormantConfigured || runtimeGate.IsRuntimeActive ||
-                !string.IsNullOrEmpty(runtimeGate.FailureMessage) ||
-                health.enabled || facade.enabled || playerInput.enabled || runtimeGate.enabled)
+            // Global InputAction.enabled state is shared project-wide and says
+            // nothing about this prefab; dormancy only forbids the adapter
+            // from having enabled the action itself.
+            var humanFaults = new List<string>();
+            if (!input.IsDormantConfigured) humanFaults.Add("input.IsDormantConfigured");
+            if (input.RuntimeSchedulingEnabled) humanFaults.Add("input.RuntimeSchedulingEnabled");
+            if (input.MovementFeedMode != InvectorMovementFeedMode.BufferedMotor)
+                humanFaults.Add("input.MovementFeedMode");
+            if (!input.HasConfiguredMotorBridge) humanFaults.Add("input.HasConfiguredMotorBridge");
+            if (!input.HasProjectMoveAction) humanFaults.Add("input.HasProjectMoveAction");
+            if (input.PresentationAttackId != 0) humanFaults.Add("input.PresentationAttackId");
+            if (input.ProjectMoveActionOwnedByAdapter)
+                humanFaults.Add("input.ProjectMoveActionOwnedByAdapter");
+            if (input.ExternalFixedUpdateSubscriberCount != 0)
+                humanFaults.Add("input.ExternalFixedUpdateSubscriberCount");
+            if (!motor.IsDormantConfigured) humanFaults.Add("motor.IsDormantConfigured");
+            if (motor.IsInitialized) humanFaults.Add("motor.IsInitialized");
+            if (motor.HasConfiguredNavigationPlanner)
+                humanFaults.Add("motor.HasConfiguredNavigationPlanner");
+            if (!animationDriver.IsDormantConfigured) humanFaults.Add("driver.IsDormantConfigured");
+            if (!weaponPresenter.IsDormantConfigured) humanFaults.Add("weapon.IsDormantConfigured");
+            if (weaponPresenter.HasRuntimeSolvers) humanFaults.Add("weapon.HasRuntimeSolvers");
+            if (!runtimeGate.IsDormantConfigured) humanFaults.Add("gate.IsDormantConfigured");
+            if (runtimeGate.IsRuntimeActive) humanFaults.Add("gate.IsRuntimeActive");
+            if (!string.IsNullOrEmpty(runtimeGate.FailureMessage)) humanFaults.Add("gate.FailureMessage");
+            if (health.enabled) humanFaults.Add("health.enabled");
+            if (facade.enabled) humanFaults.Add("facade.enabled");
+            if (playerInput.enabled) humanFaults.Add("playerInput.enabled");
+            if (runtimeGate.enabled) humanFaults.Add("gate.enabled");
+            if (humanFaults.Count != 0)
             {
                 throw new InvalidOperationException(
-                    "The production-human input, motor, presentation, facade, or runtime gates are not dormant.");
+                    "Production-human dormant-safety contract failed: " +
+                    string.Join(", ", humanFaults) + ".");
             }
 
             if (!identity.Matches("fire", InvectorBrawlerPrefabRole.Human))
@@ -2165,25 +2333,42 @@ namespace BrawlArena.EditorAutomation
                     "The production-AI Animator, physics body, controller, or vendor managers are not dormant.");
             }
 
-            if (!input.IsDormantConfigured || input.RuntimeSchedulingEnabled ||
-                input.MovementFeedMode != InvectorMovementFeedMode.BufferedMotor ||
-                !input.HasConfiguredMotorBridge || !input.HasProjectMoveAction ||
-                input.PresentationAttackId != 0 || input.ProjectMoveActionEnabled ||
-                input.ProjectMoveActionOwnedByAdapter ||
-                input.ExternalFixedUpdateSubscriberCount != 0 ||
-                !motor.IsDormantConfigured || motor.IsInitialized ||
-                !motor.HasConfiguredNavigationPlanner ||
-                !animationDriver.IsDormantConfigured ||
-                !weaponPresenter.IsDormantConfigured ||
-                weaponPresenter.HasRuntimeSolvers ||
-                !navigation.IsDormantConfigured ||
-                !runtimeGate.IsDormantConfigured || runtimeGate.IsRuntimeActive ||
-                !string.IsNullOrEmpty(runtimeGate.FailureMessage) ||
-                health.enabled || facade.enabled || ai.enabled || navigation.enabled ||
-                runtimeGate.enabled)
+            // Global InputAction.enabled state is shared project-wide and says
+            // nothing about this prefab; dormancy only forbids the adapter
+            // from having enabled the action itself.
+            var aiFaults = new List<string>();
+            if (!input.IsDormantConfigured) aiFaults.Add("input.IsDormantConfigured");
+            if (input.RuntimeSchedulingEnabled) aiFaults.Add("input.RuntimeSchedulingEnabled");
+            if (input.MovementFeedMode != InvectorMovementFeedMode.BufferedMotor)
+                aiFaults.Add("input.MovementFeedMode");
+            if (!input.HasConfiguredMotorBridge) aiFaults.Add("input.HasConfiguredMotorBridge");
+            if (!input.HasProjectMoveAction) aiFaults.Add("input.HasProjectMoveAction");
+            if (input.PresentationAttackId != 0) aiFaults.Add("input.PresentationAttackId");
+            if (input.ProjectMoveActionOwnedByAdapter)
+                aiFaults.Add("input.ProjectMoveActionOwnedByAdapter");
+            if (input.ExternalFixedUpdateSubscriberCount != 0)
+                aiFaults.Add("input.ExternalFixedUpdateSubscriberCount");
+            if (!motor.IsDormantConfigured) aiFaults.Add("motor.IsDormantConfigured");
+            if (motor.IsInitialized) aiFaults.Add("motor.IsInitialized");
+            if (!motor.HasConfiguredNavigationPlanner)
+                aiFaults.Add("motor.HasConfiguredNavigationPlanner");
+            if (!animationDriver.IsDormantConfigured) aiFaults.Add("driver.IsDormantConfigured");
+            if (!weaponPresenter.IsDormantConfigured) aiFaults.Add("weapon.IsDormantConfigured");
+            if (weaponPresenter.HasRuntimeSolvers) aiFaults.Add("weapon.HasRuntimeSolvers");
+            if (!navigation.IsDormantConfigured) aiFaults.Add("navigation.IsDormantConfigured");
+            if (!runtimeGate.IsDormantConfigured) aiFaults.Add("gate.IsDormantConfigured");
+            if (runtimeGate.IsRuntimeActive) aiFaults.Add("gate.IsRuntimeActive");
+            if (!string.IsNullOrEmpty(runtimeGate.FailureMessage)) aiFaults.Add("gate.FailureMessage");
+            if (health.enabled) aiFaults.Add("health.enabled");
+            if (facade.enabled) aiFaults.Add("facade.enabled");
+            if (ai.enabled) aiFaults.Add("ai.enabled");
+            if (navigation.enabled) aiFaults.Add("navigation.enabled");
+            if (runtimeGate.enabled) aiFaults.Add("gate.enabled");
+            if (aiFaults.Count != 0)
             {
                 throw new InvalidOperationException(
-                    "The production-AI planner, scheduler, presentation, facade, or runtime gates are not dormant.");
+                    "Production-AI dormant-safety contract failed: " +
+                    string.Join(", ", aiFaults) + ".");
             }
 
             if (!identity.Matches("fire", InvectorBrawlerPrefabRole.AI))

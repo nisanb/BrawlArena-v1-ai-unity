@@ -188,7 +188,7 @@ PrefabInstance:
       addedObject: {fileID: 192916738130777243}
     - targetCorrespondingSourceObject: {fileID: 6676496902942982557, guid: 5c2dcf339ba1a9c4ca7a6feb3d8f8760, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2762226648204486435}
+      addedObject: {fileID: 548464901737233116}
   m_SourcePrefab: {fileID: 100100000, guid: 5c2dcf339ba1a9c4ca7a6feb3d8f8760, type: 3}
 --- !u!4 &8500038528166885620 stripped
 Transform:
@@ -1263,8 +1263,8 @@ MonoBehaviour:
   - {x: 0, y: 0, z: 0}
   muzzleEffectLocalRotations:
   - {x: 0, y: 0, z: 0, w: 1}
-  bowPresentationRig: {fileID: 2762226648204486435}
---- !u!114 &2762226648204486435
+  bowPresentationRig: {fileID: 548464901737233116}
+--- !u!114 &548464901737233116
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

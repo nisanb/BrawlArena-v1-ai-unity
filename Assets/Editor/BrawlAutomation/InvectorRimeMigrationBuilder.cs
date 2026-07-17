@@ -69,6 +69,8 @@ namespace BrawlArena.EditorAutomation
                         lifecycleController,
                         OverrideControllerPath,
                         "RimeInvectorPilot");
+                InvectorMigrationPilotBuilder
+                    .ConfigureWizardPresentationOverrides(overrideController);
 
                 InvectorMigrationPilotBuilder.BuildWeaponIKAssets(
                     WeaponIKAdjustPath,

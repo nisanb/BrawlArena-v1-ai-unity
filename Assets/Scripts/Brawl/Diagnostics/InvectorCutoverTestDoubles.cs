@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using UnityEngine;
 
 namespace BrawlArena.EditorAutomation.Tests
@@ -120,3 +121,4 @@ namespace BrawlArena.EditorAutomation.Tests
         }
     }
 }
+#endif

@@ -93,6 +93,8 @@ namespace BrawlArena.EditorAutomation
                         lifecycleController,
                         OverrideControllerPath,
                         "TempestInvectorPilot");
+                InvectorMigrationPilotBuilder
+                    .ConfigureWizardPresentationOverrides(overrideController);
 
                 InvectorMigrationPilotBuilder.BuildWeaponIKAssets(
                     WeaponIKAdjustPath,
