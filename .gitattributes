@@ -133,6 +133,10 @@ Packages/packages-lock.json linguist-generated
 *.dll                   lfs
 *.pdb                   lfs
 *.so                    lfs
+# Unity AI Assistant extensionless relay binaries
+Packages/com.unity.ai.assistant/RelayApp~/gateway/codex-acp-darwin-arm64 lfs
+Packages/com.unity.ai.assistant/RelayApp~/gateway/codex-acp-darwin-x64 lfs
+Packages/com.unity.ai.assistant/RelayApp~/relay_linux lfs
 # Fonts
 *.otf                   lfs
 *.ttf                   lfs
