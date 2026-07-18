@@ -42,6 +42,20 @@ namespace BrawlArena.EditorAutomation
         public const string WeaponPresentationName = "RimeStaffPresentation";
 
         static readonly Color FrostMuzzleColor = new Color(0x75 / 255f, 0xF0 / 255f, 1f, 1f);
+        static readonly Vector3 WeaponHandIKPositionOffset =
+            new Vector3(-22.731770f, -21.091560f, 7.045807f);
+        static readonly Vector3 SupportTargetLocalPosition =
+            new Vector3(11.038170000f, -5.882828000f, -8.197099000f);
+        static readonly Vector3 SupportTargetLocalEuler =
+            new Vector3(1.051649000f, 199.302300000f, 22.067450000f);
+        static readonly Vector3 SupportHintLocalPosition =
+            new Vector3(13.846820000f, -29.315950000f, 3.461801000f);
+        static readonly Vector3 SupportHintLocalEuler =
+            new Vector3(34.890250000f, 80.836430000f, 250.304900000f);
+        static readonly Vector3 StaffVisualLocalPosition =
+            new Vector3(8.895547000f, -3.444080000f, -0.427311900f);
+        static readonly Vector3 StaffVisualLocalEuler =
+            new Vector3(271.682000000f, 262.627100000f, 97.171430000f);
 
         [MenuItem("Brawl Arena/Invector Migration/Build Phase 4 Rime Variants")]
         static void BuildFromMenu()
@@ -76,13 +90,21 @@ namespace BrawlArena.EditorAutomation
                     WeaponIKAdjustPath,
                     WeaponIKAdjustListPath,
                     "RimeStaffIKAdjust",
-                    "RimeStaffIKAdjustList");
+                    "RimeStaffIKAdjustList",
+                    WeaponHandIKPositionOffset,
+                    Vector3.zero);
                 InvectorMigrationPilotBuilder.BuildWeaponPresentationPrefab(
                     FrostPath,
                     AuthoredStaffName,
                     WeaponPresentationName,
                     WeaponPrefabPath,
-                    FrostMuzzleColor);
+                    FrostMuzzleColor,
+                    SupportTargetLocalPosition,
+                    SupportTargetLocalEuler,
+                    SupportHintLocalPosition,
+                    SupportHintLocalEuler,
+                    StaffVisualLocalPosition,
+                    StaffVisualLocalEuler);
 
                 GameObject pilot = InvectorMigrationPilotBuilder.BuildPilotPrefab(
                     overrideController,

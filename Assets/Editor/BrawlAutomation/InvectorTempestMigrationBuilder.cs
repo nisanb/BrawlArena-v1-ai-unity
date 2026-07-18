@@ -58,13 +58,22 @@ namespace BrawlArena.EditorAutomation
 
         static readonly Color StormMuzzleColor =
             new Color(0xB5 / 255f, 0x8C / 255f, 1f, 1f);
-        // Staff03's source bind pose is nearly fully extended. Pull both IK
-        // targets 1 cm toward their shoulders so the guarded two-bone solver
-        // stays inside its reach skin instead of failing at the exact limit.
         static readonly Vector3 WeaponHandIKPositionOffset =
-            new Vector3(-0.01f, 0f, 0f);
+            new Vector3(-9.792466f, -10.295830f, 2.919632f);
         static readonly Vector3 SupportHandIKPositionOffset =
             new Vector3(0.01f, 0f, 0f);
+        static readonly Vector3 SupportTargetLocalPosition =
+            new Vector3(-3.952494000f, -14.231210000f, -3.253066000f);
+        static readonly Vector3 SupportTargetLocalEuler =
+            new Vector3(1.442146000f, 196.769400000f, 20.848600000f);
+        static readonly Vector3 SupportHintLocalPosition =
+            new Vector3(16.945470000f, -43.846310000f, 14.882640000f);
+        static readonly Vector3 SupportHintLocalEuler =
+            new Vector3(17.467760000f, 68.279990000f, 87.788990000f);
+        static readonly Vector3 StaffVisualLocalPosition =
+            new Vector3(0.877542600f, -6.599002000f, -0.369651900f);
+        static readonly Vector3 StaffVisualLocalEuler =
+            new Vector3(271.682000000f, 262.627100000f, 97.171430000f);
 
         [MenuItem("Brawl Arena/Invector Migration/Build Tempest Variants")]
         static void BuildFromMenu()
@@ -108,7 +117,13 @@ namespace BrawlArena.EditorAutomation
                     AuthoredStaffName,
                     WeaponPresentationName,
                     WeaponPrefabPath,
-                    StormMuzzleColor);
+                    StormMuzzleColor,
+                    SupportTargetLocalPosition,
+                    SupportTargetLocalEuler,
+                    SupportHintLocalPosition,
+                    SupportHintLocalEuler,
+                    StaffVisualLocalPosition,
+                    StaffVisualLocalEuler);
 
                 GameObject pilot = InvectorMigrationPilotBuilder.BuildPilotPrefab(
                     overrideController,

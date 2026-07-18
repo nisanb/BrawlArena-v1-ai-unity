@@ -627,7 +627,11 @@ namespace BrawlArena.EditorAutomation.Tests
                 "UseAnimatorMove", "isAimingByHipFire", "cameraMain", "controlAimCanvas",
                 "LockCamera", "LockAiming", "LockHipFireAiming", "rotateToLockTargetConditions",
             })
-                AssertDeclaresProperty(typeof(InvectorShooterMeleeInputAdapter), property);
+            AssertDeclaresProperty(typeof(InvectorShooterMeleeInputAdapter), property);
+
+            AssertDeclaresProperty(
+                typeof(InvectorShooterMeleeInputAdapter),
+                "IsPresentationAttackWindowOpen");
 
             AssertDeclaresMethodSignature(
                 typeof(InvectorShooterMeleeInputAdapter), "SetMovementReference", typeof(BrawlCamera));
@@ -810,6 +814,9 @@ namespace BrawlArena.EditorAutomation.Tests
             AssertDeclaresMethodSignature(
                 typeof(BrawlInvectorThirdPersonController), "TriggerMeleePresentation",
                 typeof(int), typeof(bool));
+            AssertDeclaresMethodSignature(
+                typeof(BrawlInvectorThirdPersonController),
+                "MarkMeleePresentationConsumed");
             AssertDeclaresMethodSignature(
                 typeof(BrawlInvectorThirdPersonController), "TriggerRecoilPresentation",
                 typeof(int));

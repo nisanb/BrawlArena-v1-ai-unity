@@ -42,6 +42,26 @@ namespace BrawlArena.EditorAutomation
         public const string ScenePath = "Assets/Scenes/InvectorMigrationLab.unity";
         public const string WeaponCategory = "BrawlWizardStaff";
 
+        // Stock Invector IK-adjust offsets are local to the Humanoid hand
+        // bones. The runtime presenter preserves that scaled local contract.
+        static readonly Vector3 CinderWeaponHandIKPositionOffset =
+            new Vector3(-13.371220f, -17.029370f, -3.664010f);
+
+        static readonly Vector3 CinderSupportTargetLocalPosition =
+            new Vector3(-1.68240023f, -5.561548f, 16.5106335f);
+        static readonly Vector3 CinderSupportTargetLocalEuler =
+            new Vector3(0.25193277f, 202.682f, 23.80455f);
+        static readonly Vector3 CinderSupportHintLocalPosition =
+            new Vector3(-28.508480f, -60.527400f, -18.043850f);
+        static readonly Vector3 CinderSupportHintLocalEuler =
+            new Vector3(44.552420f, 304.172600f, 93.925260f);
+        // StaffVisual pose captured with Unity Transform Scene handles under
+        // hand_r. Unlike the IK offset above, this seats the mesh in the palm.
+        static readonly Vector3 CinderStaffVisualLocalPosition =
+            new Vector3(9.179848f, -3.098283f, -0.425854f);
+        static readonly Vector3 CinderStaffVisualLocalEuler =
+            new Vector3(271.682000f, 262.627200f, 97.171300f);
+
         public const string TemplatePath =
             "Assets/Invector-3rdPersonController/Shooter/Prefabs/Player/vShooterMelee_NoInventory.prefab";
         public const string CombinedControllerPath =
@@ -218,7 +238,9 @@ namespace BrawlArena.EditorAutomation
                 WeaponIKAdjustPath,
                 WeaponIKAdjustListPath,
                 "CinderStaffIKAdjust",
-                "CinderStaffIKAdjustList");
+                "CinderStaffIKAdjustList",
+                CinderWeaponHandIKPositionOffset,
+                Vector3.zero);
         }
 
         internal static void BuildWeaponIKAssets(
@@ -318,7 +340,13 @@ namespace BrawlArena.EditorAutomation
                 "Staff01",
                 "CinderStaffPresentation",
                 WeaponPrefabPath,
-                new Color(1f, 0.48f, 0.08f, 1f));
+                new Color(1f, 0.48f, 0.08f, 1f),
+                CinderSupportTargetLocalPosition,
+                CinderSupportTargetLocalEuler,
+                CinderSupportHintLocalPosition,
+                CinderSupportHintLocalEuler,
+                CinderStaffVisualLocalPosition,
+                CinderStaffVisualLocalEuler);
         }
 
         internal static void BuildWeaponPresentationPrefab(
@@ -327,6 +355,58 @@ namespace BrawlArena.EditorAutomation
             string presentationName,
             string destinationPath,
             Color muzzleColor)
+        {
+            BuildWeaponPresentationPrefabCore(
+                characterPath,
+                authoredStaffName,
+                presentationName,
+                destinationPath,
+                muzzleColor,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        internal static void BuildWeaponPresentationPrefab(
+            string characterPath,
+            string authoredStaffName,
+            string presentationName,
+            string destinationPath,
+            Color muzzleColor,
+            Vector3 supportTargetLocalPosition,
+            Vector3 supportTargetLocalEuler,
+            Vector3 supportHintLocalPosition,
+            Vector3 supportHintLocalEuler,
+            Vector3 staffVisualLocalPosition,
+            Vector3 staffVisualLocalEuler)
+        {
+            BuildWeaponPresentationPrefabCore(
+                characterPath,
+                authoredStaffName,
+                presentationName,
+                destinationPath,
+                muzzleColor,
+                supportTargetLocalPosition,
+                supportTargetLocalEuler,
+                supportHintLocalPosition,
+                supportHintLocalEuler,
+                staffVisualLocalPosition,
+                staffVisualLocalEuler);
+        }
+
+        static void BuildWeaponPresentationPrefabCore(
+            string characterPath,
+            string authoredStaffName,
+            string presentationName,
+            string destinationPath,
+            Color muzzleColor,
+            Vector3? supportTargetLocalPosition,
+            Vector3? supportTargetLocalEuler,
+            Vector3? supportHintLocalPosition,
+            Vector3? supportHintLocalEuler,
+            Vector3? staffVisualLocalPosition = null,
+            Vector3? staffVisualLocalEuler = null)
         {
             GameObject character = AssetDatabase.LoadAssetAtPath<GameObject>(characterPath);
             Scene previewScene = EditorSceneManager.NewPreviewScene();
@@ -341,23 +421,54 @@ namespace BrawlArena.EditorAutomation
                 Transform leftLowerArm = animator != null && animator.isHuman
                     ? animator.GetBoneTransform(HumanBodyBones.LeftLowerArm)
                     : null;
-                if (staff == null || staff.parent == null || leftHand == null || leftLowerArm == null)
+                Transform rightHand = animator != null && animator.isHuman
+                    ? animator.GetBoneTransform(HumanBodyBones.RightHand)
+                    : null;
+                if (staff == null || staff.parent == null || leftHand == null ||
+                    leftLowerArm == null || rightHand == null)
                 {
                     throw new InvalidOperationException(
                         characterPath + " must expose " + authoredStaffName +
-                        " plus a valid Humanoid left arm for its weapon presentation asset.");
+                        " plus valid Humanoid hands for its weapon presentation asset.");
                 }
 
                 var weaponRoot = new GameObject(presentationName);
                 SceneManager.MoveGameObjectToScene(weaponRoot, previewScene);
-                weaponRoot.transform.SetParent(staff.parent, false);
+                // Staffs in the RPG source prefabs sit under a pelvis-level
+                // `Weapon` staging socket. Capture their authored world pose
+                // relative to the actual weapon hand so the generated visual
+                // follows that hand in every animation instead of floating
+                // with the pelvis.
+                weaponRoot.transform.SetParent(rightHand, false);
                 weaponRoot.layer = 0;
 
                 GameObject staffVisual = UnityEngine.Object.Instantiate(
-                    staff.gameObject, weaponRoot.transform, false);
+                    staff.gameObject, weaponRoot.transform, true);
                 staffVisual.name = "StaffVisual";
+                if (staffVisualLocalPosition.HasValue)
+                    staffVisual.transform.localPosition = staffVisualLocalPosition.Value;
+                if (staffVisualLocalEuler.HasValue)
+                    staffVisual.transform.localEulerAngles = staffVisualLocalEuler.Value;
                 SetLayerRecursively(staffVisual, 0);
                 staffVisual.SetActive(true);
+
+                // Author the grip reference on the actual staff surface. A helper
+                // placed at the hand bone would always report a perfect grip even
+                // when the mesh is visibly floating, so it cannot be used as
+                // contact evidence.
+                if (!GameplayProbeRecorder.TryClosestMeshPoint(
+                        staffVisual.transform, rightHand.position,
+                        out Vector3 authoredGripPoint))
+                {
+                    throw new InvalidOperationException(
+                        authoredStaffName + " has no readable staff mesh for its grip anchor.");
+                }
+                Transform gripAnchor = CreateAnchor(
+                    staffVisual.transform,
+                    "WeaponGripAnchor",
+                    authoredGripPoint,
+                    rightHand.rotation);
+                gripAnchor.gameObject.layer = 0;
 
                 Transform muzzle = FindDescendant(staffVisual.transform, "SpellOrigin");
                 if (muzzle == null)
@@ -369,6 +480,14 @@ namespace BrawlArena.EditorAutomation
                     weaponRoot.transform, "SupportHandTarget", leftHand.position, leftHand.rotation);
                 Transform supportHint = CreateAnchor(
                     weaponRoot.transform, "SupportHintTarget", leftLowerArm.position, leftLowerArm.rotation);
+                if (supportTargetLocalPosition.HasValue)
+                    supportHand.localPosition = supportTargetLocalPosition.Value;
+                if (supportTargetLocalEuler.HasValue)
+                    supportHand.localEulerAngles = supportTargetLocalEuler.Value;
+                if (supportHintLocalPosition.HasValue)
+                    supportHint.localPosition = supportHintLocalPosition.Value;
+                if (supportHintLocalEuler.HasValue)
+                    supportHint.localEulerAngles = supportHintLocalEuler.Value;
                 supportHand.gameObject.layer = 0;
                 supportHint.gameObject.layer = 0;
 
@@ -771,8 +890,55 @@ namespace BrawlArena.EditorAutomation
                 AssetDatabase.SaveAssets();
             }
 
+            bool attackTagsChanged;
+            int attackStates = NormalizePresentationAttackTags(
+                controller, out attackTagsChanged);
+            if (attackStates != 2)
+                throw new InvalidOperationException(
+                    "The lifecycle controller must expose exactly the weak and strong " +
+                    "AttackID-0 states used by staff and bow presentation.");
+            if (attackTagsChanged)
+            {
+                EditorUtility.SetDirty(controller);
+                AssetDatabase.SaveAssets();
+            }
+
             ValidateGeneratedLifecycleController(controller);
             return controller;
+        }
+
+        static int NormalizePresentationAttackTags(
+            AnimatorController controller,
+            out bool changed)
+        {
+            changed = false;
+            int matches = 0;
+            foreach (AnimatorControllerLayer layer in controller.layers)
+                NormalizePresentationAttackTags(
+                    layer.stateMachine, ref matches, ref changed);
+            return matches;
+        }
+
+        static void NormalizePresentationAttackTags(
+            AnimatorStateMachine machine,
+            ref int matches,
+            ref bool changed)
+        {
+            foreach (ChildAnimatorState child in machine.states)
+            {
+                string motionName =
+                    child.state.motion != null ? child.state.motion.name : string.Empty;
+                if (motionName != WizardBasicAttackOverrideSourceName &&
+                    motionName != WizardSuperAttackOverrideSourceName)
+                    continue;
+                matches++;
+                if (string.IsNullOrEmpty(child.state.tag)) continue;
+                child.state.tag = string.Empty;
+                changed = true;
+            }
+            foreach (ChildAnimatorStateMachine child in machine.stateMachines)
+                NormalizePresentationAttackTags(
+                    child.stateMachine, ref matches, ref changed);
         }
 
         static bool NormalizeLifecycleOverlay(AnimatorStateMachine fullBody)
@@ -1065,7 +1231,8 @@ namespace BrawlArena.EditorAutomation
             string weaponPrefabPath,
             string weaponIKAdjustListPath,
             string weaponPresentationName,
-            string destinationPath)
+            string destinationPath,
+            bool weaponHeldInLeftHand = false)
         {
             var template = AssetDatabase.LoadAssetAtPath<GameObject>(TemplatePath);
             var character = AssetDatabase.LoadAssetAtPath<GameObject>(characterPath);
@@ -1169,7 +1336,8 @@ namespace BrawlArena.EditorAutomation
                     authoredStaffName,
                     weaponPrefabPath,
                     weaponIKAdjustListPath,
-                    weaponPresentationName);
+                    weaponPresentationName,
+                    weaponHeldInLeftHand);
                 ConfigureHitProxy(instance);
 
                 ConfigureStaticSafety(instance);
@@ -1468,7 +1636,8 @@ namespace BrawlArena.EditorAutomation
             string authoredStaffName,
             string weaponPrefabPath,
             string weaponIKAdjustListPath,
-            string weaponPresentationName)
+            string weaponPresentationName,
+            bool weaponHeldInLeftHand)
         {
             GameObject weaponPrefab =
                 AssetDatabase.LoadAssetAtPath<GameObject>(weaponPrefabPath);
@@ -1481,7 +1650,15 @@ namespace BrawlArena.EditorAutomation
             if (authoredStaff == null || authoredStaff.parent == null)
                 throw new InvalidOperationException(
                     "The pilot lost its " + authoredStaffName + " parent socket.");
-            Transform weaponParent = authoredStaff.parent;
+            Transform weaponParent = animator != null && animator.isHuman
+                ? animator.GetBoneTransform(
+                    weaponHeldInLeftHand
+                        ? HumanBodyBones.LeftHand
+                        : HumanBodyBones.RightHand)
+                : null;
+            if (weaponParent == null)
+                throw new InvalidOperationException(
+                    "The pilot has no valid hand parent for its weapon presentation.");
             UnityEngine.Object.DestroyImmediate(authoredStaff.gameObject);
 
             var visual = (GameObject)PrefabUtility.InstantiatePrefab(
@@ -1501,7 +1678,7 @@ namespace BrawlArena.EditorAutomation
                 muzzleEffects.Length != 1)
             {
                 throw new InvalidOperationException(
-                    "The generated staff presentation hierarchy is incomplete.");
+                    "The generated weapon presentation hierarchy is incomplete.");
             }
 
             InvectorBrawlerWeaponPresentation presenter =
@@ -1517,7 +1694,7 @@ namespace BrawlArena.EditorAutomation
                 supportHint,
                 ikAdjustList,
                 WeaponCategory,
-                false,
+                weaponHeldInLeftHand,
                 muzzleEffects);
         }
 

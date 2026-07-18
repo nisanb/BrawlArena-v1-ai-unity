@@ -149,7 +149,7 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 3406894042922127143, guid: dbddf6f451e7c90449940027455ee166, type: 3}
       insertIndex: -1
       addedObject: {fileID: 5272197157002167330}
-    - targetCorrespondingSourceObject: {fileID: 3406969590203325535, guid: dbddf6f451e7c90449940027455ee166, type: 3}
+    - targetCorrespondingSourceObject: {fileID: 3406601920923060695, guid: dbddf6f451e7c90449940027455ee166, type: 3}
       insertIndex: -1
       addedObject: {fileID: 7678433219917220071}
     m_AddedComponents:
@@ -1236,6 +1236,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorBrawlerWeaponPresentation
   configuredAnimator: {fileID: 7021220976318584958}
   configuredController: {fileID: 1546855905174212443}
+  configuredInput: {fileID: 784520551388863639}
   weaponVisualRoot: {fileID: 7678433219917220071}
   muzzle: {fileID: 2576582224794287040}
   supportHandTarget: {fileID: 7736349132860096499}
@@ -1251,9 +1252,17 @@ MonoBehaviour:
   muzzleEffectLocalRotations:
   - {x: 0, y: 0, z: 0, w: 1}
   bowPresentationRig: {fileID: 0}
---- !u!4 &6930404230878159346 stripped
+  hasAuthoredPreviewPose: 0
+  previewWeaponHandLocalPosition: {x: 0, y: 0, z: 0}
+  previewWeaponHintLocalPosition: {x: 0, y: 0, z: 0}
+  previewWeaponHandLocalEuler: {x: 0, y: 0, z: 0}
+  previewSupportHandLocalPosition: {x: 0, y: 0, z: 0}
+  previewSupportHintLocalPosition: {x: 0, y: 0, z: 0}
+  previewSupportHandLocalEuler: {x: 0, y: 0, z: 0}
+  hideAuthoredArrowInPreview: 0
+--- !u!4 &6930176996185191546 stripped
 Transform:
-  m_CorrespondingSourceObject: {fileID: 3406969590203325535, guid: dbddf6f451e7c90449940027455ee166, type: 3}
+  m_CorrespondingSourceObject: {fileID: 3406601920923060695, guid: dbddf6f451e7c90449940027455ee166, type: 3}
   m_PrefabInstance: {fileID: 5722457913427754413}
   m_PrefabAsset: {fileID: 0}
 --- !u!4 &6930469401653113482 stripped
@@ -1272,7 +1281,7 @@ PrefabInstance:
   serializedVersion: 2
   m_Modification:
     serializedVersion: 3
-    m_TransformParent: {fileID: 6930404230878159346}
+    m_TransformParent: {fileID: 6930176996185191546}
     m_Modifications:
     - target: {fileID: 797421274444562486, guid: 9d5e236e804e54a48b9baff7aed98f50, type: 3}
       propertyPath: m_LocalPosition.x

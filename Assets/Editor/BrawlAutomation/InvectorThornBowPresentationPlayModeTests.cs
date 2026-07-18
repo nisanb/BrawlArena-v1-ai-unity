@@ -63,6 +63,11 @@ namespace BrawlArena.EditorAutomation.Tests
         const float BasicReleaseDelay = 0.48f;
         const float SuperReleaseDelay = 0.14f;
         const float ReleaseTimingTolerance = 0.12f;
+        const float MaximumPoseSupportTargetDistance = 0.0001f;
+        const float MinimumPoseSupportReachMargin = 0.02f;
+        const float MinimumPoseSupportHintLateral = 0.05f;
+        const float MinimumRelaxedArrowNockDistance = 0.05f;
+        const float MaximumRelaxedArrowNockDistance = 0.30f;
 
         static readonly int WeakAttackStateHash = Animator.StringToHash(
             "FullBody.Attacks.WeakAttacks.Unarmed.A");
@@ -295,7 +300,8 @@ namespace BrawlArena.EditorAutomation.Tests
                 controller.isCrouching = false;
                 ikRecordsProven = ikDataPinned && poses.All(probe =>
                     probe.Resolved && probe.LateUpdateObserved && probe.Applied &&
-                    probe.Unsuppressed && probe.FaultStable);
+                    probe.Unsuppressed && probe.FaultStable &&
+                    probe.SupportGeometryProven && probe.ContactProven);
                 ikEvidence = string.Join(
                     " | ", poses.Select(probe => probe.Evidence));
 
@@ -681,6 +687,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 ProjectileEvidenceKey, string.Empty);
             string recordedAuthorityEvidence = SessionState.GetString(
                 AuthorityEvidenceKey, string.Empty);
+            Debug.Log("[ThornPoseProbe] " + recordedIKEvidence);
             ClearAllSessionState();
 
             Scene restored = SceneManager.GetActiveScene();
@@ -860,7 +867,6 @@ namespace BrawlArena.EditorAutomation.Tests
                 : -1;
             float deadline = Time.realtimeSinceStartup + PresentationTimeoutSeconds;
             for (int frame = 0;
-                 frame < PresentationPollFrames &&
                  Time.realtimeSinceStartup < deadline &&
                  !(probe.StateObserved && probe.ClipObserved &&
                    probe.ReleaseObserved);
@@ -971,6 +977,9 @@ namespace BrawlArena.EditorAutomation.Tests
             object resolved = ResolveCurrentIKAdjustMethod != null
                 ? ResolveCurrentIKAdjustMethod.Invoke(presenter, null)
                 : null;
+            probe.Resolved = expected != null && ReferenceEquals(resolved, expected) &&
+                controller.isCrouching == probe.Crouching &&
+                presenter.AimPresented == probe.Aiming;
             int lateUpdateBaseline = presenter.GatedLateUpdateCount;
             int appliedBaseline = presenter.AppliedIKPassCount;
             int suppressedBaseline = presenter.SuppressedIKPassCount;
@@ -986,9 +995,6 @@ namespace BrawlArena.EditorAutomation.Tests
                 probe.Frames = frame + 1;
             }
 
-            probe.Resolved = expected != null && ReferenceEquals(resolved, expected) &&
-                controller.isCrouching == probe.Crouching &&
-                presenter.AimPresented == probe.Aiming;
             probe.LateUpdateObserved =
                 presenter.GatedLateUpdateCount > lateUpdateBaseline;
             probe.Applied = presenter.AppliedIKPassCount > appliedBaseline;
@@ -996,16 +1002,71 @@ namespace BrawlArena.EditorAutomation.Tests
                 presenter.SuppressedIKPassCount == suppressedBaseline &&
                 presenter.InvalidPoseCount == invalidBaseline;
             probe.FaultStable = presenter.RuntimeFaultCount == faultBaseline;
+            Animator animator = presenter.ConfiguredAnimator;
+            Transform supportUpperArm = animator != null && animator.isHuman
+                ? animator.GetBoneTransform(HumanBodyBones.RightUpperArm)
+                : null;
+            Transform supportLowerArm = animator != null && animator.isHuman
+                ? animator.GetBoneTransform(HumanBodyBones.RightLowerArm)
+                : null;
+            Transform supportHand = animator != null && animator.isHuman
+                ? animator.GetBoneTransform(HumanBodyBones.RightHand)
+                : null;
+            probe.SupportPoseResolved = presenter.TryGetCurrentSupportIKPose(
+                out Vector3 supportTarget,
+                out _,
+                out Vector3 supportHint);
+            if (probe.SupportPoseResolved && supportUpperArm != null &&
+                supportLowerArm != null && supportHand != null)
+            {
+                Vector3 reach = supportTarget - supportUpperArm.position;
+                float reachDistance = reach.magnitude;
+                float maximumReach = Vector3.Distance(
+                        supportUpperArm.position, supportLowerArm.position) +
+                    Vector3.Distance(
+                        supportLowerArm.position, supportHand.position);
+                probe.SupportTargetDistance = Vector3.Distance(
+                    supportHand.position, supportTarget);
+                probe.SupportReachMargin = maximumReach - reachDistance;
+                probe.SupportHintLateral = reachDistance > 0.0001f
+                    ? Vector3.ProjectOnPlane(
+                        supportHint - supportUpperArm.position,
+                        reach / reachDistance).magnitude
+                    : -1f;
+            }
+            probe.SupportGeometryProven = probe.SupportPoseResolved &&
+                probe.SupportTargetDistance <= MaximumPoseSupportTargetDistance &&
+                probe.SupportReachMargin > MinimumPoseSupportReachMargin &&
+                probe.SupportHintLateral >= MinimumPoseSupportHintLateral;
+            InvectorBowPresentationRig rig = presenter.BowPresentationRig;
+            if (rig != null && rig.ArrowVisual != null && rig.NockPoint != null)
+            {
+                probe.ArrowNockDistance = Vector3.Distance(
+                    rig.NockPoint.position,
+                    rig.ArrowVisual.TransformPoint(rig.ArrowNockLocalPoint));
+            }
+            probe.ContactProven = probe.Aiming
+                ? probe.ArrowNockDistance <= MaximumPoseSupportTargetDistance
+                : probe.ArrowNockDistance >= MinimumRelaxedArrowNockDistance &&
+                  probe.ArrowNockDistance <= MaximumRelaxedArrowNockDistance;
             probe.Evidence = string.Format(
                 "{0}: resolved={1}, late={2}, appliedClean={3}/{4}, " +
-                "faultStable={5}, frames={6}, applied={7}->{8}, " +
-                "suppressed={9}->{10}, invalid={11}->{12}, last={13}",
+                "faultStable={5}, support={6}, targetDistance={7:F6}, " +
+                "reachMargin={8:F6}, hintLateral={9:F6}, contact={10}, " +
+                "nockDistance={11:F6}, frames={12}, applied={13}->{14}, " +
+                "suppressed={15}->{16}, invalid={17}->{18}, last={19}",
                 probe.StateName,
                 probe.Resolved,
                 probe.LateUpdateObserved,
                 probe.Applied,
                 probe.Unsuppressed,
                 probe.FaultStable,
+                probe.SupportGeometryProven,
+                probe.SupportTargetDistance,
+                probe.SupportReachMargin,
+                probe.SupportHintLateral,
+                probe.ContactProven,
+                probe.ArrowNockDistance,
                 probe.Frames,
                 appliedBaseline,
                 presenter.AppliedIKPassCount,
@@ -1032,6 +1093,14 @@ namespace BrawlArena.EditorAutomation.Tests
                 actor.transform, InvectorThornMigrationBuilder.LeftWeaponSocketName);
             Transform rightSocket = FindDescendant(
                 actor.transform, InvectorThornMigrationBuilder.RightWeaponSocketName);
+            Transform leftHand = presenter.ConfiguredAnimator != null &&
+                                 presenter.ConfiguredAnimator.isHuman
+                ? presenter.ConfiguredAnimator.GetBoneTransform(HumanBodyBones.LeftHand)
+                : null;
+            Transform rightHand = presenter.ConfiguredAnimator != null &&
+                                  presenter.ConfiguredAnimator.isHuman
+                ? presenter.ConfiguredAnimator.GetBoneTransform(HumanBodyBones.RightHand)
+                : null;
             Transform presentation = FindDescendant(
                 actor.transform, InvectorThornMigrationBuilder.WeaponPresentationName);
             Transform bow = presentation != null
@@ -1086,6 +1155,18 @@ namespace BrawlArena.EditorAutomation.Tests
                 Vector3.Distance(assetNock.localPosition, nock.localPosition) < 0.0001f &&
                 Quaternion.Angle(
                     assetNock.localRotation, nock.localRotation) < 0.01f;
+            bool relaxedCarry = !presenter.AimPresented &&
+                (presenter.CurrentIKState == vWeaponIKAdjust.StandingState ||
+                 presenter.CurrentIKState == vWeaponIKAdjust.CrouchingState);
+            Vector3 arrowNock = rig != null && arrow != null
+                ? arrow.TransformPoint(rig.ArrowNockLocalPoint)
+                : Vector3.zero;
+            Vector3 arrowTip = rig != null && arrow != null
+                ? arrow.TransformPoint(rig.ArrowTipLocalPoint)
+                : Vector3.zero;
+            float arrowNockDistance = nock != null && rig != null && arrow != null
+                ? Vector3.Distance(nock.position, arrowNock)
+                : -1f;
 
             var faults = new System.Collections.Generic.List<string>();
             if (!presenter.WeaponHeldInLeftHand) faults.Add("heldInLeftHand");
@@ -1094,15 +1175,17 @@ namespace BrawlArena.EditorAutomation.Tests
                     InvectorThornMigrationBuilder.WeaponCategory,
                     StringComparison.Ordinal)) faults.Add("weaponCategory");
             if (leftSocket == null) faults.Add("leftSocket");
+            if (leftHand == null) faults.Add("leftHand");
             if (rightSocket == null) faults.Add("rightSocket");
-            if (presentation == null || presentation.parent != leftSocket)
+            if (rightHand == null) faults.Add("rightHand");
+            if (presentation == null || presentation.parent != leftHand)
                 faults.Add("presentationParent");
             if (bow == null || !bow.gameObject.activeInHierarchy) faults.Add("bowActive");
             if (FindDescendant(
                     actor.transform,
                     InvectorThornMigrationBuilder.AuthoredBowName) != null)
                 faults.Add("authoredBowStillPresent");
-            if (arrow == null || arrow.parent != rightSocket ||
+            if (arrow == null || arrow.parent != rightHand ||
                 !arrow.gameObject.activeInHierarchy) faults.Add("arrowSocketActive");
             if (nock == null || !nockMatchesAsset) faults.Add("nockAssetPose");
             if (rig == null || rig.gameObject != actor.gameObject ||
@@ -1110,14 +1193,17 @@ namespace BrawlArena.EditorAutomation.Tests
             if (rig == null || rig.ArrowVisual != arrow || rig.NockPoint != nock)
                 faults.Add("rigReferences");
             if (muzzle == null || muzzle.parent != nock) faults.Add("muzzleParent");
-            if (rig != null && arrow != null && nock != null && Vector3.Distance(
-                    nock.position,
-                    arrow.TransformPoint(rig.ArrowNockLocalPoint)) >= 0.0001f)
-                faults.Add("arrowNockAlignment");
-            if (rig != null && arrow != null && muzzle != null && Vector3.Distance(
-                    muzzle.position,
-                    arrow.TransformPoint(rig.ArrowTipLocalPoint)) >= 0.0001f)
-                faults.Add("arrowTipAlignment");
+            if (rig != null && arrow != null && nock != null &&
+                (relaxedCarry
+                    ? arrowNockDistance < MinimumRelaxedArrowNockDistance ||
+                      arrowNockDistance > MaximumRelaxedArrowNockDistance
+                    : arrowNockDistance >= MaximumPoseSupportTargetDistance))
+                faults.Add("arrowNockStatePose");
+            if (rig != null && arrow != null && nock != null && muzzle != null &&
+                Vector3.Distance(
+                    arrowTip - arrowNock,
+                    muzzle.position - nock.position) >= 0.0001f)
+                faults.Add("arrowAxisVector");
             if (muzzle != null && nock != null &&
                 (muzzle.position - nock.position).sqrMagnitude <= 0.000001f)
                 faults.Add("muzzleNockSeparation");
@@ -1348,6 +1434,13 @@ namespace BrawlArena.EditorAutomation.Tests
             public bool Applied;
             public bool Unsuppressed;
             public bool FaultStable;
+            public bool SupportPoseResolved;
+            public bool SupportGeometryProven;
+            public float SupportTargetDistance = -1f;
+            public float SupportReachMargin = -1f;
+            public float SupportHintLateral = -1f;
+            public bool ContactProven;
+            public float ArrowNockDistance = -1f;
             public int Frames;
             public string Evidence = string.Empty;
 

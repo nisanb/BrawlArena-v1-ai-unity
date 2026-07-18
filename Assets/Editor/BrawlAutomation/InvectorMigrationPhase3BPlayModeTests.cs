@@ -183,8 +183,8 @@ namespace BrawlArena.EditorAutomation.Tests
             bool immediateMeleeTriggerQueued =
                 gate.Controller.HasPendingMeleePresentationTrigger;
             gate.InputAdapter.ResetAttackTriggers();
-            bool attackResetCallbackBridged =
-                !gate.Controller.HasPendingMeleePresentationTrigger &&
+            bool attackResetCallbackRearmedPendingPresentation =
+                gate.Controller.HasPendingMeleePresentationTrigger &&
                 gate.InputAdapter.AttackResetCallbackCount ==
                     attackResetCallbacksBeforeProbe + 1 &&
                 gate.Controller.MeleeAttackTriggerResetCount ==
@@ -197,7 +197,8 @@ namespace BrawlArena.EditorAutomation.Tests
                 animator.GetInteger(vAnimatorParameters.RecoilID) == 7;
             gate.DeactivateLabInstance();
             bool attackPresentationResidueCleared =
-                immediateMeleeTriggerQueued && attackResetCallbackBridged &&
+                immediateMeleeTriggerQueued &&
+                attackResetCallbackRearmedPendingPresentation &&
                 immediateRecoilTriggerQueued &&
                 !gate.Controller.HasPendingMeleePresentationTrigger &&
                 !gate.Controller.HasPendingRecoilPresentationTrigger &&

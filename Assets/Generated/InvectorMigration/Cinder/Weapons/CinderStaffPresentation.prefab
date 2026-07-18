@@ -4920,12 +4920,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 471352671569993357}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 1.028038, y: -0.0000144011465, z: -1.0346792}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalRotation: {x: -0.70834327, y: -0.011538476, z: 0.009051949, w: 0.7057158}
+  m_LocalPosition: {x: 9.179848, y: -3.098283, z: -0.425854}
+  m_LocalScale: {x: 1, y: 0.9999999, z: 0.9999998}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 4782717086270026513}
+  - {fileID: 2363533354212406768}
   m_Father: {fileID: 797421274444562486}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &8282736237841752156
@@ -4985,6 +4986,37 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &803282970692736240
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2363533354212406768}
+  m_Layer: 0
+  m_Name: WeaponGripAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2363533354212406768
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 803282970692736240}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.7083433, y: 0.011538454, z: -0.00905187, w: 0.7057157}
+  m_LocalPosition: {x: -2.409489, y: -0.64816767, z: 1.2609563}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7736378871180461301}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2789672944200072304
 GameObject:
   m_ObjectHideFlags: 0
@@ -5009,8 +5041,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2789672944200072304}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.70571566, y: -0.009053377, z: -0.011539483, w: 0.7083433}
-  m_LocalPosition: {x: -172.03516, y: -0.289717, z: 4.4543304}
+  m_LocalRotation: {x: 0.20179245, y: 0.9594816, z: -0.04266642, w: -0.19197507}
+  m_LocalPosition: {x: -1.6824002, y: -5.561548, z: 16.510633}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -5106,8 +5138,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8954839024222681825}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.0011014934, y: 0.000009685754, z: 0.0006375551, w: 0.9999993}
-  m_LocalPosition: {x: -148.88776, y: 0.3276085, z: 4.452545}
+  m_LocalRotation: {x: 0.08802375, y: 0.5404812, z: -0.7187786, w: -0.4283564}
+  m_LocalPosition: {x: -28.50848, y: -60.5274, z: -18.04385}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

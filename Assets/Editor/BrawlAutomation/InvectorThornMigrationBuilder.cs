@@ -65,11 +65,8 @@ namespace BrawlArena.EditorAutomation
         public const string SuperAttackOverrideSourceName = "StrongAttack_PunchA";
         public const string BasicAttackClipName = "Attack01_Bow";
         public const string SuperAttackClipName = "Attack02_Bow";
-        // Thorn deliberately keeps the vendor Idle@Pistol upper-body carry
-        // pose: it is a static single-frame pose, and the authored resting
-        // arrow-to-nock contact (sub-0.1mm, proven by the bow topology test)
-        // depends on the hands never swaying relative to each other. An
-        // animated bow idle cannot satisfy that contract.
+        // The vendor pistol layer is static across locomotion. Thorn's bow
+        // support solver owns the right-hand nock contact outside attacks.
 
         public const string RosterId = "thorn";
         public const string WeaponCategory = "BrawlWizardBow";
@@ -87,6 +84,24 @@ namespace BrawlArena.EditorAutomation
         public const string StringBottomName = "StringBottom";
         public const float IKReachInset = 0.01f;
         public const float BowStringWidth = 0.012f;
+        public static readonly Vector3 CarryPresentationLocalPosition =
+            Vector3.zero;
+        public static readonly Vector3 RelaxedSupportHandOffset =
+            new Vector3(-0.036176f, -0.074161f, -0.176044f);
+        public static readonly Vector3 SupportHintNockLocalPosition =
+            new Vector3(-0.157592f, 0.123637f, 0.005433f);
+        public static readonly Vector3 PreviewWeaponHandLocalPosition =
+            new Vector3(-0.35f, 0.55f, 0.15f);
+        public static readonly Vector3 PreviewWeaponHintLocalPosition =
+            new Vector3(-0.55f, 0.78f, 0.15f);
+        public static readonly Vector3 PreviewWeaponHandLocalEuler =
+            new Vector3(51.31f, 70.32f, 262.74f);
+        public static readonly Vector3 PreviewSupportHandLocalPosition =
+            new Vector3(0.40f, 0.85f, 0.18f);
+        public static readonly Vector3 PreviewSupportHintLocalPosition =
+            new Vector3(0.55f, 1.02f, 0.15f);
+        public static readonly Vector3 PreviewSupportHandLocalEuler =
+            new Vector3(309.10f, 250.40f, 277.50f);
 
         static readonly Color ThornMuzzleColor =
             new Color(0x9B / 255f, 0xE3 / 255f, 0x6B / 255f, 1f);
@@ -135,7 +150,8 @@ namespace BrawlArena.EditorAutomation
                     WeaponPrefabPath,
                     WeaponIKAdjustListPath,
                     WeaponPresentationName,
-                    PilotPrefabPath);
+                    PilotPrefabPath,
+                    true);
                 pilot = NormalizeBowPresenter(pilot);
                 FinalizeBowCategory();
                 CloseTransientPresentation(pilot);
@@ -489,7 +505,8 @@ namespace BrawlArena.EditorAutomation
             ReplaceDefaultIKStates(
                 adjust.ikAdjustsLeft,
                 leftHandInset,
-                rightHandInset);
+                Vector3.zero,
+                true);
             ReplaceDefaultIKStates(
                 adjust.ikAdjustsRight,
                 rightHandInset,
@@ -528,14 +545,25 @@ namespace BrawlArena.EditorAutomation
         static void ReplaceDefaultIKStates(
             List<IKAdjust> states,
             Vector3 weaponHandInset,
-            Vector3 supportHandInset)
+            Vector3 supportHandInset,
+            bool relaxedCarry = false)
         {
             states.Clear();
             for (int i = 0; i < vWeaponIKAdjust.defaultNames.Length; i++)
             {
                 var state = new IKAdjust(vWeaponIKAdjust.defaultNames[i]);
                 state.weaponHandOffset.position = weaponHandInset;
-                state.supportHandOffset.position = supportHandInset;
+                bool aiming = string.Equals(
+                        state.name,
+                        vWeaponIKAdjust.StandingAimingState,
+                        StringComparison.Ordinal) ||
+                    string.Equals(
+                        state.name,
+                        vWeaponIKAdjust.CrouchingAimingState,
+                        StringComparison.Ordinal);
+                state.supportHandOffset.position = relaxedCarry && !aiming
+                    ? RelaxedSupportHandOffset
+                    : supportHandInset;
                 states.Add(state);
             }
         }
@@ -555,6 +583,9 @@ namespace BrawlArena.EditorAutomation
                     instance.transform, RightWeaponSocketName);
                 Transform bow = FindDescendant(instance.transform, AuthoredBowName);
                 Transform arrow = FindDescendant(instance.transform, AuthoredArrowName);
+                Transform leftHand = animator != null && animator.isHuman
+                    ? animator.GetBoneTransform(HumanBodyBones.LeftHand)
+                    : null;
                 Transform rightHand = animator != null && animator.isHuman
                     ? animator.GetBoneTransform(HumanBodyBones.RightHand)
                     : null;
@@ -563,7 +594,7 @@ namespace BrawlArena.EditorAutomation
                     : null;
                 if (leftSocket == null || rightSocket == null || bow == null ||
                     arrow == null || bow.parent != leftSocket ||
-                    arrow.parent != rightSocket || rightHand == null ||
+                    arrow.parent != rightSocket || leftHand == null || rightHand == null ||
                     rightLowerArm == null)
                 {
                     throw new InvalidOperationException(
@@ -572,44 +603,44 @@ namespace BrawlArena.EditorAutomation
 
                 var weaponRoot = new GameObject(WeaponPresentationName);
                 SceneManager.MoveGameObjectToScene(weaponRoot, previewScene);
-                weaponRoot.transform.SetParent(leftSocket, false);
+                weaponRoot.transform.SetParent(leftHand, false);
                 weaponRoot.layer = 0;
 
                 GameObject bowVisual = UnityEngine.Object.Instantiate(
-                    bow.gameObject, weaponRoot.transform, false);
+                    bow.gameObject, weaponRoot.transform, true);
                 bowVisual.name = BowVisualName;
                 SetLayerRecursively(bowVisual, 0);
                 bowVisual.SetActive(true);
 
                 // Bow02 has no authored SpellOrigin or independently deformable
-                // string. Derive both endpoints from the authored mesh bounds so
-                // repeat builds remain deterministic without moving/duplicating
-                // the inherited right-hand Arrow2 visual.
+                // string. The bow owns the contact point: use the midpoint of
+                // its string as the nock, then preserve Arrow2's authored local
+                // nock-to-tip vector and right-hand grip relation around it.
                 DeriveArrowEndpoints(
                     arrow,
                     bowVisual.transform,
                     out _,
                     out _,
-                    out Vector3 arrowNock,
-                    out Vector3 arrowTip);
-                Transform nock = CreateAnchor(
-                    weaponRoot.transform,
-                    NockPointName,
-                    arrowNock,
-                    arrow.rotation);
-                Transform muzzle = CreateAnchor(
-                    nock,
-                    SpellOriginName,
-                    arrowTip,
-                    arrow.rotation);
-                nock.gameObject.layer = 0;
-                muzzle.gameObject.layer = 12;
-
+                    out Vector3 sourceArrowNock,
+                    out Vector3 sourceArrowTip);
                 DeriveBowStringAnchors(
                     bowVisual.transform,
                     out Vector3 stringTopPosition,
                     out Vector3 stringRestPosition,
                     out Vector3 stringBottomPosition);
+                Transform nock = CreateAnchor(
+                    weaponRoot.transform,
+                    NockPointName,
+                    stringRestPosition,
+                    arrow.rotation);
+                Transform muzzle = CreateAnchor(
+                    nock,
+                    SpellOriginName,
+                    stringRestPosition + (sourceArrowTip - sourceArrowNock),
+                    arrow.rotation);
+                nock.gameObject.layer = 0;
+                muzzle.gameObject.layer = 12;
+
                 Transform stringTop = CreateAnchor(
                     weaponRoot.transform,
                     StringTopName,
@@ -634,15 +665,16 @@ namespace BrawlArena.EditorAutomation
                     stringRest,
                     stringBottom);
 
+                Vector3 nockDelta = stringRestPosition - sourceArrowNock;
                 Transform supportHand = CreateAnchor(
                     weaponRoot.transform,
                     "SupportHandTarget",
-                    rightHand.position,
+                    rightHand.position + nockDelta,
                     rightHand.rotation);
                 Transform supportHint = CreateAnchor(
                     weaponRoot.transform,
                     "SupportHintTarget",
-                    rightLowerArm.position,
+                    rightLowerArm.position + nockDelta,
                     rightLowerArm.rotation);
                 supportHand.gameObject.layer = 0;
                 supportHint.gameObject.layer = 0;
@@ -716,6 +748,12 @@ namespace BrawlArena.EditorAutomation
                     : null;
                 Transform arrow = FindDescendant(
                     contents.transform, AuthoredArrowName);
+                Transform rightHand = animator != null && animator.isHuman
+                    ? animator.GetBoneTransform(HumanBodyBones.RightHand)
+                    : null;
+                Transform rightLowerArm = animator != null && animator.isHuman
+                    ? animator.GetBoneTransform(HumanBodyBones.RightLowerArm)
+                    : null;
                 Transform stringTop = visual != null
                     ? FindDescendant(visual, StringTopName)
                     : null;
@@ -742,7 +780,9 @@ namespace BrawlArena.EditorAutomation
                         WeaponIKAdjustListPath);
                 if (animator == null || controller == null || presenter == null ||
                     visual == null || muzzle == null || nock == null ||
-                    bowVisual == null || arrow == null || stringTop == null ||
+                    bowVisual == null || arrow == null || rightHand == null ||
+                    rightLowerArm == null ||
+                    stringTop == null ||
                     stringRest == null || stringBottom == null || bowString == null ||
                     supportHand == null || supportHint == null ||
                     effects.Length != 1 || list == null)
@@ -751,18 +791,43 @@ namespace BrawlArena.EditorAutomation
                         "The assembled Thorn pilot lost its bow presentation references.");
                 }
 
+                GameObject handOwnedArrow = UnityEngine.Object.Instantiate(
+                    arrow.gameObject,
+                    rightHand,
+                    true);
+                handOwnedArrow.name = AuthoredArrowName;
+                UnityEngine.Object.DestroyImmediate(arrow.gameObject);
+                arrow = handOwnedArrow.transform;
                 DeriveArrowEndpoints(
                     arrow,
                     bowVisual,
                     out Vector3 arrowNockLocalPoint,
                     out Vector3 arrowTipLocalPoint,
-                    out Vector3 expectedNock,
-                    out Vector3 expectedTip);
+                    out Vector3 sourceArrowNock,
+                    out Vector3 sourceArrowTip);
+                UnityEngine.Object.DestroyImmediate(supportHand.gameObject);
+                UnityEngine.Object.DestroyImmediate(supportHint.gameObject);
+                supportHand = new GameObject("SupportHandTarget").transform;
+                supportHint = new GameObject("SupportHintTarget").transform;
+                supportHand.SetParent(nock, false);
+                supportHint.SetParent(nock, false);
+                Vector3 nockDelta = nock.position - sourceArrowNock;
+                supportHand.SetPositionAndRotation(
+                    rightHand.position + nockDelta,
+                    rightHand.rotation);
+                supportHint.SetPositionAndRotation(
+                    rightLowerArm.position + nockDelta,
+                    rightLowerArm.rotation);
+                supportHint.localPosition = SupportHintNockLocalPosition;
+
+                Vector3 expectedNock = stringRest.position;
+                Vector3 expectedTip = expectedNock +
+                    (sourceArrowTip - sourceArrowNock);
                 if (Vector3.Distance(nock.position, expectedNock) >= 0.0001f ||
                     Vector3.Distance(muzzle.position, expectedTip) >= 0.0001f)
                 {
                     throw new InvalidOperationException(
-                        "The generated Thorn nock/tip anchors no longer match Arrow2 mesh bounds.");
+                        "The generated Thorn nock/tip anchors no longer match the bow string rest and Arrow2 mesh vector.");
                 }
 
                 bowRig.Configure(
@@ -786,6 +851,15 @@ namespace BrawlArena.EditorAutomation
                     WeaponCategory,
                     true,
                     effects);
+                presenter.ConfigurePreviewPose(
+                    PreviewWeaponHandLocalPosition,
+                    PreviewWeaponHintLocalPosition,
+                    PreviewWeaponHandLocalEuler,
+                    PreviewSupportHandLocalPosition,
+                    PreviewSupportHintLocalPosition,
+                    PreviewSupportHandLocalEuler,
+                    true);
+                visual.localPosition = CarryPresentationLocalPosition;
                 GameObject saved = PrefabUtility.SaveAsPrefabAsset(
                     contents, path, out bool success);
                 if (!success || saved == null)
@@ -828,7 +902,8 @@ namespace BrawlArena.EditorAutomation
                 !ValidateIKStateOffsets(
                     adjust.ikAdjustsLeft,
                     leftHandInset,
-                    rightHandInset) ||
+                    Vector3.zero,
+                    true) ||
                 !ValidateIKStateOffsets(
                     adjust.ikAdjustsRight,
                     rightHandInset,
@@ -842,13 +917,26 @@ namespace BrawlArena.EditorAutomation
         static bool ValidateIKStateOffsets(
             IReadOnlyList<IKAdjust> states,
             Vector3 expectedWeaponInset,
-            Vector3 expectedSupportInset)
+            Vector3 expectedSupportInset,
+            bool relaxedCarry = false)
         {
             if (states == null || states.Count != vWeaponIKAdjust.defaultNames.Length)
                 return false;
             for (int i = 0; i < states.Count; i++)
             {
                 IKAdjust state = states[i];
+                bool aiming = state != null &&
+                    (string.Equals(
+                         state.name,
+                         vWeaponIKAdjust.StandingAimingState,
+                         StringComparison.Ordinal) ||
+                     string.Equals(
+                         state.name,
+                         vWeaponIKAdjust.CrouchingAimingState,
+                         StringComparison.Ordinal));
+                Vector3 requiredSupportInset = relaxedCarry && !aiming
+                    ? RelaxedSupportHandOffset
+                    : expectedSupportInset;
                 if (state == null || !string.Equals(
                         state.name,
                         vWeaponIKAdjust.defaultNames[i],
@@ -861,7 +949,7 @@ namespace BrawlArena.EditorAutomation
                     state.weaponHintOffset.eulerAngles != Vector3.zero ||
                     !Approximately(
                         state.supportHandOffset.position,
-                        expectedSupportInset) ||
+                        requiredSupportInset) ||
                     state.supportHandOffset.eulerAngles != Vector3.zero ||
                     state.supportHintOffset.position != Vector3.zero ||
                     state.supportHintOffset.eulerAngles != Vector3.zero ||
@@ -894,6 +982,8 @@ namespace BrawlArena.EditorAutomation
                 : null;
 
             Animator animator = prefab.GetComponent<Animator>();
+            InvectorBrawlerWeaponPresentation presenter =
+                prefab.GetComponent<InvectorBrawlerWeaponPresentation>();
             Transform leftSocket = FindDescendant(
                 prefab.transform, LeftWeaponSocketName);
             Transform rightSocket = FindDescendant(
@@ -943,6 +1033,9 @@ namespace BrawlArena.EditorAutomation
             Transform supportHint = presentation != null
                 ? FindDescendant(presentation, "SupportHintTarget")
                 : null;
+            Transform leftHand = animator != null && animator.isHuman
+                ? animator.GetBoneTransform(HumanBodyBones.LeftHand)
+                : null;
             Transform rightHand = animator != null && animator.isHuman
                 ? animator.GetBoneTransform(HumanBodyBones.RightHand)
                 : null;
@@ -971,6 +1064,17 @@ namespace BrawlArena.EditorAutomation
                     out expectedArrowTipLocal,
                     out expectedNockPosition,
                     out expectedTipPosition);
+            Vector3 stagedNockPosition = Vector3.zero;
+            Vector3 stagedTipPosition = Vector3.zero;
+            bool stagedArrowAlignment = arrowEndpointsDerived &&
+                rightHand != null && supportHand != null;
+            if (stagedArrowAlignment)
+            {
+                stagedNockPosition = supportHand.TransformPoint(
+                    rightHand.InverseTransformPoint(expectedNockPosition));
+                stagedTipPosition = supportHand.TransformPoint(
+                    rightHand.InverseTransformPoint(expectedTipPosition));
+            }
             Vector3 expectedStringTop = Vector3.zero;
             Vector3 expectedStringRest = Vector3.zero;
             Vector3 expectedStringBottom = Vector3.zero;
@@ -1004,34 +1108,42 @@ namespace BrawlArena.EditorAutomation
 
             Require(sourceAnimator != null, "source Animator");
             Require(leftSocket != null, "left weapon socket");
+            Require(leftHand != null, "left Humanoid hand");
             Require(rightSocket != null, "right weapon socket");
             Require(presentation != null, "bow presentation root");
-            Require(presentation != null && presentation.parent == leftSocket,
+            Require(presentation != null && presentation.parent == leftHand,
                 "left-held presentation parent");
+            Require(presentation != null && Approximately(
+                    presentation.localPosition,
+                    CarryPresentationLocalPosition),
+                "calibrated left-hand carry position");
             Require(FindDescendants(prefab.transform, AuthoredBowName).Length == 0,
                 "removed inherited Bow2");
             Require(bowVisual != null, "BowVisual");
             Require(bowMatches, "BowVisual materials");
             Require(arrow != null, "Arrow2");
-            Require(arrow != null && arrow.parent == rightSocket,
+            Require(arrow != null && arrow.parent == rightHand,
                 "right-held Arrow2 parent");
             Require(arrow != null && arrow.gameObject.activeSelf,
                 "authored Arrow2 active state");
             Require(arrowMatches, "Arrow2 materials");
             Require(arrowEndpointsDerived, "mesh-derived Arrow2 endpoints");
             Require(nock != null, "NockPoint");
-            Require(nock != null &&
-                    Vector3.Distance(nock.position, expectedNockPosition) < 0.0001f,
-                "NockPoint position");
+            Require(nock != null && stagedArrowAlignment &&
+                    Vector3.Distance(nock.position, stagedNockPosition) < 0.0001f,
+                "support-solved NockPoint position");
+            Require(nock != null && stringRest != null &&
+                    Vector3.Distance(nock.position, stringRest.position) < 0.0001f,
+                "bow-owned string-rest NockPoint");
             Require(nock != null && arrow != null &&
                     Quaternion.Angle(nock.rotation, arrow.rotation) < 0.01f,
                 "NockPoint rotation");
             Require(muzzle != null, "SpellOrigin");
             Require(muzzle != null && muzzle.parent == nock,
                 "SpellOrigin parent");
-            Require(muzzle != null &&
-                    Vector3.Distance(muzzle.position, expectedTipPosition) < 0.0001f,
-                "SpellOrigin tip position");
+            Require(muzzle != null && stagedArrowAlignment &&
+                    Vector3.Distance(muzzle.position, stagedTipPosition) < 0.0001f,
+                "support-solved SpellOrigin tip position");
             Require(muzzle != null && arrow != null &&
                     Quaternion.Angle(muzzle.rotation, arrow.rotation) < 0.01f,
                 "SpellOrigin rotation");
@@ -1063,6 +1175,8 @@ namespace BrawlArena.EditorAutomation
                 "single root bow rig");
             Require(bowRig != null && bowRig.IsDormantConfigured,
                 "dormant configured bow rig");
+            Require(presenter != null && presenter.HasAuthoredPreviewPose,
+                "authored dormant menu preview pose");
             Require(bowRig != null && bowRig.ArrowVisual == arrow,
                 "bow rig Arrow2 reference");
             Require(bowRig != null && bowRig.NockPoint == nock,
@@ -1083,14 +1197,15 @@ namespace BrawlArena.EditorAutomation
                 "bow rig Arrow2 tip local point");
             Require(supportHand != null, "SupportHandTarget");
             Require(supportHint != null, "SupportHintTarget");
+            Require(supportHand != null && supportHand.parent == nock,
+                "nock-relative SupportHandTarget");
+            Require(supportHint != null && supportHint.parent == nock &&
+                    Approximately(
+                        supportHint.localPosition,
+                        SupportHintNockLocalPosition),
+                "nock-relative calibrated SupportHintTarget");
             Require(rightHand != null, "Humanoid right hand");
             Require(rightLowerArm != null, "Humanoid right lower arm");
-            Require(supportHand != null && rightHand != null &&
-                    Vector3.Distance(supportHand.position, rightHand.position) < 0.0001f,
-                "SupportHandTarget position");
-            Require(supportHint != null && rightLowerArm != null &&
-                    Vector3.Distance(supportHint.position, rightLowerArm.position) < 0.0001f,
-                "SupportHintTarget position");
             Require(effects.Length == 1, "single muzzle effect");
             Require(effects.Length == 1 && !effects[0].main.playOnAwake,
                 "muzzle effect play-on-awake posture");

@@ -83,7 +83,8 @@ namespace BrawlArena
                 animator.Update(0f);
 
                 ValidateLiveLifecycle(animator);
-                ValidateOnlyAnimatorEnabled(preview, animator);
+                EnablePresentationPreview(preview);
+                ValidateOnlyPreviewBehaviours(preview, animator);
             }
             catch
             {
@@ -103,7 +104,7 @@ namespace BrawlArena
                 animator.Update(0f);
                 if (sampleSeconds > 0f)
                     animator.Update(sampleSeconds);
-                ValidateOnlyAnimatorEnabled(preview, animator);
+                ValidateOnlyPreviewBehaviours(preview, animator);
             }
             catch
             {
@@ -120,7 +121,7 @@ namespace BrawlArena
                 Animator animator = RequirePreparedAnimator(preview, definition);
                 animator.ResetTrigger(BrawlInvectorLifecycleParameters.VictoryTrigger);
                 animator.SetTrigger(BrawlInvectorLifecycleParameters.VictoryTrigger);
-                ValidateOnlyAnimatorEnabled(preview, animator);
+                ValidateOnlyPreviewBehaviours(preview, animator);
             }
             catch
             {
@@ -141,7 +142,7 @@ namespace BrawlArena
                 throw new InvalidOperationException("The Invector preview Animator is not preview-safe.");
 
             ValidateLiveLifecycle(animator);
-            ValidateOnlyAnimatorEnabled(preview, animator);
+            ValidateOnlyPreviewBehaviours(preview, animator);
             return animator;
         }
 
@@ -257,7 +258,19 @@ namespace BrawlArena
             }
         }
 
-        static void ValidateOnlyAnimatorEnabled(GameObject preview, Animator expectedAnimator)
+        static void EnablePresentationPreview(GameObject preview)
+        {
+            InvectorBrawlerWeaponPresentation[] presenters =
+                preview.GetComponentsInChildren<InvectorBrawlerWeaponPresentation>(true);
+            if (presenters.Length != 1 || presenters[0].gameObject != preview ||
+                !presenters[0].EnablePreview())
+            {
+                throw new InvalidOperationException(
+                    "The Invector preview requires one exact root project-owned presentation boundary.");
+            }
+        }
+
+        static void ValidateOnlyPreviewBehaviours(GameObject preview, Animator expectedAnimator)
         {
             foreach (Behaviour behaviour in preview.GetComponentsInChildren<Behaviour>(true))
             {
@@ -265,6 +278,16 @@ namespace BrawlArena
                 {
                     if (!behaviour.enabled)
                         throw new InvalidOperationException("The preview Animator was disabled unexpectedly.");
+                }
+                else if (behaviour is InvectorBrawlerWeaponPresentation presenter &&
+                         presenter.gameObject == preview)
+                {
+                    if (!presenter.enabled || !presenter.PreviewEnabled ||
+                        presenter.RuntimeEnabled)
+                    {
+                        throw new InvalidOperationException(
+                            "The project-owned preview presenter escaped its preview-only gate.");
+                    }
                 }
                 else if (behaviour.enabled)
                 {

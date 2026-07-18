@@ -58,7 +58,24 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
-        public void PreparedPreviewEnablesOnlyAnimatorAndSupportsSemanticPoses()
+        public void OnlyThornOwnsTheBuilderAuthoredMenuPose()
+        {
+            foreach ((string id, string path) in ProductionHumans)
+            {
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                Assert.NotNull(prefab, path);
+                InvectorBrawlerWeaponPresentation presenter =
+                    prefab.GetComponent<InvectorBrawlerWeaponPresentation>();
+                Assert.NotNull(presenter, id);
+                Assert.AreEqual(id == "thorn", presenter.HasAuthoredPreviewPose,
+                    id + " authored-preview posture changed");
+                Assert.AreEqual(id == "thorn", presenter.HideAuthoredArrowInPreview,
+                    id + " preview arrow posture changed");
+            }
+        }
+
+        [Test]
+        public void PreparedPreviewEnablesOnlyAnimatorAndProjectPresentationBoundary()
         {
             BrawlerDefinition definition = LoadDefinition(ProductionHumans[0].id,
                 ProductionHumans[0].path);
@@ -73,10 +90,18 @@ namespace BrawlArena.EditorAutomation
 
                 Assert.IsTrue(preview.activeSelf);
                 Animator animator = preview.GetComponent<Animator>();
+                InvectorBrawlerWeaponPresentation presenter =
+                    preview.GetComponent<InvectorBrawlerWeaponPresentation>();
                 Assert.IsTrue(animator.enabled);
                 Assert.IsFalse(animator.applyRootMotion);
+                Assert.NotNull(presenter);
+                Assert.IsTrue(presenter.enabled);
+                Assert.IsTrue(presenter.PreviewEnabled);
+                Assert.IsFalse(presenter.RuntimeEnabled);
                 foreach (Behaviour behaviour in preview.GetComponentsInChildren<Behaviour>(true))
-                    Assert.AreEqual(behaviour == animator, behaviour.enabled,
+                    Assert.AreEqual(
+                        behaviour == animator || behaviour == presenter,
+                        behaviour.enabled,
                         behaviour.GetType().FullName);
                 foreach (Collider collider in preview.GetComponentsInChildren<Collider>(true))
                     Assert.IsFalse(collider.enabled, collider.GetType().FullName);
@@ -122,9 +147,16 @@ namespace BrawlArena.EditorAutomation
                         "An activation-time AudioSource escaped the second quarantine pass.");
 
                 Animator animator = preview.GetComponent<Animator>();
+                InvectorBrawlerWeaponPresentation presenter =
+                    preview.GetComponent<InvectorBrawlerWeaponPresentation>();
                 Assert.IsTrue(animator.enabled);
+                Assert.NotNull(presenter);
+                Assert.IsTrue(presenter.PreviewEnabled);
+                Assert.IsFalse(presenter.RuntimeEnabled);
                 foreach (Behaviour behaviour in preview.GetComponentsInChildren<Behaviour>(true))
-                    Assert.AreEqual(behaviour == animator, behaviour.enabled,
+                    Assert.AreEqual(
+                        behaviour == animator || behaviour == presenter,
+                        behaviour.enabled,
                         behaviour.GetType().FullName);
             }
             finally

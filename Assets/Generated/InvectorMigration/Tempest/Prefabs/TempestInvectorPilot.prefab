@@ -149,7 +149,7 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 6389823943310265302, guid: 855345f398366284ca65b631d3d06fa3, type: 3}
       insertIndex: -1
       addedObject: {fileID: 4445450609908641101}
-    - targetCorrespondingSourceObject: {fileID: 6389890834118957230, guid: 855345f398366284ca65b631d3d06fa3, type: 3}
+    - targetCorrespondingSourceObject: {fileID: 6389518756557065510, guid: 855345f398366284ca65b631d3d06fa3, type: 3}
       insertIndex: -1
       addedObject: {fileID: 7049582862460643026}
     m_AddedComponents:
@@ -1241,6 +1241,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BrawlArena.InvectorBrawlerWeaponPresentation
   configuredAnimator: {fileID: 4918521575814477866}
   configuredController: {fileID: 3978718536969497462}
+  configuredInput: {fileID: 3585596281424581128}
   weaponVisualRoot: {fileID: 7049582862460643026}
   muzzle: {fileID: 6037538314511025083}
   supportHandTarget: {fileID: 2126474713602768553}
@@ -1256,14 +1257,22 @@ MonoBehaviour:
   muzzleEffectLocalRotations:
   - {x: 0, y: 0, z: 0, w: 1}
   bowPresentationRig: {fileID: 0}
+  hasAuthoredPreviewPose: 0
+  previewWeaponHandLocalPosition: {x: 0, y: 0, z: 0}
+  previewWeaponHintLocalPosition: {x: 0, y: 0, z: 0}
+  previewWeaponHandLocalEuler: {x: 0, y: 0, z: 0}
+  previewSupportHandLocalPosition: {x: 0, y: 0, z: 0}
+  previewSupportHintLocalPosition: {x: 0, y: 0, z: 0}
+  previewSupportHandLocalEuler: {x: 0, y: 0, z: 0}
+  hideAuthoredArrowInPreview: 0
+--- !u!4 &4980582433918948398 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6389518756557065510, guid: 855345f398366284ca65b631d3d06fa3, type: 3}
+  m_PrefabInstance: {fileID: 2139970828493494536}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &4980843907434074846 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6389823943310265302, guid: 855345f398366284ca65b631d3d06fa3, type: 3}
-  m_PrefabInstance: {fileID: 2139970828493494536}
-  m_PrefabAsset: {fileID: 0}
---- !u!4 &4980919592389099942 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 6389890834118957230, guid: 855345f398366284ca65b631d3d06fa3, type: 3}
   m_PrefabInstance: {fileID: 2139970828493494536}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &7418995824842310192
@@ -1272,7 +1281,7 @@ PrefabInstance:
   serializedVersion: 2
   m_Modification:
     serializedVersion: 3
-    m_TransformParent: {fileID: 4980919592389099942}
+    m_TransformParent: {fileID: 4980582433918948398}
     m_Modifications:
     - target: {fileID: 513611733276878050, guid: a926fc4c559a42c46bc699a8f3aeac59, type: 3}
       propertyPath: m_LocalPosition.x

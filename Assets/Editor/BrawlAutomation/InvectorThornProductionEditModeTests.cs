@@ -117,6 +117,20 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(presenter, Is.Not.Null);
             Assert.That(presenter.IsDormantConfigured, Is.True);
             Assert.That(presenter.HasRuntimeSolvers, Is.False);
+            Assert.That(presenter.HasAuthoredPreviewPose, Is.True);
+            Assert.That(presenter.PreviewWeaponHandLocalPosition,
+                Is.EqualTo(InvectorThornMigrationBuilder.PreviewWeaponHandLocalPosition));
+            Assert.That(presenter.PreviewWeaponHintLocalPosition,
+                Is.EqualTo(InvectorThornMigrationBuilder.PreviewWeaponHintLocalPosition));
+            Assert.That(presenter.PreviewWeaponHandLocalEuler,
+                Is.EqualTo(InvectorThornMigrationBuilder.PreviewWeaponHandLocalEuler));
+            Assert.That(presenter.PreviewSupportHandLocalPosition,
+                Is.EqualTo(InvectorThornMigrationBuilder.PreviewSupportHandLocalPosition));
+            Assert.That(presenter.PreviewSupportHintLocalPosition,
+                Is.EqualTo(InvectorThornMigrationBuilder.PreviewSupportHintLocalPosition));
+            Assert.That(presenter.PreviewSupportHandLocalEuler,
+                Is.EqualTo(InvectorThornMigrationBuilder.PreviewSupportHandLocalEuler));
+            Assert.That(presenter.HideAuthoredArrowInPreview, Is.True);
             Assert.That(presenter.WeaponHeldInLeftHand, Is.True);
             Assert.That(presenter.WeaponCategory,
                 Is.EqualTo(InvectorThornMigrationBuilder.WeaponCategory));
@@ -160,11 +174,17 @@ namespace BrawlArena.EditorAutomation.Tests
                 HumanBodyBones.RightHand);
             foreach (IKAdjust state in adjust.ikAdjustsLeft)
             {
+                bool aiming = state.name == vWeaponIKAdjust.StandingAimingState ||
+                    state.name == vWeaponIKAdjust.CrouchingAimingState;
                 AssertVector(state.weaponHandOffset.position, leftInset);
                 AssertVector(state.weaponHandOffset.eulerAngles, Vector3.zero);
                 AssertVector(state.weaponHintOffset.position, Vector3.zero);
                 AssertVector(state.weaponHintOffset.eulerAngles, Vector3.zero);
-                AssertVector(state.supportHandOffset.position, rightInset);
+                AssertVector(
+                    state.supportHandOffset.position,
+                    aiming
+                        ? Vector3.zero
+                        : InvectorThornMigrationBuilder.RelaxedSupportHandOffset);
                 AssertVector(state.supportHandOffset.eulerAngles, Vector3.zero);
                 AssertVector(state.supportHintOffset.position, Vector3.zero);
                 AssertVector(state.supportHintOffset.eulerAngles, Vector3.zero);
@@ -191,6 +211,10 @@ namespace BrawlArena.EditorAutomation.Tests
                 pilot.transform, InvectorThornMigrationBuilder.RightWeaponSocketName);
             Transform presentation = Find(
                 pilot.transform, InvectorThornMigrationBuilder.WeaponPresentationName);
+            Transform pilotLeftHand = pilot.GetComponent<Animator>()
+                .GetBoneTransform(HumanBodyBones.LeftHand);
+            Transform pilotRightHand = pilot.GetComponent<Animator>()
+                .GetBoneTransform(HumanBodyBones.RightHand);
             Transform bowVisual = Find(
                 presentation, InvectorThornMigrationBuilder.BowVisualName);
             Transform rightHandArrow = Find(
@@ -207,21 +231,39 @@ namespace BrawlArena.EditorAutomation.Tests
                 presentation, InvectorThornMigrationBuilder.StringBottomName);
             LineRenderer bowString = presentation
                 .GetComponentsInChildren<LineRenderer>(true).Single();
-            Assert.That(presentation.parent, Is.SameAs(pilotLeft));
+            Transform supportHand = Find(presentation, "SupportHandTarget");
+            Assert.That(presentation.parent, Is.SameAs(pilotLeftHand));
+            AssertVector(
+                presentation.localPosition,
+                InvectorThornMigrationBuilder.CarryPresentationLocalPosition);
             Assert.That(bowVisual, Is.Not.Null);
             Assert.That(Find(pilot.transform,
                 InvectorThornMigrationBuilder.AuthoredBowName), Is.Null);
-            Assert.That(rightHandArrow.parent, Is.SameAs(pilotRight));
+            Assert.That(rightHandArrow.parent, Is.SameAs(pilotRightHand));
             Assert.That(rightHandArrow.gameObject.activeSelf, Is.True);
             Assert.That(nock, Is.Not.Null);
             Assert.That(muzzle.parent, Is.SameAs(nock));
+            Assert.That(Vector3.Distance(nock.position, stringRest.position),
+                Is.LessThan(0.0001f));
+            Assert.That(supportHand.parent, Is.SameAs(nock));
+            Transform supportHint = Find(presentation, "SupportHintTarget");
+            Assert.That(supportHint.parent, Is.SameAs(nock));
+            AssertVector(
+                supportHint.localPosition,
+                InvectorThornMigrationBuilder.SupportHintNockLocalPosition);
             Assert.That(Vector3.Distance(
                     nock.position,
-                    rightHandArrow.TransformPoint(bowRig.ArrowNockLocalPoint)),
+                    supportHand.TransformPoint(
+                        pilotRightHand.InverseTransformPoint(
+                            rightHandArrow.TransformPoint(
+                                bowRig.ArrowNockLocalPoint)))),
                 Is.LessThan(0.0001f));
             Assert.That(Vector3.Distance(
                     muzzle.position,
-                    rightHandArrow.TransformPoint(bowRig.ArrowTipLocalPoint)),
+                    supportHand.TransformPoint(
+                        pilotRightHand.InverseTransformPoint(
+                            rightHandArrow.TransformPoint(
+                                bowRig.ArrowTipLocalPoint)))),
                 Is.LessThan(0.0001f));
             Assert.That((muzzle.position - nock.position).sqrMagnitude,
                 Is.GreaterThan(0.000001f));

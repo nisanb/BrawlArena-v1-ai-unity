@@ -176,6 +176,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 rosterId + " human animation selection drifted.");
             Assert.That(facade.WeaponPresentation, Is.SameAs(presentation),
                 rosterId + " human weapon presentation selection drifted.");
+            AssertWeaponHierarchy(presentation, rosterId + " human");
             Assert.That(playerInput, Is.Not.Null);
             Assert.That(gate, Is.Not.Null);
             Assert.That(scheduler.MovementFeedMode, Is.EqualTo(InvectorMovementFeedMode.BufferedMotor));
@@ -205,6 +206,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 rosterId + " AI animation selection drifted.");
             Assert.That(facade.WeaponPresentation, Is.SameAs(presentation),
                 rosterId + " AI weapon presentation selection drifted.");
+            AssertWeaponHierarchy(presentation, rosterId + " AI");
             Assert.That(brain.Navigation, Is.SameAs(navigation),
                 rosterId + " AI navigation selection drifted.");
             Assert.That(gate, Is.Not.Null);
@@ -215,6 +217,35 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(prefab.GetComponentsInChildren<InvectorHumanRuntimeGate>(true), Is.Empty);
             Assert.That(prefab.GetComponentsInChildren<NavMeshAgent>(true), Has.Length.EqualTo(1),
                 rosterId + " AI prefab must contain exactly one planning agent.");
+        }
+
+        static void AssertWeaponHierarchy(
+            InvectorBrawlerWeaponPresentation presentation,
+            string context)
+        {
+            Animator animator = presentation.ConfiguredAnimator;
+            Transform visualRoot = presentation.WeaponVisualRoot;
+            Transform supportTarget = presentation.SupportHandTarget;
+            Transform supportHint = presentation.SupportHintTarget;
+            HumanBodyBones heldHand = presentation.WeaponHeldInLeftHand
+                ? HumanBodyBones.LeftHand
+                : HumanBodyBones.RightHand;
+            Transform weaponHand = animator != null && animator.isHuman
+                ? animator.GetBoneTransform(heldHand)
+                : null;
+
+            Assert.That(weaponHand, Is.Not.Null,
+                context + " has no configured Humanoid weapon hand.");
+            Assert.That(visualRoot, Is.Not.Null,
+                context + " has no configured weapon visual root.");
+            Assert.That(visualRoot.IsChildOf(weaponHand), Is.True,
+                context + " weapon visual must be owned by its configured weapon hand.");
+            Assert.That(supportTarget, Is.Not.Null);
+            Assert.That(supportTarget.IsChildOf(visualRoot), Is.True,
+                context + " support-hand target must stay inside the weapon visual.");
+            Assert.That(supportHint, Is.Not.Null);
+            Assert.That(supportHint.IsChildOf(visualRoot), Is.True,
+                context + " support hint must stay inside the weapon visual.");
         }
 
         static GameObject RequireExactRosterReference(

@@ -103,7 +103,7 @@ namespace BrawlArena.EditorAutomation.Tests
             foreach (IKAdjust state in adjust.ikAdjustsRight.Concat(adjust.ikAdjustsLeft))
             {
                 Assert.That(state.weaponHandOffset.position,
-                    Is.EqualTo(new Vector3(-0.01f, 0f, 0f)));
+                    Is.EqualTo(new Vector3(-9.792466f, -10.295830f, 2.919632f)));
                 Assert.That(state.supportHandOffset.position,
                     Is.EqualTo(new Vector3(0.01f, 0f, 0f)));
                 Assert.That(state.weaponHintOffset.position, Is.EqualTo(Vector3.zero));

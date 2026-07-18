@@ -31,6 +31,7 @@ namespace BrawlArena.Editor.Tests
             root.AddComponent<Rigidbody>();
             root.AddComponent<CapsuleCollider>();
             var controller = root.AddComponent<BrawlInvectorThirdPersonController>();
+            root.AddComponent<InvectorShooterMeleeInputAdapter>();
             var presenter = root.AddComponent<InvectorBrawlerWeaponPresentation>();
 
             Transform visual = Child(root.transform, "WeaponVisual");
@@ -115,14 +116,16 @@ namespace BrawlArena.Editor.Tests
                 StringAssert.DoesNotContain(token, source, token);
 
             Assert.AreEqual(1, CountOccurrences(source, "void LateUpdate()"));
-            StringAssert.Contains("if (!runtimeEnabled) return;", source);
+            StringAssert.Contains(
+                "if (!runtimeEnabled && !previewEnabled) return;", source);
             StringAssert.Contains("LabRuntimeEnabled => RuntimeEnabled", source);
             StringAssert.Contains("new vIKSolver(", source);
             StringAssert.Contains("The explicit-bone constructor creates no hidden helper objects.", source);
             StringAssert.DoesNotContain(
                 "new vIKSolver(configuredAnimator", source,
                 "The Animator constructor allocates hidden helper GameObjects.");
-            StringAssert.Contains("HasAnimatorTag(IgnoreIKTag)", source);
+            StringAssert.Contains("configuredController.HasPendingMeleePresentationTrigger", source);
+            StringAssert.Contains("configuredInput.IsPresentationAttackWindowOpen", source);
             StringAssert.Contains("HasAnimatorTag(IgnoreSupportHandIKTag)", source);
             StringAssert.Contains("IsLifecycleState()", source);
             StringAssert.Contains("IsReachable(solver, targetPosition, hintPosition)", source);

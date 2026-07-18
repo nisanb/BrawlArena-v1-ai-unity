@@ -41,6 +41,9 @@ namespace BrawlArena
         BrawlInvectorThirdPersonController configuredController;
 
         [SerializeField, HideInInspector]
+        InvectorShooterMeleeInputAdapter configuredInput;
+
+        [SerializeField, HideInInspector]
         Transform weaponVisualRoot;
 
         [SerializeField, HideInInspector]
@@ -76,13 +79,39 @@ namespace BrawlArena
         [SerializeField, HideInInspector]
         InvectorBowPresentationRig bowPresentationRig;
 
+        [SerializeField, HideInInspector]
+        bool hasAuthoredPreviewPose;
+
+        [SerializeField, HideInInspector]
+        Vector3 previewWeaponHandLocalPosition;
+
+        [SerializeField, HideInInspector]
+        Vector3 previewWeaponHintLocalPosition;
+
+        [SerializeField, HideInInspector]
+        Vector3 previewWeaponHandLocalEuler;
+
+        [SerializeField, HideInInspector]
+        Vector3 previewSupportHandLocalPosition;
+
+        [SerializeField, HideInInspector]
+        Vector3 previewSupportHintLocalPosition;
+
+        [SerializeField, HideInInspector]
+        Vector3 previewSupportHandLocalEuler;
+
+        [SerializeField, HideInInspector]
+        bool hideAuthoredArrowInPreview;
+
         bool runtimeEnabled;
+        bool previewEnabled;
+        bool previewArrowWasActive;
         bool aimPresented;
         bool visible = true;
         bool tearingDown;
         Vector3 presentedAimDirection;
-        vIKSolver weaponHandSolver;
-        vIKSolver supportHandSolver;
+        [NonSerialized] vIKSolver weaponHandSolver;
+        [NonSerialized] vIKSolver supportHandSolver;
 
         int aimRequestCount;
         int aimReleaseCount;
@@ -99,24 +128,57 @@ namespace BrawlArena
         int droppedRequestCount;
         int runtimeFaultCount;
         int gateEnableFailureCount;
+        int previewPoseApplyCount;
+        float lastPreviewWeaponHandDistance = -1f;
+        float lastPreviewSupportHandDistance = -1f;
         InvectorWeaponPresentationSuppression lastSuppression;
         string lastFaultType = string.Empty;
+        string lastInvalidPoseStage = string.Empty;
 
         public bool RuntimeEnabled => runtimeEnabled;
+        public bool PreviewEnabled => previewEnabled;
         public bool LabRuntimeEnabled => RuntimeEnabled;
         public bool IsConfigured => HasConfiguredReferences && HasCompleteIKData();
         public bool IsDormantConfigured =>
-            IsConfigured && !runtimeEnabled && !enabled &&
+            IsConfigured && !runtimeEnabled && !previewEnabled && !enabled &&
             !aimPresented;
         public bool HasRuntimeSolvers =>
             weaponHandSolver != null || supportHandSolver != null;
         public bool AimPresented => aimPresented;
         public bool Visible => visible;
         public Vector3 PresentedAimDirection => presentedAimDirection;
+        public Animator ConfiguredAnimator => configuredAnimator;
+        public BrawlInvectorThirdPersonController ConfiguredController =>
+            configuredController;
+        public Transform WeaponVisualRoot => weaponVisualRoot;
+        public Transform Muzzle => muzzle;
+        public Transform SupportHandTarget => supportHandTarget;
+        public Transform SupportHintTarget => supportHintTarget;
+        public string CurrentIKState => aimPresented
+            ? (configuredController != null && configuredController.isCrouching
+                ? vWeaponIKAdjust.CrouchingAimingState
+                : vWeaponIKAdjust.StandingAimingState)
+            : (configuredController != null && configuredController.isCrouching
+                ? vWeaponIKAdjust.CrouchingState
+                : vWeaponIKAdjust.StandingState);
         public vWeaponIKAdjustList ProjectIKAdjustList => projectIKAdjustList;
         public string WeaponCategory => weaponCategory;
         public bool WeaponHeldInLeftHand => weaponHeldInLeftHand;
         public InvectorBowPresentationRig BowPresentationRig => bowPresentationRig;
+        public bool HasAuthoredPreviewPose => hasAuthoredPreviewPose;
+        public Vector3 PreviewWeaponHandLocalPosition =>
+            previewWeaponHandLocalPosition;
+        public Vector3 PreviewWeaponHintLocalPosition =>
+            previewWeaponHintLocalPosition;
+        public Vector3 PreviewWeaponHandLocalEuler =>
+            previewWeaponHandLocalEuler;
+        public Vector3 PreviewSupportHandLocalPosition =>
+            previewSupportHandLocalPosition;
+        public Vector3 PreviewSupportHintLocalPosition =>
+            previewSupportHintLocalPosition;
+        public Vector3 PreviewSupportHandLocalEuler =>
+            previewSupportHandLocalEuler;
+        public bool HideAuthoredArrowInPreview => hideAuthoredArrowInPreview;
         public int RuntimeHelperCount => 0;
         public int AimRequestCount => aimRequestCount;
         public int AimReleaseCount => aimReleaseCount;
@@ -133,8 +195,54 @@ namespace BrawlArena
         public int DroppedRequestCount => droppedRequestCount;
         public int RuntimeFaultCount => runtimeFaultCount;
         public int GateEnableFailureCount => gateEnableFailureCount;
+        public int PreviewPoseApplyCount => previewPoseApplyCount;
+        public float LastPreviewWeaponHandDistance =>
+            lastPreviewWeaponHandDistance;
+        public float LastPreviewSupportHandDistance =>
+            lastPreviewSupportHandDistance;
         public InvectorWeaponPresentationSuppression LastSuppression => lastSuppression;
         public string LastFaultType => lastFaultType;
+        public string LastInvalidPoseStage =>
+            lastSuppression == InvectorWeaponPresentationSuppression.InvalidIKPose
+                ? lastInvalidPoseStage
+                : string.Empty;
+
+        /// <summary>
+        /// Exposes the exact support-arm pose selected for the current Invector
+        /// weapon state so editor probes can distinguish an authored handle
+        /// problem from a solver failure without mutating runtime state.
+        /// </summary>
+        public bool TryGetCurrentSupportIKPose(
+            out Vector3 targetPosition,
+            out Quaternion targetRotation,
+            out Vector3 hintPosition)
+        {
+            targetPosition = Vector3.zero;
+            targetRotation = Quaternion.identity;
+            hintPosition = Vector3.zero;
+
+            IKAdjust adjust = ResolveCurrentIKAdjust();
+            if (adjust == null || adjust.supportHandOffset == null ||
+                adjust.supportHintOffset == null || supportHandTarget == null ||
+                supportHintTarget == null || projectIKAdjustList == null)
+                return false;
+
+            Vector3 globalPositionOffset = weaponHeldInLeftHand
+                ? projectIKAdjustList.ikTargetPositionOffsetR
+                : projectIKAdjustList.ikTargetPositionOffsetL;
+            Vector3 globalRotationOffset = weaponHeldInLeftHand
+                ? projectIKAdjustList.ikTargetRotationOffsetR
+                : projectIKAdjustList.ikTargetRotationOffsetL;
+            targetPosition = supportHandTarget.TransformPoint(
+                globalPositionOffset + adjust.supportHandOffset.position);
+            targetRotation = supportHandTarget.rotation *
+                Quaternion.Euler(globalRotationOffset) *
+                Quaternion.Euler(adjust.supportHandOffset.eulerAngles);
+            hintPosition = supportHintTarget.TransformPoint(
+                adjust.supportHintOffset.position);
+            return IsFinite(targetPosition) && IsFinite(targetRotation) &&
+                   IsFinite(hintPosition);
+        }
 
         /// <summary>
         /// Builder-facing configuration. The caller supplies the complete
@@ -158,6 +266,13 @@ namespace BrawlArena
 
             configuredAnimator = animator;
             configuredController = controller;
+            configuredInput = controller.GetComponent<InvectorShooterMeleeInputAdapter>();
+            if (configuredInput == null)
+            {
+                throw new ArgumentException(
+                    "The weapon presenter requires the same-root Invector input adapter.",
+                    nameof(controller));
+            }
             weaponVisualRoot = visualRoot;
             muzzle = muzzleTransform;
             supportHandTarget = supportTarget;
@@ -187,6 +302,39 @@ namespace BrawlArena
         }
 
         /// <summary>
+        /// Builder-owned menu pose, expressed in character-root space. It is
+        /// consumed only by EnablePreview and cannot affect the production gate.
+        /// </summary>
+        public void ConfigurePreviewPose(
+            Vector3 weaponHandLocalPosition,
+            Vector3 weaponHintLocalPosition,
+            Vector3 weaponHandLocalEuler,
+            Vector3 supportHandLocalPosition,
+            Vector3 supportHintLocalPosition,
+            Vector3 supportHandLocalEuler,
+            bool hideArrow)
+        {
+            if (!IsFinite(weaponHandLocalPosition) ||
+                !IsFinite(weaponHintLocalPosition) ||
+                !IsFinite(weaponHandLocalEuler) ||
+                !IsFinite(supportHandLocalPosition) ||
+                !IsFinite(supportHintLocalPosition) ||
+                !IsFinite(supportHandLocalEuler))
+            {
+                throw new ArgumentException("The authored preview pose must be finite.");
+            }
+
+            previewWeaponHandLocalPosition = weaponHandLocalPosition;
+            previewWeaponHintLocalPosition = weaponHintLocalPosition;
+            previewWeaponHandLocalEuler = weaponHandLocalEuler;
+            previewSupportHandLocalPosition = supportHandLocalPosition;
+            previewSupportHintLocalPosition = supportHintLocalPosition;
+            previewSupportHandLocalEuler = supportHandLocalEuler;
+            hideAuthoredArrowInPreview = hideArrow;
+            hasAuthoredPreviewPose = true;
+        }
+
+        /// <summary>
         /// Opens the presenter only for an active, project-owned Play-mode stack. Failure
         /// is reported through diagnostics and leaves the component dormant.
         /// </summary>
@@ -212,6 +360,7 @@ namespace BrawlArena
             }
 
             runtimeEnabled = true;
+            previewEnabled = false;
             enabled = true;
             lastSuppression = InvectorWeaponPresentationSuppression.None;
             lastFaultType = string.Empty;
@@ -221,10 +370,57 @@ namespace BrawlArena
         public void DisableRuntime()
         {
             runtimeEnabled = false;
+            previewEnabled = false;
             if (bowPresentationRig != null) bowPresentationRig.DisableRuntime();
             ResetPresentationState(true);
             ReleaseSolvers();
             if (enabled) enabled = false;
+        }
+
+        /// <summary>
+        /// Opens only the project-owned pose presenter for a quarantined menu or
+        /// editor preview. Gameplay requests remain gated by RuntimeEnabled, the
+        /// bow scheduler stays dormant, and lifecycle states still release IK so
+        /// the shared death/respawn/victory animation contract remains visible.
+        /// </summary>
+        public bool EnablePreview()
+        {
+            if (!IsConfigured || runtimeEnabled ||
+                configuredAnimator == null || !configuredAnimator.enabled ||
+                !configuredAnimator.isActiveAndEnabled ||
+                !configuredAnimator.isHuman ||
+                configuredAnimator.runtimeAnimatorController == null ||
+                configuredController == null || configuredController.enabled ||
+                configuredInput == null || configuredInput.enabled ||
+                !TryCreateSolvers())
+            {
+                DisablePreview();
+                return false;
+            }
+
+            previewEnabled = true;
+            enabled = true;
+            visible = true;
+            ApplyVisibility(true);
+            if (hideAuthoredArrowInPreview && bowPresentationRig != null &&
+                bowPresentationRig.ArrowVisual != null)
+            {
+                previewArrowWasActive =
+                    bowPresentationRig.ArrowVisual.gameObject.activeSelf;
+                bowPresentationRig.ArrowVisual.gameObject.SetActive(false);
+            }
+            lastSuppression = InvectorWeaponPresentationSuppression.None;
+            lastFaultType = string.Empty;
+            return true;
+        }
+
+        public void DisablePreview()
+        {
+            previewEnabled = false;
+            RestorePreviewArrow();
+            ResetPresentationState(true);
+            ReleaseSolvers();
+            if (!runtimeEnabled && enabled) enabled = false;
         }
 
         /// <summary>Compatibility alias for the isolated migration lab.</summary>
@@ -235,10 +431,10 @@ namespace BrawlArena
 
         public void ResetRuntimeTrace()
         {
-            if (runtimeEnabled)
+            if (runtimeEnabled || previewEnabled)
             {
                 throw new InvalidOperationException(
-                    "Disable the weapon-presentation runtime gate before resetting its trace.");
+                    "Disable the weapon-presentation runtime and preview gates before resetting its trace.");
             }
 
             aimRequestCount = 0;
@@ -256,6 +452,9 @@ namespace BrawlArena
             droppedRequestCount = 0;
             runtimeFaultCount = 0;
             gateEnableFailureCount = 0;
+            previewPoseApplyCount = 0;
+            lastPreviewWeaponHandDistance = -1f;
+            lastPreviewSupportHandDistance = -1f;
             lastSuppression = InvectorWeaponPresentationSuppression.None;
             lastFaultType = string.Empty;
             if (bowPresentationRig != null) bowPresentationRig.ResetRuntimeTrace();
@@ -398,26 +597,31 @@ namespace BrawlArena
 
         void LateUpdate()
         {
-            if (!runtimeEnabled) return;
+            if (!runtimeEnabled && !previewEnabled) return;
             gatedLateUpdateCount++;
 
             ArmSnapshot snapshot = default;
             bool hasSnapshot = false;
             try
             {
-                InvectorWeaponPresentationSuppression suppression =
-                    EvaluateFullIKSuppression();
+                InvectorWeaponPresentationSuppression suppression = previewEnabled
+                    ? EvaluatePreviewIKSuppression()
+                    : EvaluateFullIKSuppression();
                 if (suppression != InvectorWeaponPresentationSuppression.None)
                 {
+                    lastInvalidPoseStage = string.Empty;
                     SuppressIK(suppression);
-                    if (suppression == InvectorWeaponPresentationSuppression.LifecycleState)
+                    if (suppression == InvectorWeaponPresentationSuppression.LifecycleState &&
+                        runtimeEnabled)
                         ReleaseAim();
+                    if (previewEnabled) ApplyPreviewArrowPosture();
                     return;
                 }
 
                 IKAdjust adjust = ResolveCurrentIKAdjust();
                 if (adjust == null || !TryCreateSolvers())
                 {
+                    lastInvalidPoseStage = string.Empty;
                     SuppressIK(InvectorWeaponPresentationSuppression.MissingIKData);
                     return;
                 }
@@ -425,16 +629,38 @@ namespace BrawlArena
                 snapshot = new ArmSnapshot(weaponHandSolver, supportHandSolver);
                 hasSnapshot = true;
 
-                if (!TryApplyWeaponHandIK(adjust))
+                if (previewEnabled && hasAuthoredPreviewPose)
                 {
+                    if (!TryApplyAuthoredPreviewPose())
+                    {
+                        lastInvalidPoseStage = "PreviewPose";
+                        snapshot.Restore();
+                        invalidPoseCount++;
+                        SuppressIK(InvectorWeaponPresentationSuppression.InvalidIKPose);
+                        return;
+                    }
+                    lastSuppression = InvectorWeaponPresentationSuppression.None;
+                }
+                else if (weaponHeldInLeftHand)
+                {
+                    weaponHandSolver.SetIKWeight(0f);
+                }
+                else if (!TryApplyWeaponHandIK(adjust))
+                {
+                    lastInvalidPoseStage = "WeaponHand";
                     snapshot.Restore();
                     invalidPoseCount++;
                     SuppressIK(InvectorWeaponPresentationSuppression.InvalidIKPose);
                     return;
                 }
 
-                if (HasAnimatorTag(IgnoreSupportHandIKTag))
+                if (previewEnabled && hasAuthoredPreviewPose)
                 {
+                    lastSuppression = InvectorWeaponPresentationSuppression.None;
+                }
+                else if (HasAnimatorTag(IgnoreSupportHandIKTag))
+                {
+                    lastInvalidPoseStage = string.Empty;
                     supportHandSolver.SetIKWeight(0f);
                     supportHandSuppressionCount++;
                     lastSuppression =
@@ -442,6 +668,7 @@ namespace BrawlArena
                 }
                 else if (!TryApplySupportHandIK(adjust))
                 {
+                    lastInvalidPoseStage = "SupportHand";
                     snapshot.Restore();
                     invalidPoseCount++;
                     SuppressIK(InvectorWeaponPresentationSuppression.InvalidIKPose);
@@ -454,12 +681,14 @@ namespace BrawlArena
 
                 if (!snapshot.HasFiniteCurrentRotations())
                 {
+                    lastInvalidPoseStage = "PostSolveRotations";
                     snapshot.Restore();
                     invalidPoseCount++;
                     SuppressIK(InvectorWeaponPresentationSuppression.InvalidIKPose);
                     return;
                 }
 
+                lastInvalidPoseStage = string.Empty;
                 appliedIKPassCount++;
             }
             catch (Exception exception)
@@ -473,12 +702,14 @@ namespace BrawlArena
         {
             if (tearingDown) return;
             runtimeEnabled = false;
+            previewEnabled = false;
             TeardownWithoutThrow();
         }
 
         void OnDestroy()
         {
             runtimeEnabled = false;
+            previewEnabled = false;
             TeardownWithoutThrow();
         }
 
@@ -527,15 +758,44 @@ namespace BrawlArena
 
             Transform hand = weaponHandSolver.endBone;
             Transform hint = weaponHandSolver.middleBone;
-            Vector3 targetPosition = hand.position +
-                hand.rotation * adjust.weaponHandOffset.position;
+            Vector3 targetPosition =
+                hand.TransformPoint(adjust.weaponHandOffset.position);
             Quaternion targetRotation = hand.rotation *
                 Quaternion.Euler(adjust.weaponHandOffset.eulerAngles);
-            Vector3 hintPosition = hint.position +
-                hint.rotation * adjust.weaponHintOffset.position;
+            Vector3 hintPosition =
+                hint.TransformPoint(adjust.weaponHintOffset.position);
 
             return ApplySolverPose(
                 weaponHandSolver, targetPosition, targetRotation, hintPosition);
+        }
+
+        bool TryApplyAuthoredPreviewPose()
+        {
+            Vector3 weaponTarget =
+                transform.TransformPoint(previewWeaponHandLocalPosition);
+            Vector3 supportTarget =
+                transform.TransformPoint(previewSupportHandLocalPosition);
+            bool weaponApplied = ApplySolverPose(
+                weaponHandSolver,
+                weaponTarget,
+                transform.rotation * Quaternion.Euler(previewWeaponHandLocalEuler),
+                transform.TransformPoint(previewWeaponHintLocalPosition));
+            bool supportApplied = ApplySolverPose(
+                supportHandSolver,
+                supportTarget,
+                transform.rotation * Quaternion.Euler(previewSupportHandLocalEuler),
+                transform.TransformPoint(previewSupportHintLocalPosition));
+            if (!weaponApplied || !supportApplied) return false;
+
+            lastPreviewWeaponHandDistance = Vector3.Distance(
+                weaponHandSolver.endBone.position, weaponTarget);
+            lastPreviewSupportHandDistance = Vector3.Distance(
+                supportHandSolver.endBone.position, supportTarget);
+            if (!IsFinite(lastPreviewWeaponHandDistance) ||
+                !IsFinite(lastPreviewSupportHandDistance))
+                return false;
+            previewPoseApplyCount++;
+            return true;
         }
 
         bool TryApplySupportHandIK(IKAdjust adjust)
@@ -550,14 +810,13 @@ namespace BrawlArena
             Vector3 globalRotationOffset = weaponHeldInLeftHand
                 ? projectIKAdjustList.ikTargetRotationOffsetR
                 : projectIKAdjustList.ikTargetRotationOffsetL;
-            Vector3 targetPosition = supportHandTarget.position +
-                supportHandTarget.rotation *
-                (globalPositionOffset + adjust.supportHandOffset.position);
+            Vector3 targetPosition = supportHandTarget.TransformPoint(
+                globalPositionOffset + adjust.supportHandOffset.position);
             Quaternion targetRotation = supportHandTarget.rotation *
                 Quaternion.Euler(globalRotationOffset) *
                 Quaternion.Euler(adjust.supportHandOffset.eulerAngles);
-            Vector3 hintPosition = supportHintTarget.position +
-                supportHintTarget.rotation * adjust.supportHintOffset.position;
+            Vector3 hintPosition = supportHintTarget.TransformPoint(
+                adjust.supportHintOffset.position);
 
             return ApplySolverPose(
                 supportHandSolver, targetPosition, targetRotation, hintPosition);
@@ -624,6 +883,25 @@ namespace BrawlArena
                 return InvectorWeaponPresentationSuppression.VisualHidden;
             if (configuredController.HasPendingLifecyclePresentationTrigger)
                 return InvectorWeaponPresentationSuppression.LifecycleState;
+            if (IsLifecycleState())
+                return InvectorWeaponPresentationSuppression.LifecycleState;
+            if (configuredController.HasPendingMeleePresentationTrigger ||
+                configuredInput.IsPresentationAttackWindowOpen)
+                return InvectorWeaponPresentationSuppression.IgnoreIKTag;
+            return InvectorWeaponPresentationSuppression.None;
+        }
+
+        InvectorWeaponPresentationSuppression EvaluatePreviewIKSuppression()
+        {
+            if (!previewEnabled)
+                return InvectorWeaponPresentationSuppression.GateClosed;
+            if (configuredAnimator == null || !configuredAnimator.enabled ||
+                !configuredAnimator.isActiveAndEnabled ||
+                !configuredAnimator.isInitialized || !configuredAnimator.isHuman)
+                return InvectorWeaponPresentationSuppression.AnimatorUnavailable;
+            if (!visible || weaponVisualRoot == null ||
+                !weaponVisualRoot.gameObject.activeInHierarchy)
+                return InvectorWeaponPresentationSuppression.VisualHidden;
             if (IsLifecycleState())
                 return InvectorWeaponPresentationSuppression.LifecycleState;
             if (HasAnimatorTag(IgnoreIKTag))
@@ -745,6 +1023,27 @@ namespace BrawlArena
             supportHandSolver = null;
         }
 
+        void RestorePreviewArrow()
+        {
+            if (hideAuthoredArrowInPreview && bowPresentationRig != null &&
+                bowPresentationRig.ArrowVisual != null)
+            {
+                bowPresentationRig.ArrowVisual.gameObject.SetActive(
+                    previewArrowWasActive);
+            }
+            previewArrowWasActive = false;
+        }
+
+        void ApplyPreviewArrowPosture()
+        {
+            if (previewEnabled && hideAuthoredArrowInPreview &&
+                bowPresentationRig != null &&
+                bowPresentationRig.ArrowVisual != null)
+            {
+                bowPresentationRig.ArrowVisual.gameObject.SetActive(false);
+            }
+        }
+
         void TeardownWithoutThrow()
         {
             try
@@ -772,6 +1071,7 @@ namespace BrawlArena
             }
             lastSuppression = suppression;
             runtimeEnabled = false;
+            previewEnabled = false;
 
             tearingDown = true;
             try
@@ -790,6 +1090,14 @@ namespace BrawlArena
             }
             finally
             {
+                try
+                {
+                    RestorePreviewArrow();
+                }
+                catch
+                {
+                    previewArrowWasActive = false;
+                }
                 tearingDown = false;
             }
         }
@@ -837,8 +1145,10 @@ namespace BrawlArena
 
         bool HasConfiguredReferences =>
             configuredAnimator != null && configuredController != null &&
+            configuredInput != null &&
             configuredAnimator.gameObject == gameObject &&
             configuredController.gameObject == gameObject &&
+            configuredInput.gameObject == gameObject &&
             weaponVisualRoot != null && weaponVisualRoot.IsChildOf(transform) &&
             muzzle != null && muzzle.IsChildOf(weaponVisualRoot) &&
             supportHandTarget != null && supportHandTarget.IsChildOf(weaponVisualRoot) &&

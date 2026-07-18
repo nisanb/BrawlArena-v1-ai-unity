@@ -23,7 +23,7 @@ MonoBehaviour:
       position: {x: 0, y: 0, z: 0}
       eulerAngles: {x: 0, y: 0, z: 0}
     supportHandOffset:
-      position: {x: -0.009999136, y: 0.000027270484, z: 0.00012856185}
+      position: {x: -0.036176, y: -0.074161, z: -0.176044}
       eulerAngles: {x: 0, y: 0, z: 0}
     supportHintOffset:
       position: {x: 0, y: 0, z: 0}
@@ -39,7 +39,7 @@ MonoBehaviour:
       position: {x: 0, y: 0, z: 0}
       eulerAngles: {x: 0, y: 0, z: 0}
     supportHandOffset:
-      position: {x: -0.009999136, y: 0.000027270484, z: 0.00012856185}
+      position: {x: 0, y: 0, z: 0}
       eulerAngles: {x: 0, y: 0, z: 0}
     supportHintOffset:
       position: {x: 0, y: 0, z: 0}
@@ -55,7 +55,7 @@ MonoBehaviour:
       position: {x: 0, y: 0, z: 0}
       eulerAngles: {x: 0, y: 0, z: 0}
     supportHandOffset:
-      position: {x: -0.009999136, y: 0.000027270484, z: 0.00012856185}
+      position: {x: -0.036176, y: -0.074161, z: -0.176044}
       eulerAngles: {x: 0, y: 0, z: 0}
     supportHintOffset:
       position: {x: 0, y: 0, z: 0}
@@ -71,7 +71,7 @@ MonoBehaviour:
       position: {x: 0, y: 0, z: 0}
       eulerAngles: {x: 0, y: 0, z: 0}
     supportHandOffset:
-      position: {x: -0.009999136, y: 0.000027270484, z: 0.00012856185}
+      position: {x: 0, y: 0, z: 0}
       eulerAngles: {x: 0, y: 0, z: 0}
     supportHintOffset:
       position: {x: 0, y: 0, z: 0}

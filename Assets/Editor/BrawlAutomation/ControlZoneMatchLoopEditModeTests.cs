@@ -263,6 +263,11 @@ namespace BrawlArena.EditorAutomation.Tests
 
             humanMotor.Teleport(Vector3.zero);
             aiMotor.Teleport(new Vector3(0f, 0f, 20f));
+            // Establish the post-teleport grounded baseline before proving
+            // that spawn protection rejects gameplay knockback. The vendor
+            // motor may apply a millimetre-scale grounding correction on its
+            // first scheduled physics step; that is not combat displacement.
+            yield return new WaitForFixedUpdate();
             human.BeginSpawnProtection(ControlZoneRules.SpawnProtectionDuration);
             float protectedHealth = human.Health.Current;
             float sourceCharge = ai.SuperCharge;
@@ -330,13 +335,13 @@ namespace BrawlArena.EditorAutomation.Tests
             aiMotor.Teleport(blueSpawns[0].position);
             int blueBeforeKo = manager.BlueScore;
             int redBeforeKo = manager.RedScore;
-            float deathStartedAt = Time.realtimeSinceStartup;
+            float deathStartedAt = Time.time;
             human.Health.TakeDamage(human.Health.Current + 10f, ai.gameObject);
             Assert.That(human.IsDead && human.IsRespawning, Is.True);
             float respawnDeadline = Time.realtimeSinceStartup + 8f;
             while (human.IsRespawning && Time.realtimeSinceStartup < respawnDeadline)
                 yield return null;
-            float respawnElapsed = Time.realtimeSinceStartup - deathStartedAt;
+            float respawnElapsed = Time.time - deathStartedAt;
 
             Assert.That(human.IsDead || human.IsRespawning, Is.False);
             Assert.That(respawnElapsed, Is.InRange(5.8f, 6.8f));
@@ -353,12 +358,12 @@ namespace BrawlArena.EditorAutomation.Tests
                 "Occupied slot zero must fall back only to primary slots one/two.");
             Assert.That(human.IsBurning || human.IsPoisoned || human.IsSlowed, Is.False);
             Assert.That(human.IsSpawnProtected, Is.True);
-            float protectionObservedAt = Time.realtimeSinceStartup;
-            float protectionDeadline = protectionObservedAt + 3f;
+            float protectionObservedAt = Time.time;
+            float protectionDeadline = Time.realtimeSinceStartup + 3f;
             while (human.IsSpawnProtected &&
                    Time.realtimeSinceStartup < protectionDeadline)
                 yield return null;
-            float protectionElapsed = Time.realtimeSinceStartup - protectionObservedAt;
+            float protectionElapsed = Time.time - protectionObservedAt;
             Assert.That(human.IsSpawnProtected, Is.False);
             Assert.That(protectionElapsed, Is.InRange(1.45f, 2.1f));
 

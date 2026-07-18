@@ -14,6 +14,11 @@ namespace BrawlArena
     [DisallowMultipleComponent]
     public sealed class BrawlInvectorThirdPersonController : vThirdPersonController
     {
+        static readonly int WeakAttackState = Animator.StringToHash(
+            "FullBody.Attacks.WeakAttacks.Unarmed.A");
+        static readonly int StrongAttackState = Animator.StringToHash(
+            "FullBody.Attacks.StrongAttacks.Unarmed.A");
+
         const string ResourceAuthorityMessage =
             "BrawlArena owns health, death, and Ward Flow; the Invector pilot controller cannot mutate those resources.";
 
@@ -30,6 +35,8 @@ namespace BrawlArena
         int lastPresentationRecoilId;
         BrawlInvectorLifecyclePresentation lastLifecyclePresentation;
         bool hasPendingMeleePresentationTrigger;
+        int pendingMeleePresentationTriggerHash;
+        int pendingMeleePresentationStateHash;
         bool hasPendingRecoilPresentationTrigger;
         bool hasPendingLifecyclePresentationTrigger;
 
@@ -76,6 +83,8 @@ namespace BrawlArena
             lastPresentationRecoilId = 0;
             lastLifecyclePresentation = BrawlInvectorLifecyclePresentation.None;
             hasPendingMeleePresentationTrigger = false;
+            pendingMeleePresentationTriggerHash = 0;
+            pendingMeleePresentationStateHash = 0;
             hasPendingRecoilPresentationTrigger = false;
             hasPendingLifecyclePresentationTrigger = false;
         }
@@ -96,9 +105,13 @@ namespace BrawlArena
             }
 
             animator.SetInteger(vAnimatorParameters.AttackID, attackId);
-            animator.SetTrigger(strong
+            pendingMeleePresentationTriggerHash = strong
                 ? vAnimatorParameters.StrongAttack
-                : vAnimatorParameters.WeakAttack);
+                : vAnimatorParameters.WeakAttack;
+            pendingMeleePresentationStateHash = strong
+                ? StrongAttackState
+                : WeakAttackState;
+            animator.SetTrigger(pendingMeleePresentationTriggerHash);
             lastPresentationAttackId = attackId;
             hasPendingMeleePresentationTrigger = true;
             meleePresentationWriteCount++;
@@ -125,6 +138,8 @@ namespace BrawlArena
             animator.ResetTrigger(vAnimatorParameters.StrongAttack);
             lastPresentationRecoilId = recoilId;
             hasPendingMeleePresentationTrigger = false;
+            pendingMeleePresentationTriggerHash = 0;
+            pendingMeleePresentationStateHash = 0;
             hasPendingRecoilPresentationTrigger = true;
             recoilPresentationWriteCount++;
         }
@@ -139,10 +154,39 @@ namespace BrawlArena
             {
                 animator.ResetTrigger(vAnimatorParameters.WeakAttack);
                 animator.ResetTrigger(vAnimatorParameters.StrongAttack);
+                RearmPendingMeleePresentation();
             }
 
-            hasPendingMeleePresentationTrigger = false;
             meleeAttackTriggerResetCount++;
+        }
+
+        internal void MarkMeleePresentationConsumed()
+        {
+            if (!hasPendingMeleePresentationTrigger || animator == null)
+                return;
+            int fullBodyLayer = animator.GetLayerIndex("FullBody");
+            if (fullBodyLayer < 0) return;
+            AnimatorStateInfo current =
+                animator.GetCurrentAnimatorStateInfo(fullBodyLayer);
+            AnimatorStateInfo next = animator.IsInTransition(fullBodyLayer)
+                ? animator.GetNextAnimatorStateInfo(fullBodyLayer)
+                : default;
+            if (current.fullPathHash != pendingMeleePresentationStateHash &&
+                next.fullPathHash != pendingMeleePresentationStateHash)
+                return;
+
+            hasPendingMeleePresentationTrigger = false;
+            pendingMeleePresentationTriggerHash = 0;
+            pendingMeleePresentationStateHash = 0;
+        }
+
+        internal void RearmPendingMeleePresentation()
+        {
+            if (animator != null && hasPendingMeleePresentationTrigger &&
+                pendingMeleePresentationTriggerHash != 0)
+            {
+                animator.SetTrigger(pendingMeleePresentationTriggerHash);
+            }
         }
 
         /// <summary>
@@ -210,6 +254,8 @@ namespace BrawlArena
             lastPresentationAttackId = 0;
             lastPresentationRecoilId = 0;
             hasPendingMeleePresentationTrigger = false;
+            pendingMeleePresentationTriggerHash = 0;
+            pendingMeleePresentationStateHash = 0;
             hasPendingRecoilPresentationTrigger = false;
         }
 
@@ -297,6 +343,7 @@ namespace BrawlArena
         {
             animatorUpdateCount++;
             base.UpdateAnimator();
+            RearmPendingMeleePresentation();
         }
 
         /// <summary>

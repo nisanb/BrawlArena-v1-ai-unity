@@ -188,6 +188,18 @@ namespace BrawlArena.EditorAutomation
                 case "run_invector_test":
                     switch (cmd.arg)
                     {
+                        case "phase3b":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunSafelyAgainstCurrentScene();
+                            break;
+                        case "phase3db-lifecycle":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunPhase3DBLifecycleSafely();
+                            break;
+                        case "phase3dc-weapon-ik":
+                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
+                                .RunPhase3DCWeaponIKSafely();
+                            break;
                         case "cutover":
                             result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
                                 .RunInvectorOnlyCutoverSafely();
@@ -248,6 +260,9 @@ namespace BrawlArena.EditorAutomation
                     EditorApplication.EnterPlaymode();
                     result.message = "entering play mode";
                     break;
+                case "ik_calibration_bootstrap":
+                    result.message = BrawlIKCalibrationBootstrap.Begin(cmd.arg);
+                    break;
                 case "play_test":
                     // Autopilot flag: GameFlow auto-picks a character and the
                     // player brawler is bot-driven, so the match runs unattended.
@@ -266,6 +281,31 @@ namespace BrawlArena.EditorAutomation
                 case "status":
                     result.message = StatusDump();
                     break;
+                case "gameplay_probe":
+                {
+                    if (!EditorApplication.isPlaying)
+                    {
+                        result.ok = false;
+                        result.message = "gameplay_probe requires Play Mode";
+                        break;
+                    }
+                    string scenario = string.IsNullOrEmpty(cmd.arg)
+                        ? Path.Combine(Dir, "probe-scenarios/shooting-basics.json")
+                        : cmd.arg;
+                    GameplayProbe.Run(scenario);
+                    result.message = "probe armed with " + scenario;
+                    break;
+                }
+                case "play_gameplay_probe":
+                {
+                    string scenario = string.IsNullOrEmpty(cmd.arg)
+                        ? Path.Combine(Dir, "probe-scenarios/shooting-basics.json")
+                        : cmd.arg;
+                    File.WriteAllText(Path.Combine(Dir, "autopilot.flag"), "1");
+                    GameplayProbe.RunOnNextPlay(scenario);
+                    result.message = "entering fresh play mode with probe " + scenario;
+                    break;
+                }
                 case "game_screenshot":
                 {
                     string file = Path.Combine(Dir, string.IsNullOrEmpty(cmd.arg) ? "game.png" : cmd.arg);

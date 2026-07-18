@@ -3,13 +3,35 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using UnityEditor;
 using UnityEngine;
 
 namespace BrawlArena.EditorAutomation
 {
     /// <summary>
-    /// Records manually rendered gameplay views into contact sheets alongside
-    /// synchronized animation and weapon-pose telemetry.
+    /// Restores the editor probe's roster selection after the play-mode domain
+    /// reload and before Arena scene objects run Awake/Start.
+    /// </summary>
+    static class GameplayProbePendingSelectionBootstrap
+    {
+        const string PendingPlayCharacterIndexKey =
+            "BrawlArena.GameplayProbe.PendingPlayCharacterIndex";
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void RestorePendingSelection()
+        {
+            int characterIndex = SessionState.GetInt(
+                PendingPlayCharacterIndexKey, -1);
+            if (characterIndex < 0) return;
+            MatchSetup.CharacterIndex = characterIndex;
+            MatchSetup.FromMenu = true;
+        }
+    }
+
+    /// <summary>
+    /// Records ordered gameplay views and synchronized presentation telemetry.
+    /// The recorder resolves both hands and the configured weapon presentation;
+    /// it never guesses a weapon from the first renderer under a hand bone.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class GameplayProbeRecorder : MonoBehaviour
@@ -22,10 +44,40 @@ namespace BrawlArena.EditorAutomation
             public float time;
             public float[] subjectPos;
             public float subjectYaw;
-            public float[] handPos;
-            public float[] weaponPos;
-            public float[] weaponEuler;
+            public float[] rightHandPos;
+            public float[] rightHandEuler;
+            public float[] leftHandPos;
+            public float[] leftHandEuler;
+            public float[] rightLowerArmPos;
+            public float[] leftLowerArmPos;
+            public float[] rightUpperArmPos;
+            public float[] leftUpperArmPos;
+            public float[] weaponVisualPos;
+            public float[] weaponVisualEuler;
+            public float[] weaponGripPos;
+            public float weaponGripDistance;
+            public float[] supportGripPos;
+            public float supportGripDistance;
+            public float[] supportTargetPos;
+            public float[] supportTargetEuler;
+            public float[] effectiveSupportTargetPos;
+            public float[] effectiveSupportHintPos;
+            public float supportHandDistance;
+            public float supportReachDistance;
+            public float supportReachMargin;
+            public float supportHintLateral;
+            public float[] supportHintPos;
+            public string weaponCategory;
+            public bool weaponHeldInLeftHand;
+            public string weaponHandBone;
+            public string supportHandBone;
+            public string ikState;
+            public bool aimPresented;
+            public string ikSuppression;
+            public string invalidIKPoseStage;
             public string animClips;
+            public string lastAction;
+            public bool lastActionSucceeded;
             public bool canAct;
         }
 
@@ -38,15 +90,19 @@ namespace BrawlArena.EditorAutomation
         sealed class ViewCapture
         {
             public readonly string name;
+            public readonly bool writeOrderedFrames;
             public Camera camera;
             public RenderTexture renderTexture;
+            public Texture2D frame;
             public Texture2D sheet;
             public int cellCount;
             public int sheetIndex;
+            public int frameIndex;
 
-            public ViewCapture(string name)
+            public ViewCapture(string name, bool writeOrderedFrames)
             {
                 this.name = name;
+                this.writeOrderedFrames = writeOrderedFrames;
             }
         }
 
@@ -54,20 +110,43 @@ namespace BrawlArena.EditorAutomation
         {
             public BrawlerController actor;
             public Animator animator;
-            public Transform hand;
-            public Transform weapon;
+            public InvectorBrawlerWeaponPresentation presenter;
+            public ScriptedBrawlerDriver driver;
+            public Transform rightUpperArm;
+            public Transform rightLowerArm;
+            public Transform rightHand;
+            public Transform leftUpperArm;
+            public Transform leftLowerArm;
+            public Transform leftHand;
+            public Transform weaponHand;
+            public Transform supportHand;
+            public Transform weaponVisual;
+            public Transform supportTarget;
+            public Transform supportHint;
+            public Vector3 weaponGripPoint;
+            public float weaponGripDistance;
+            public bool hasWeaponGrip;
+            public Vector3 supportGripPoint;
+            public float supportGripDistance;
+            public bool hasSupportGrip;
+            public Vector3 effectiveSupportTarget;
+            public Vector3 effectiveSupportHint;
+            public bool hasEffectiveSupportPose;
         }
 
         public BrawlerController subject;
-        public int captureEveryNFrames = 3;
-        public int cellWidth = 480;
-        public int cellHeight = 270;
+        public int captureEveryNFrames = 6;
+        public int cellWidth = 800;
+        public int cellHeight = 600;
         public int gridCols = 4;
         public int gridRows = 4;
 
-        readonly ViewCapture closeup = new ViewCapture("closeup");
-        readonly ViewCapture side = new ViewCapture("side");
-        readonly ViewCapture main = new ViewCapture("main");
+        readonly ViewCapture hands = new ViewCapture("hands", true);
+        readonly ViewCapture support = new ViewCapture("support", true);
+        readonly ViewCapture supportOpposite = new ViewCapture("support-opposite", true);
+        readonly ViewCapture front = new ViewCapture("front", true);
+        readonly ViewCapture side = new ViewCapture("side", true);
+        readonly ViewCapture main = new ViewCapture("main", false);
         readonly List<FrameTelemetry> telemetry = new List<FrameTelemetry>();
         readonly List<AnimatorClipInfo> clipInfoBuffer = new List<AnimatorClipInfo>();
         readonly StringBuilder clipNames = new StringBuilder();
@@ -83,9 +162,11 @@ namespace BrawlArena.EditorAutomation
         public void StartRecording(string outputDirAbsolute)
         {
             if (string.IsNullOrWhiteSpace(outputDirAbsolute))
-                throw new ArgumentException("A recording output directory is required.", nameof(outputDirAbsolute));
+                throw new ArgumentException(
+                    "A recording output directory is required.", nameof(outputDirAbsolute));
             if (!Path.IsPathRooted(outputDirAbsolute))
-                throw new ArgumentException("The recording output directory must be absolute.", nameof(outputDirAbsolute));
+                throw new ArgumentException(
+                    "The recording output directory must be absolute.", nameof(outputDirAbsolute));
 
             if (isRecording) StopRecording();
 
@@ -103,11 +184,18 @@ namespace BrawlArena.EditorAutomation
             int sheetWidth = cellWidth * gridCols;
             int sheetHeight = cellHeight * gridRows;
             EnsureBlankPixels(sheetWidth * sheetHeight);
-            PrepareView(closeup, sheetWidth, sheetHeight);
+            PrepareView(hands, sheetWidth, sheetHeight);
+            PrepareView(support, sheetWidth, sheetHeight);
+            PrepareView(supportOpposite, sheetWidth, sheetHeight);
+            PrepareView(front, sheetWidth, sheetHeight);
             PrepareView(side, sheetWidth, sheetHeight);
             PrepareView(main, sheetWidth, sheetHeight);
-            EnsureProbeCamera(closeup, "Gameplay Probe Closeup Camera", 42f);
-            EnsureProbeCamera(side, "Gameplay Probe Side Camera", 50f);
+            EnsureProbeCamera(hands, "Gameplay Probe Hands Camera", 34f);
+            EnsureProbeCamera(support, "Gameplay Probe Support Camera", 28f);
+            EnsureProbeCamera(
+                supportOpposite, "Gameplay Probe Opposite Support Camera", 28f);
+            EnsureProbeCamera(front, "Gameplay Probe Front Camera", 38f);
+            EnsureProbeCamera(side, "Gameplay Probe Side Camera", 38f);
 
             telemetry.Clear();
             clipInfoBuffer.Clear();
@@ -122,16 +210,17 @@ namespace BrawlArena.EditorAutomation
             if (!isRecording) return;
             isRecording = false;
 
-            FlushSheet(closeup);
+            FlushSheet(hands);
+            FlushSheet(support);
+            FlushSheet(supportOpposite);
+            FlushSheet(front);
             FlushSheet(side);
             FlushSheet(main);
 
-            var wrapper = new TelemetryWrapper
-            {
-                frames = telemetry.ToArray(),
-            };
-            string json = JsonUtility.ToJson(wrapper, true);
-            File.WriteAllText(Path.Combine(outputDirectory, "frames.json"), json);
+            var wrapper = new TelemetryWrapper { frames = telemetry.ToArray() };
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "frames.json"),
+                JsonUtility.ToJson(wrapper, true));
             File.WriteAllBytes(
                 Path.Combine(outputDirectory, "recording-complete.marker"),
                 Array.Empty<byte>());
@@ -153,16 +242,18 @@ namespace BrawlArena.EditorAutomation
         void CaptureTick()
         {
             SubjectObservation observation = ObserveSubject();
-
-            if (observation.actor != null && observation.hand != null && closeup.camera != null)
+            if (observation.actor != null && observation.rightHand != null &&
+                observation.leftHand != null)
             {
-                PositionCloseupCamera(closeup.camera, observation.actor.transform, observation.hand);
-                CaptureView(closeup, closeup.camera);
-            }
-
-            if (observation.actor != null && side.camera != null)
-            {
-                PositionSideCamera(side.camera, observation.actor.transform);
+                PositionHandsCamera(hands.camera, observation);
+                CaptureView(hands, hands.camera);
+                PositionSupportCamera(support.camera, observation);
+                CaptureView(support, support.camera);
+                PositionOppositeSupportCamera(supportOpposite.camera, observation);
+                CaptureView(supportOpposite, supportOpposite.camera);
+                PositionFullPoseCamera(front.camera, observation, true);
+                CaptureView(front, front.camera);
+                PositionFullPoseCamera(side.camera, observation, false);
                 CaptureView(side, side.camera);
             }
 
@@ -179,34 +270,274 @@ namespace BrawlArena.EditorAutomation
             if (subject == null) return observation;
 
             observation.actor = subject;
-            observation.animator = subject.GetComponentInChildren<Animator>(true);
+            observation.presenter =
+                subject.GetComponent<InvectorBrawlerWeaponPresentation>();
+            observation.driver = subject.GetComponent<ScriptedBrawlerDriver>();
+            observation.animator = observation.presenter != null
+                ? observation.presenter.ConfiguredAnimator
+                : subject.GetComponentInChildren<Animator>(true);
             if (observation.animator == null || !observation.animator.isHuman)
                 return observation;
 
-            observation.hand = observation.animator.GetBoneTransform(HumanBodyBones.RightHand);
-            if (observation.hand == null) return observation;
+            observation.rightUpperArm = observation.animator.GetBoneTransform(
+                HumanBodyBones.RightUpperArm);
+            observation.rightLowerArm = observation.animator.GetBoneTransform(
+                HumanBodyBones.RightLowerArm);
+            observation.rightHand = observation.animator.GetBoneTransform(
+                HumanBodyBones.RightHand);
+            observation.leftUpperArm = observation.animator.GetBoneTransform(
+                HumanBodyBones.LeftUpperArm);
+            observation.leftLowerArm = observation.animator.GetBoneTransform(
+                HumanBodyBones.LeftLowerArm);
+            observation.leftHand = observation.animator.GetBoneTransform(
+                HumanBodyBones.LeftHand);
 
-            Renderer weaponRenderer = observation.hand.GetComponentInChildren<Renderer>(true);
-            if (weaponRenderer != null) observation.weapon = weaponRenderer.transform;
+            bool heldLeft = observation.presenter != null &&
+                observation.presenter.WeaponHeldInLeftHand;
+            observation.weaponHand = heldLeft
+                ? observation.leftHand : observation.rightHand;
+            observation.supportHand = heldLeft
+                ? observation.rightHand : observation.leftHand;
+            observation.weaponVisual = observation.presenter != null
+                ? observation.presenter.WeaponVisualRoot : null;
+            observation.supportTarget = observation.presenter != null
+                ? observation.presenter.SupportHandTarget : null;
+            observation.supportHint = observation.presenter != null
+                ? observation.presenter.SupportHintTarget : null;
+
+            if (observation.weaponHand != null && observation.weaponVisual != null)
+            {
+                observation.hasWeaponGrip = TryClosestMeshPoint(
+                    observation.weaponVisual,
+                    observation.weaponHand.position,
+                    out observation.weaponGripPoint);
+                if (observation.hasWeaponGrip)
+                {
+                    observation.weaponGripDistance = Vector3.Distance(
+                        observation.weaponHand.position,
+                        observation.weaponGripPoint);
+                }
+            }
+            if (observation.supportHand != null && observation.weaponVisual != null)
+            {
+                observation.hasSupportGrip = TryClosestMeshPoint(
+                    observation.weaponVisual,
+                    observation.supportHand.position,
+                    out observation.supportGripPoint);
+                if (observation.hasSupportGrip)
+                {
+                    observation.supportGripDistance = Vector3.Distance(
+                        observation.supportHand.position,
+                        observation.supportGripPoint);
+                }
+            }
+            if (observation.presenter != null)
+            {
+                observation.hasEffectiveSupportPose =
+                    observation.presenter.TryGetCurrentSupportIKPose(
+                        out observation.effectiveSupportTarget,
+                        out _,
+                        out observation.effectiveSupportHint);
+            }
             return observation;
         }
 
-        static void PositionCloseupCamera(Camera camera, Transform actor, Transform hand)
+        public static bool TryClosestMeshPoint(
+            Transform root, Vector3 worldPoint, out Vector3 closestPoint)
         {
-            Vector3 offset = actor.right * 0.65f + actor.forward * 0.9f + Vector3.up * 0.35f;
-            camera.transform.position = hand.position + offset.normalized * 1.2f;
-            camera.transform.LookAt(hand.position, Vector3.up);
+            closestPoint = Vector3.zero;
+            float bestSqrDistance = float.PositiveInfinity;
+            bool found = false;
+
+            MeshFilter[] filters = root.GetComponentsInChildren<MeshFilter>(true);
+            for (int filterIndex = 0; filterIndex < filters.Length; filterIndex++)
+            {
+                MeshFilter filter = filters[filterIndex];
+                Mesh mesh = filter.sharedMesh;
+                Renderer renderer = filter.GetComponent<Renderer>();
+                if (mesh == null || !mesh.isReadable || renderer == null ||
+                    !renderer.enabled || !renderer.gameObject.activeInHierarchy)
+                    continue;
+
+                Vector3[] vertices = mesh.vertices;
+                int[] triangles = mesh.triangles;
+                for (int i = 0; i + 2 < triangles.Length; i += 3)
+                {
+                    Vector3 a = filter.transform.TransformPoint(vertices[triangles[i]]);
+                    Vector3 b = filter.transform.TransformPoint(vertices[triangles[i + 1]]);
+                    Vector3 c = filter.transform.TransformPoint(vertices[triangles[i + 2]]);
+                    Vector3 candidate = ClosestPointOnTriangle(worldPoint, a, b, c);
+                    float sqrDistance = (candidate - worldPoint).sqrMagnitude;
+                    if (sqrDistance >= bestSqrDistance) continue;
+                    bestSqrDistance = sqrDistance;
+                    closestPoint = candidate;
+                    found = true;
+                }
+            }
+            return found;
         }
 
-        static void PositionSideCamera(Camera camera, Transform actor)
+        static Vector3 ClosestPointOnTriangle(
+            Vector3 point, Vector3 a, Vector3 b, Vector3 c)
         {
-            camera.transform.position = actor.position + actor.right * 3.5f + Vector3.up * 1.2f;
-            camera.transform.LookAt(actor.position + Vector3.up, Vector3.up);
+            Vector3 ab = b - a;
+            Vector3 ac = c - a;
+            Vector3 ap = point - a;
+            float d1 = Vector3.Dot(ab, ap);
+            float d2 = Vector3.Dot(ac, ap);
+            if (d1 <= 0f && d2 <= 0f) return a;
+
+            Vector3 bp = point - b;
+            float d3 = Vector3.Dot(ab, bp);
+            float d4 = Vector3.Dot(ac, bp);
+            if (d3 >= 0f && d4 <= d3) return b;
+
+            float vc = d1 * d4 - d3 * d2;
+            if (vc <= 0f && d1 >= 0f && d3 <= 0f)
+                return a + (d1 / (d1 - d3)) * ab;
+
+            Vector3 cp = point - c;
+            float d5 = Vector3.Dot(ab, cp);
+            float d6 = Vector3.Dot(ac, cp);
+            if (d6 >= 0f && d5 <= d6) return c;
+
+            float vb = d5 * d2 - d1 * d6;
+            if (vb <= 0f && d2 >= 0f && d6 <= 0f)
+                return a + (d2 / (d2 - d6)) * ac;
+
+            float va = d3 * d6 - d5 * d4;
+            if (va <= 0f && d4 - d3 >= 0f && d5 - d6 >= 0f)
+                return b + ((d4 - d3) / ((d4 - d3) + (d5 - d6))) * (c - b);
+
+            float denominator = 1f / (va + vb + vc);
+            float v = vb * denominator;
+            float w = vc * denominator;
+            return a + ab * v + ac * w;
+        }
+
+        static void PositionHandsCamera(Camera camera, SubjectObservation observation)
+        {
+            if (camera == null) return;
+            Bounds bounds = CreateArmBounds(observation);
+            Vector3 direction = observation.actor.transform.forward * 0.9f +
+                observation.actor.transform.right * 0.55f + Vector3.up * 0.18f;
+            FitCamera(camera, bounds, direction, 1.35f);
+        }
+
+        static void PositionSupportCamera(
+            Camera camera, SubjectObservation observation)
+        {
+            if (camera == null || observation.supportHand == null) return;
+            var bounds = new Bounds(observation.supportHand.position, Vector3.one * 0.04f);
+            Transform supportLowerArm = observation.presenter != null &&
+                observation.presenter.WeaponHeldInLeftHand
+                    ? observation.rightLowerArm
+                    : observation.leftLowerArm;
+            Encapsulate(ref bounds, supportLowerArm);
+            Encapsulate(ref bounds, observation.supportTarget);
+            if (observation.hasSupportGrip)
+                bounds.Encapsulate(observation.supportGripPoint);
+            bounds.Expand(new Vector3(0.16f, 0.16f, 0.16f));
+            Vector3 direction = observation.actor.transform.forward * 0.75f -
+                observation.actor.transform.right * 0.65f + Vector3.up * 0.08f;
+            FitCamera(camera, bounds, direction, 1.15f);
+        }
+
+        static void PositionOppositeSupportCamera(
+            Camera camera, SubjectObservation observation)
+        {
+            if (camera == null || observation.supportHand == null) return;
+            var bounds = new Bounds(observation.supportHand.position, Vector3.one * 0.04f);
+            Transform supportLowerArm = observation.presenter != null &&
+                observation.presenter.WeaponHeldInLeftHand
+                    ? observation.rightLowerArm
+                    : observation.leftLowerArm;
+            Encapsulate(ref bounds, supportLowerArm);
+            Encapsulate(ref bounds, observation.supportTarget);
+            if (observation.hasSupportGrip)
+                bounds.Encapsulate(observation.supportGripPoint);
+            bounds.Expand(new Vector3(0.16f, 0.16f, 0.16f));
+            Vector3 direction = observation.actor.transform.forward * 0.75f +
+                observation.actor.transform.right * 0.65f + Vector3.up * 0.12f;
+            FitCamera(camera, bounds, direction, 1.55f);
+        }
+
+        static void PositionFullPoseCamera(
+            Camera camera, SubjectObservation observation, bool isFront)
+        {
+            if (camera == null) return;
+            Bounds bounds = CreatePresentationBounds(observation);
+            Vector3 direction = isFront
+                ? observation.actor.transform.forward
+                : observation.actor.transform.right;
+            direction = (direction + Vector3.up * 0.06f).normalized;
+            FitCamera(camera, bounds, direction, 1.18f);
+        }
+
+        static Bounds CreateArmBounds(SubjectObservation observation)
+        {
+            Vector3 center = observation.actor.transform.position + Vector3.up;
+            var bounds = new Bounds(center, Vector3.one * 0.05f);
+            Encapsulate(ref bounds, observation.rightUpperArm);
+            Encapsulate(ref bounds, observation.rightLowerArm);
+            Encapsulate(ref bounds, observation.rightHand);
+            Encapsulate(ref bounds, observation.leftUpperArm);
+            Encapsulate(ref bounds, observation.leftLowerArm);
+            Encapsulate(ref bounds, observation.leftHand);
+            Encapsulate(ref bounds, observation.supportTarget);
+            if (observation.hasWeaponGrip)
+                bounds.Encapsulate(observation.weaponGripPoint);
+            bounds.Expand(new Vector3(0.38f, 0.28f, 0.38f));
+            return bounds;
+        }
+
+        static Bounds CreatePresentationBounds(SubjectObservation observation)
+        {
+            Vector3 root = observation.actor.transform.position;
+            var bounds = new Bounds(root + Vector3.up, Vector3.one * 0.1f);
+            bounds.Encapsulate(root + Vector3.up * 0.18f);
+            bounds.Encapsulate(root + Vector3.up * 1.75f);
+
+            Renderer[] renderers = observation.actor.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer is ParticleSystemRenderer || !renderer.enabled ||
+                    !renderer.gameObject.activeInHierarchy)
+                    continue;
+                bounds.Encapsulate(renderer.bounds);
+            }
+            return bounds;
+        }
+
+        static void Encapsulate(ref Bounds bounds, Transform target)
+        {
+            if (target != null) bounds.Encapsulate(target.position);
+        }
+
+        static void FitCamera(
+            Camera camera, Bounds bounds, Vector3 viewDirection, float padding)
+        {
+            Vector3 direction = viewDirection.sqrMagnitude > 0.001f
+                ? viewDirection.normalized : Vector3.forward;
+            float vertical = Mathf.Max(0.25f, bounds.extents.y);
+            float horizontal = Mathf.Max(bounds.extents.x, bounds.extents.z);
+            float verticalRadians = camera.fieldOfView * Mathf.Deg2Rad * 0.5f;
+            float horizontalRadians = Mathf.Atan(
+                Mathf.Tan(verticalRadians) * Mathf.Max(0.1f, camera.aspect));
+            float distance = Mathf.Max(
+                vertical / Mathf.Tan(verticalRadians),
+                horizontal / Mathf.Tan(horizontalRadians));
+            distance = Mathf.Max(0.8f, distance * padding);
+            camera.transform.position = bounds.center + direction * distance;
+            camera.transform.LookAt(bounds.center, Vector3.up);
         }
 
         void CaptureView(ViewCapture view, Camera camera)
         {
-            if (view.renderTexture == null || view.sheet == null || camera == null) return;
+            if (view.renderTexture == null || view.sheet == null ||
+                view.frame == null || camera == null)
+                return;
 
             RenderTexture previousTarget = camera.targetTexture;
             try
@@ -214,25 +545,38 @@ namespace BrawlArena.EditorAutomation
                 camera.targetTexture = view.renderTexture;
                 camera.Render();
 
-                int column = view.cellCount % gridCols;
-                int row = view.cellCount / gridCols;
-                int destinationX = column * cellWidth;
-                int destinationY = (gridRows - row - 1) * cellHeight;
-
                 RenderTexture previousActive = RenderTexture.active;
                 try
                 {
                     RenderTexture.active = view.renderTexture;
-                    view.sheet.ReadPixels(
-                        new Rect(0f, 0f, cellWidth, cellHeight),
-                        destinationX, destinationY, false);
-                    view.sheet.Apply(false, false);
+                    view.frame.ReadPixels(
+                        new Rect(0f, 0f, cellWidth, cellHeight), 0, 0, false);
+                    view.frame.Apply(false, false);
                 }
                 finally
                 {
                     RenderTexture.active = previousActive;
                 }
 
+                int column = view.cellCount % gridCols;
+                int row = view.cellCount / gridCols;
+                int destinationX = column * cellWidth;
+                int destinationY = (gridRows - row - 1) * cellHeight;
+                view.sheet.SetPixels32(
+                    destinationX, destinationY, cellWidth, cellHeight,
+                    view.frame.GetPixels32());
+                view.sheet.Apply(false, false);
+
+                if (view.writeOrderedFrames)
+                {
+                    string frameDirectory = Path.Combine(outputDirectory, view.name);
+                    string frameName = string.Format("frame-{0:000000}.png", view.frameIndex);
+                    File.WriteAllBytes(
+                        Path.Combine(frameDirectory, frameName),
+                        view.frame.EncodeToPNG());
+                }
+
+                view.frameIndex++;
                 view.cellCount++;
                 if (view.cellCount >= gridCols * gridRows) FlushSheet(view);
             }
@@ -245,25 +589,47 @@ namespace BrawlArena.EditorAutomation
 
         void AppendTelemetry(SubjectObservation observation)
         {
-            Vector3 subjectPosition = Vector3.zero;
-            float subjectYaw = 0f;
-            bool canAct = false;
-            if (observation.actor != null)
+            Vector3 subjectPosition = observation.actor != null
+                ? observation.actor.transform.position : Vector3.zero;
+            float subjectYaw = observation.actor != null
+                ? observation.actor.transform.eulerAngles.y : 0f;
+            bool canAct = observation.actor != null && observation.actor.CanAct;
+            float supportDistance = observation.supportHand != null &&
+                observation.hasEffectiveSupportPose
+                ? Vector3.Distance(
+                    observation.supportHand.position,
+                    observation.effectiveSupportTarget)
+                : -1f;
+            float supportReachDistance = -1f;
+            float supportReachMargin = -1f;
+            float supportHintLateral = -1f;
+            bool supportIsRight = observation.presenter != null &&
+                observation.presenter.WeaponHeldInLeftHand;
+            Transform supportUpperArm = supportIsRight
+                ? observation.rightUpperArm
+                : observation.leftUpperArm;
+            Transform supportLowerArm = supportIsRight
+                ? observation.rightLowerArm
+                : observation.leftLowerArm;
+            Transform supportHand = supportIsRight
+                ? observation.rightHand
+                : observation.leftHand;
+            if (supportHand != null && supportUpperArm != null &&
+                supportLowerArm != null && observation.hasEffectiveSupportPose)
             {
-                subjectPosition = observation.actor.transform.position;
-                subjectYaw = observation.actor.transform.eulerAngles.y;
-                canAct = observation.actor.CanAct;
+                Vector3 root = supportUpperArm.position;
+                Vector3 reach = observation.effectiveSupportTarget - root;
+                supportReachDistance = reach.magnitude;
+                float maximum = Vector3.Distance(root, supportLowerArm.position) +
+                    Vector3.Distance(supportLowerArm.position, supportHand.position);
+                supportReachMargin = maximum - supportReachDistance;
+                if (supportReachDistance > 0.0001f)
+                {
+                    supportHintLateral = Vector3.ProjectOnPlane(
+                        observation.effectiveSupportHint - root,
+                        reach / supportReachDistance).magnitude;
+                }
             }
-
-            Vector3 handPosition = observation.hand != null
-                ? observation.hand.position
-                : Vector3.zero;
-            Vector3 weaponPosition = observation.weapon != null
-                ? observation.weapon.position
-                : Vector3.zero;
-            Vector3 weaponEuler = observation.weapon != null
-                ? observation.weapon.eulerAngles
-                : Vector3.zero;
 
             telemetry.Add(new FrameTelemetry
             {
@@ -272,10 +638,62 @@ namespace BrawlArena.EditorAutomation
                 time = Time.time,
                 subjectPos = ToArray(subjectPosition),
                 subjectYaw = subjectYaw,
-                handPos = ToArray(handPosition),
-                weaponPos = ToArray(weaponPosition),
-                weaponEuler = ToArray(weaponEuler),
+                rightHandPos = PositionArray(observation.rightHand),
+                rightHandEuler = EulerArray(observation.rightHand),
+                leftHandPos = PositionArray(observation.leftHand),
+                leftHandEuler = EulerArray(observation.leftHand),
+                rightLowerArmPos = PositionArray(observation.rightLowerArm),
+                leftLowerArmPos = PositionArray(observation.leftLowerArm),
+                rightUpperArmPos = PositionArray(observation.rightUpperArm),
+                leftUpperArmPos = PositionArray(observation.leftUpperArm),
+                weaponVisualPos = PositionArray(observation.weaponVisual),
+                weaponVisualEuler = EulerArray(observation.weaponVisual),
+                weaponGripPos = observation.hasWeaponGrip
+                    ? ToArray(observation.weaponGripPoint) : ToArray(Vector3.zero),
+                weaponGripDistance = observation.hasWeaponGrip
+                    ? observation.weaponGripDistance : -1f,
+                supportGripPos = observation.hasSupportGrip
+                    ? ToArray(observation.supportGripPoint) : ToArray(Vector3.zero),
+                supportGripDistance = observation.hasSupportGrip
+                    ? observation.supportGripDistance : -1f,
+                supportTargetPos = PositionArray(observation.supportTarget),
+                supportTargetEuler = EulerArray(observation.supportTarget),
+                effectiveSupportTargetPos = observation.hasEffectiveSupportPose
+                    ? ToArray(observation.effectiveSupportTarget) : ToArray(Vector3.zero),
+                effectiveSupportHintPos = observation.hasEffectiveSupportPose
+                    ? ToArray(observation.effectiveSupportHint) : ToArray(Vector3.zero),
+                supportHandDistance = supportDistance,
+                supportReachDistance = supportReachDistance,
+                supportReachMargin = supportReachMargin,
+                supportHintLateral = supportHintLateral,
+                supportHintPos = PositionArray(observation.supportHint),
+                weaponCategory = observation.presenter != null
+                    ? observation.presenter.WeaponCategory : string.Empty,
+                weaponHeldInLeftHand = observation.presenter != null &&
+                    observation.presenter.WeaponHeldInLeftHand,
+                weaponHandBone = observation.presenter != null &&
+                    observation.presenter.WeaponHeldInLeftHand
+                        ? HumanBodyBones.LeftHand.ToString()
+                        : HumanBodyBones.RightHand.ToString(),
+                supportHandBone = observation.presenter != null &&
+                    observation.presenter.WeaponHeldInLeftHand
+                        ? HumanBodyBones.RightHand.ToString()
+                        : HumanBodyBones.LeftHand.ToString(),
+                ikState = observation.presenter != null
+                    ? observation.presenter.CurrentIKState : string.Empty,
+                aimPresented = observation.presenter != null &&
+                    observation.presenter.AimPresented,
+                ikSuppression = observation.presenter != null
+                    ? observation.presenter.LastSuppression.ToString() : string.Empty,
+                invalidIKPoseStage = observation.presenter != null &&
+                    observation.presenter.LastSuppression ==
+                        InvectorWeaponPresentationSuppression.InvalidIKPose
+                    ? observation.presenter.LastInvalidPoseStage : string.Empty,
                 animClips = CollectClipNames(observation.animator),
+                lastAction = observation.driver != null
+                    ? observation.driver.LastAction : string.Empty,
+                lastActionSucceeded = observation.driver != null &&
+                    observation.driver.LastActionSucceeded,
                 canAct = canAct,
             });
         }
@@ -300,6 +718,16 @@ namespace BrawlArena.EditorAutomation
                 }
             }
             return clipNames.ToString();
+        }
+
+        static float[] PositionArray(Transform target)
+        {
+            return ToArray(target != null ? target.position : Vector3.zero);
+        }
+
+        static float[] EulerArray(Transform target)
+        {
+            return ToArray(target != null ? target.eulerAngles : Vector3.zero);
         }
 
         static float[] ToArray(Vector3 value)
@@ -328,12 +756,25 @@ namespace BrawlArena.EditorAutomation
                 view.renderTexture.Create();
             }
 
-            if (view.sheet == null ||
-                view.sheet.width != sheetWidth ||
+            if (view.frame == null || view.frame.width != cellWidth ||
+                view.frame.height != cellHeight)
+            {
+                DestroyFrameTexture(view);
+                view.frame = new Texture2D(
+                    cellWidth, cellHeight, TextureFormat.RGB24, false)
+                {
+                    name = "Gameplay Probe " + view.name + " Frame",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                };
+            }
+
+            if (view.sheet == null || view.sheet.width != sheetWidth ||
                 view.sheet.height != sheetHeight)
             {
-                DestroyTexture(view);
-                view.sheet = new Texture2D(sheetWidth, sheetHeight, TextureFormat.RGB24, false)
+                DestroySheetTexture(view);
+                view.sheet = new Texture2D(
+                    sheetWidth, sheetHeight, TextureFormat.RGB24, false)
                 {
                     name = "Gameplay Probe " + view.name + " Contact Sheet",
                     filterMode = FilterMode.Bilinear,
@@ -343,6 +784,9 @@ namespace BrawlArena.EditorAutomation
 
             view.cellCount = 0;
             view.sheetIndex = 0;
+            view.frameIndex = 0;
+            if (view.writeOrderedFrames)
+                Directory.CreateDirectory(Path.Combine(outputDirectory, view.name));
             ClearSheet(view);
         }
 
@@ -361,10 +805,14 @@ namespace BrawlArena.EditorAutomation
             view.camera.targetTexture = view.renderTexture;
             view.camera.clearFlags = CameraClearFlags.Skybox;
             view.camera.backgroundColor = Color.black;
-            view.camera.cullingMask = ~0;
+            // Gameplay VFX remains visible in the main-camera sheet. Excluding
+            // the dedicated VFX layer here keeps hand/shaft contact readable
+            // during bright Attack01/Attack02 muzzle and impact bursts.
+            view.camera.cullingMask = ~(1 << 12);
             view.camera.nearClipPlane = 0.03f;
             view.camera.farClipPlane = 500f;
             view.camera.fieldOfView = fieldOfView;
+            view.camera.aspect = (float)cellWidth / Mathf.Max(1, cellHeight);
             view.camera.allowHDR = true;
         }
 
@@ -386,10 +834,11 @@ namespace BrawlArena.EditorAutomation
             if (view.cellCount <= 0 || view.sheet == null) return;
 
             view.sheet.Apply(false, false);
-            byte[] png = view.sheet.EncodeToPNG();
             string fileName = string.Format(
                 "sheet-{0}-{1:000}.png", view.name, view.sheetIndex);
-            File.WriteAllBytes(Path.Combine(outputDirectory, fileName), png);
+            File.WriteAllBytes(
+                Path.Combine(outputDirectory, fileName),
+                view.sheet.EncodeToPNG());
             view.sheetIndex++;
             view.cellCount = 0;
             ClearSheet(view);
@@ -403,7 +852,10 @@ namespace BrawlArena.EditorAutomation
         void OnDestroy()
         {
             if (isRecording) StopRecording();
-            DestroyView(closeup, true);
+            DestroyView(hands, true);
+            DestroyView(support, true);
+            DestroyView(supportOpposite, true);
+            DestroyView(front, true);
             DestroyView(side, true);
             DestroyView(main, false);
             blankSheetPixels = null;
@@ -418,7 +870,8 @@ namespace BrawlArena.EditorAutomation
                 view.camera = null;
             }
             DestroyRenderTexture(view);
-            DestroyTexture(view);
+            DestroyFrameTexture(view);
+            DestroySheetTexture(view);
         }
 
         void DestroyRenderTexture(ViewCapture view)
@@ -431,7 +884,14 @@ namespace BrawlArena.EditorAutomation
             view.renderTexture = null;
         }
 
-        void DestroyTexture(ViewCapture view)
+        void DestroyFrameTexture(ViewCapture view)
+        {
+            if (view.frame == null) return;
+            Destroy(view.frame);
+            view.frame = null;
+        }
+
+        void DestroySheetTexture(ViewCapture view)
         {
             if (view.sheet == null) return;
             Destroy(view.sheet);

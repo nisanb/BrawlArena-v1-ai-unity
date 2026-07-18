@@ -98,6 +98,7 @@ namespace BrawlArena
         public int AttackEnableCallbackCount => attackEnableCallbackCount;
         public int AttackDisableCallbackCount => attackDisableCallbackCount;
         public int AttackResetCallbackCount => attackResetCallbackCount;
+        public bool IsPresentationAttackWindowOpen => isAttacking;
         public string LastSuppressedVendorPath => lastSuppressedVendorPath;
         public Vector2 LastMoveIntent => lastMoveIntent;
         public bool HasProjectMoveAction => ResolveProjectMoveAction(false) != null;
@@ -699,6 +700,7 @@ namespace BrawlArena
         {
             attackEnableCallbackCount++;
             isAttacking = true;
+            configuredController?.MarkMeleePresentationConsumed();
             if (cc != null)
             {
                 cc.isSprinting = false;

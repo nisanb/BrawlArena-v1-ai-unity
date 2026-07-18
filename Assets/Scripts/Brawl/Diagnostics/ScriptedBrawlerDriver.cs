@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 
 namespace BrawlArena.EditorAutomation
@@ -27,6 +28,7 @@ namespace BrawlArena.EditorAutomation
         public class ProbeScenario
         {
             public string name;
+            public string rosterId;
             public List<ProbeStep> steps = new List<ProbeStep>();
         }
 
@@ -36,8 +38,15 @@ namespace BrawlArena.EditorAutomation
         float startTime;
         int activeMoveStep = -1;
 
+        static readonly FieldInfo SuperChargeBackingField =
+            typeof(BrawlerController).GetField(
+                "<SuperCharge>k__BackingField",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
         public string ScenarioName => scenario != null ? scenario.name : string.Empty;
         public bool IsFinished { get; private set; }
+        public string LastAction { get; private set; } = string.Empty;
+        public bool LastActionSucceeded { get; private set; }
 
         void Awake()
         {
@@ -50,6 +59,8 @@ namespace BrawlArena.EditorAutomation
             fired.Clear();
             activeMoveStep = -1;
             IsFinished = false;
+            LastAction = string.Empty;
+            LastActionSucceeded = false;
         }
 
         public void LoadScenario(string json)
@@ -62,6 +73,8 @@ namespace BrawlArena.EditorAutomation
             fired.Clear();
             activeMoveStep = -1;
             IsFinished = false;
+            LastAction = string.Empty;
+            LastActionSucceeded = false;
         }
 
         static Vector3 ToWorld(float[] dir)
@@ -110,8 +123,14 @@ namespace BrawlArena.EditorAutomation
                 case "stop": activeMoveStep = -1; break;
                 case "attack_auto": ok = self.TryAttackAuto(); break;
                 case "attack_dir": ok = self.TryAttackDirection(dir); break;
-                case "super_auto": ok = self.TrySuperAuto(); break;
-                case "super_dir": ok = self.TrySuperDirection(dir); break;
+                case "super_auto":
+                    PrimeSuperForEditorReview();
+                    ok = self.TrySuperAuto();
+                    break;
+                case "super_dir":
+                    PrimeSuperForEditorReview();
+                    ok = self.TrySuperDirection(dir);
+                    break;
                 case "ward_step":
                     ok = self.TryWardStep(dir.sqrMagnitude > 0.01f ? dir : transform.forward);
                     break;
@@ -119,8 +138,23 @@ namespace BrawlArena.EditorAutomation
                     Debug.LogWarning("[GameplayProbe] unknown action '" + step.action + "'");
                     return;
             }
+            LastAction = step.action;
+            LastActionSucceeded = ok;
             Debug.Log("[GameplayProbe] t=" + elapsed.ToString("F2") + " " +
                       step.action + " -> " + ok);
+        }
+
+        void PrimeSuperForEditorReview()
+        {
+            if (self == null || self.SuperReady) return;
+            if (SuperChargeBackingField == null)
+                throw new MissingFieldException(
+                    typeof(BrawlerController).FullName,
+                    "<SuperCharge>k__BackingField");
+
+            SuperChargeBackingField.SetValue(
+                self,
+                Mathf.Max(1f, self.maxSuperCharge));
         }
 
         void OnDisable()
