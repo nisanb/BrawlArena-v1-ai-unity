@@ -66,9 +66,19 @@ namespace BrawlArena.EditorAutomation
             Assert.IsInstanceOf<WaitForSeconds>(attack.Current);
             Assert.AreEqual(beforeBasic, target.Health.Current,
                 "Damage must not move ahead of the authored hit delay.");
+            // A throwing GetAttackImpactDelay falls back to the authored seed, so the
+            // hit still lands here; the routine then continues into its authored
+            // post-impact recovery window (attackMoveLock - hitDelay) before a
+            // throwing PauseAnimation hit-stop call can end the coroutine.
+            Assert.IsTrue(attack.MoveNext(),
+                "A throwing impact-delay/hit-stop driver must not skip the authored " +
+                "post-impact recovery window.");
+            Assert.IsInstanceOf<WaitForSeconds>(attack.Current);
+            Assert.AreEqual(beforeBasic - attacker.attackDamage, target.Health.Current,
+                "Damage must land before the post-impact recovery wait, regardless of " +
+                "hit-stop presentation failures.");
             Assert.IsFalse(attack.MoveNext());
-            Assert.AreEqual(beforeBasic - attacker.attackDamage, target.Health.Current);
-            AssertPresentationFailure(attacker, 1, "PlayBasicAttack");
+            AssertPresentationFailure(attacker, 3, "PauseAnimation");
 
             target.Health.SetMax(100f, true);
             SetPrivateField(attacker, "superInProgress", true);
@@ -88,7 +98,10 @@ namespace BrawlArena.EditorAutomation
             Assert.IsFalse(GetPrivateField<bool>(attacker, "superInProgress"));
             Assert.IsNull(GetPrivateField<Coroutine>(attacker, "superRoutine"));
             Assert.IsNull(GetPrivateField<Coroutine>(attacker, "attackRoutine"));
-            AssertPresentationFailure(attacker, 2, "PlaySuper");
+            // Super has no post-burst recovery wait, so its throwing PlaySuper and
+            // heavy-hit-stop PauseAnimation calls both land within one continuation,
+            // and the failure tally/last-op keep accruing from the basic attack above.
+            AssertPresentationFailure(attacker, 5, "PauseAnimation");
             Assert.GreaterOrEqual(attackerMotor.FaceCount, 2,
                 "Presentation containment must not suppress committed facing.");
         }
@@ -375,6 +388,10 @@ namespace BrawlArena.EditorAutomation
             public void PlayDeath() => throw new NotSupportedException(nameof(PlayDeath));
             public void PlayRespawn() => throw new NotSupportedException(nameof(PlayRespawn));
             public void PlayVictory() => throw new NotSupportedException(nameof(PlayVictory));
+            public float GetAttackImpactDelay(bool strongAttack, float fallbackSeconds) =>
+                throw new NotSupportedException(nameof(GetAttackImpactDelay));
+            public void PauseAnimation(float seconds) =>
+                throw new NotSupportedException(nameof(PauseAnimation));
         }
 
         sealed class RecordingMotor : MonoBehaviour, IBrawlerMotor

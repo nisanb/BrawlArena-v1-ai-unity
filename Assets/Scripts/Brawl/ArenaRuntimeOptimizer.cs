@@ -8,8 +8,10 @@ namespace BrawlArena
     /// <summary>
     /// Runtime-only cleanup for the legacy Arena scene. It keeps the authored
     /// ground box used by movement/NavMesh, removes per-tile collision work,
-    /// disables floor shadows, and places solid arena geometry on the explicit
-    /// combat layers. No scene or prefab asset is modified.
+    /// stops floor tiles from casting shadows onto themselves (they still
+    /// receive shadows from characters/props — see ORDER R), and places solid
+    /// arena geometry on the explicit combat layers. No scene or prefab asset
+    /// is modified.
     /// </summary>
     public static class ArenaRuntimeOptimizer
     {
@@ -86,7 +88,10 @@ namespace BrawlArena
                     continue;
 
                 renderer.shadowCastingMode = ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
+                // Ground must receive shadows for depth cues (ORDER R / shadow
+                // bug fix) — only casting is disabled here, an unrelated,
+                // still-legitimate optimization (the floor never needs to
+                // shadow itself or other tiles).
                 if (groundLayer >= 0) renderer.gameObject.layer = groundLayer;
                 optimizedRenderers++;
             }

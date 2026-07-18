@@ -153,6 +153,9 @@ namespace BrawlArena
         public float moveLock = 0.45f;
         public float moveSpeed = 5f;
         public float autoAimRange = 3.5f;
+        public float wardStepDistance = 2.75f;
+        public float wardStepCost = 20f;
+        public float meleeArcDegrees = 100f;
         public GameObject projectilePrefab;
         public float projectileSpeed = 16f;
         [Header("Projectile readability")]
@@ -192,59 +195,21 @@ namespace BrawlArena
         /// </summary>
         public void EnsureSuperConfiguration()
         {
-            EnsureRpgIdentityConfiguration();
             EnsureSpecialtyConfiguration();
             EnsureProjectileReadabilityConfiguration();
             string heroId = (id ?? string.Empty).ToLowerInvariant();
-            bool legacyLifeSuper = heroId == "arcane" &&
-                (string.IsNullOrEmpty(superName) || superName == "ASTRAL CONVERGENCE" ||
-                 superName == "ARCANE OVERLOAD");
-            bool legacyPoisonSuper = (heroId == "void" || heroId == "poison") &&
-                (string.IsNullOrEmpty(superName) || superName == "RIFT STEP" ||
-                 superName == "EVENT HORIZON");
-            if (legacyLifeSuper)
-            {
-                SetSuper("SANCTUARY NOVA", BrawlerSuperStyle.Burst, 1.38f, 4.6f,
-                    3.5f, 0f, 0f, 0f);
-            }
-            else if (legacyPoisonSuper)
-            {
-                SetSuper("TOXIC BLOOM", BrawlerSuperStyle.ProjectileBlast, 1.62f, 13f,
-                    4f, 0f, 22f, 2.8f);
-            }
-            else if (string.IsNullOrEmpty(superName))
+            if (string.IsNullOrEmpty(superName))
             {
                 switch (heroId)
                 {
-                    case "aria":
-                        SetSuper("ARCANE TEMPEST", BrawlerSuperStyle.Burst, 1.55f, 3.15f, 5.5f, 0f, 0f, 0f);
-                        break;
                     case "bastion":
-                        SetSuper("AEGIS SHOCKWAVE", BrawlerSuperStyle.Burst, 1.2f, 3.9f, 8.5f, 0f, 0f, 0f);
-                        break;
-                    case "nova":
-                        SetSuper("THUNDERBURST", BrawlerSuperStyle.ProjectileBlast, 1.7f, 13f, 4.5f, 0f, 24f, 2.4f);
-                        break;
-                    case "grimm":
-                        SetSuper("INFERNO BREAKER", BrawlerSuperStyle.Burst, 2f, 3.25f, 7f, 0f, 0f, 0f);
-                        break;
-                    case "vex":
-                        SetSuper("SHADOW STEP", BrawlerSuperStyle.Dash, 1.75f, 2.65f, 6.5f, 5.6f, 0f, 0f);
+                        SetSuper("AEGIS SHOCKWAVE", BrawlerSuperStyle.Burst, 1.3f, 4.2f, 9f, 0f, 0f, 0f);
                         break;
                     case "thorn":
                         SetSuper("EXPLOSIVE ARROW", BrawlerSuperStyle.ProjectileBlast, 1.85f, 14f, 6.5f, 0f, 29f, 2.6f);
                         break;
-                    case "fire":
-                        SetSuper("INFERNO COMET", BrawlerSuperStyle.ProjectileBlast, 1.95f, 13f, 5f, 0f, 23f, 2.7f);
-                        break;
                     case "frost":
                         SetSuper("ABSOLUTE ZERO", BrawlerSuperStyle.Burst, 1.45f, 4.2f, 8f, 0f, 0f, 0f);
-                        break;
-                    case "storm":
-                        SetSuper("TEMPEST CHAIN", BrawlerSuperStyle.ProjectileBlast, 1.55f, 14f, 4f, 0f, 29f, 2.1f);
-                        break;
-                    case "earth":
-                        SetSuper("TECTONIC WAVE", BrawlerSuperStyle.Burst, 1.55f, 4.4f, 10f, 0f, 0f, 0f);
                         break;
                     default:
                         SetSuper("POWER BURST", BrawlerSuperStyle.Burst, 1.6f, 3.2f, 6f, 0f, 0f, 0f);
@@ -269,84 +234,13 @@ namespace BrawlArena
         public void EnsureSpecialtyConfiguration()
         {
             string heroId = (id ?? string.Empty).ToLowerInvariant();
-            if ((heroId == "void" || heroId == "poison") &&
-                (specialty.school == SpellSchool.None || specialty.school == SpellSchool.Void))
+            if (specialty.school == SpellSchool.None)
             {
-                specialty = SpellSpecialty.ForSchool(SpellSchool.Poison);
-            }
-            else if (specialty.school == SpellSchool.None)
-            {
-                SpellSchool school;
-                switch (heroId)
-                {
-                    case "arcane": school = SpellSchool.Arcane; break;
-                    case "fire": school = SpellSchool.Fire; break;
-                    case "frost": school = SpellSchool.Frost; break;
-                    case "storm": school = SpellSchool.Storm; break;
-                    case "earth": school = SpellSchool.Earth; break;
-                    case "void":
-                    case "poison": school = SpellSchool.Poison; break;
-                    default: school = SpellSchool.None; break;
-                }
+                SpellSchool school = heroId == "frost" ? SpellSchool.Frost : SpellSchool.None;
                 specialty = SpellSpecialty.ForSchool(school);
             }
 
-            // Older Arena scenes serialize the original payload and therefore
-            // have zeroes for newly introduced class mechanics. Fill only those
-            // new fields so explicitly tuned legacy combat values stay intact.
-            SpellSpecialty defaults = SpellSpecialty.ForSchool(specialty.school);
-            if (specialty.school == SpellSchool.Arcane)
-            {
-                if (specialty.allyHealFraction <= 0f)
-                    specialty.allyHealFraction = defaults.allyHealFraction;
-                if (specialty.allyHealRadius <= 0f)
-                    specialty.allyHealRadius = defaults.allyHealRadius;
-                if (specialty.ritualHealFraction <= 0f)
-                    specialty.ritualHealFraction = defaults.ritualHealFraction;
-            }
-            else if (specialty.school == SpellSchool.Fire)
-            {
-                if (specialty.groundEffectRadius <= 0f)
-                    specialty.groundEffectRadius = defaults.groundEffectRadius;
-                if (specialty.groundEffectDuration <= 0f)
-                    specialty.groundEffectDuration = defaults.groundEffectDuration;
-                if (specialty.groundBurnFraction <= 0f)
-                    specialty.groundBurnFraction = defaults.groundBurnFraction;
-            }
-            else if (specialty.school == SpellSchool.Poison)
-            {
-                if (specialty.poisonDamageFraction <= 0f)
-                    specialty.poisonDamageFraction = defaults.poisonDamageFraction;
-                if (specialty.poisonDuration <= 0f)
-                    specialty.poisonDuration = defaults.poisonDuration;
-                if (specialty.poisonTickInterval <= 0f)
-                    specialty.poisonTickInterval = defaults.poisonTickInterval;
-            }
             specialty = specialty.Sanitized();
-        }
-
-        void EnsureRpgIdentityConfiguration()
-        {
-            string heroId = (id ?? string.Empty).ToLowerInvariant();
-            if (heroId == "arcane")
-            {
-                if (string.IsNullOrEmpty(displayName)) displayName = "Aether";
-                if (string.IsNullOrEmpty(role) || role == "Arcane Savant")
-                    role = "Lifeweaver";
-                if (string.IsNullOrEmpty(description) ||
-                    description.IndexOf("arcane sustain", StringComparison.OrdinalIgnoreCase) >= 0)
-                    description = "A radiant clan healer whose attacks mend the weakest nearby ally and whose ritual restores the whole formation.";
-            }
-            else if (heroId == "void" || heroId == "poison")
-            {
-                if (string.IsNullOrEmpty(displayName) || displayName == "Nyx")
-                    displayName = "Mire";
-                if (string.IsNullOrEmpty(role) || role == "Voidweaver")
-                    role = "Plagueweaver";
-                if (string.IsNullOrEmpty(description) ||
-                    description.IndexOf("space-bender", StringComparison.OrdinalIgnoreCase) >= 0)
-                    description = "A toxic attrition mage whose plague bolts keep damaging enemies long after the first hit.";
-            }
         }
 
         void SetSuper(string name, BrawlerSuperStyle style, float damageMultiplier, float range,
@@ -389,6 +283,13 @@ namespace BrawlArena
         string playerCharacterId;
         bool rewardHooked;
 
+        /// <summary>
+        /// Per-launch match counter that seeds the opponent lineup so each
+        /// match's comp varies without depending on wall-clock time or
+        /// hidden randomness inside this file (see BuildLineup).
+        /// </summary>
+        static int opponentLineupSeedCounter;
+
         struct LineupEntry
         {
             public int defIndex;
@@ -406,10 +307,10 @@ namespace BrawlArena
         static readonly string[] Tips =
         {
             "TIP: RELEASE CAST ONCE — TAP TO AUTO-AIM OR DRAG TO COMMIT",
-            "TIP: TAP WARD STEP WHILE MOVING TO COMMIT AN ESCAPE",
-            "TIP: RANGED BRAWLERS MELT UP CLOSE — DIVE THEM",
+            "TIP: TAP DASH WHILE MOVING TO COMMIT AN ESCAPE",
+            "TIP: WARRIORS WIN THE ZONE UP CLOSE — DON'T TRADE AT RANGE",
             "TIP: KOs NEAR YOUR SPAWN ARE EASIER TO FOLLOW UP",
-            "TIP: SAVE 20 WARD FLOW WHEN YOU EXPECT A COUNTERATTACK",
+            "TIP: SLOWS COUNTER DIVERS — KITE INTO YOUR TEAM",
             "TIP: PUSH FORWARD, WIN KOs, AND CLAIM XP CACHES TO LEVEL UP",
             "TIP: ARCHERS CONTROL LONG LANES — USE COVER TO CLOSE THE GAP",
         };
@@ -536,10 +437,15 @@ namespace BrawlArena
             }
 
             int teamSize = ArenaLayout.ActiveTeamSize(MatchSetup.Mode);
-            int[] blueDefinitions = MatchLineupPlanner.BuildRotatedTeamDefinitionIndices(
-                roster.Length, teamSize, playerIndex, playerIndex + 1);
-            int[] redDefinitions = MatchLineupPlanner.BuildRotatedTeamDefinitionIndices(
-                roster.Length, teamSize, -1, playerIndex + 2);
+            int[] blueDefinitions = MatchLineupPlanner.BuildRoleBalancedLineup(
+                roster, playerIndex, teamSize);
+            // Opposing comps must read differently from the player's own
+            // team, not mirror it hero-for-hero. The seed varies match to
+            // match (a per-launch counter) but stays deterministic for the
+            // duration of a single BuildLineup call.
+            int opponentSeed = System.Threading.Interlocked.Increment(ref opponentLineupSeedCounter);
+            int[] redDefinitions = MatchLineupPlanner.BuildOpponentLineup(
+                roster, blueDefinitions, teamSize, opponentSeed);
 
             var lineup = new List<LineupEntry>(teamSize * 2)
             {

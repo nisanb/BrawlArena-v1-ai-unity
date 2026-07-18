@@ -36,10 +36,13 @@ namespace BrawlArena
         [Tooltip("Seconds required to restore one of the three basic-attack charges. Zero-valued legacy data uses the production default.")]
         [Min(0.05f)] public float basicAttackReloadInterval =
             MobileCombatRules.BasicAttackReloadInterval;
-        [Tooltip("Seconds into the swing when damage lands / projectile spawns.")]
+        [Tooltip("Seconds into the swing when damage lands / projectile spawns. Animation-" +
+                 "derived timing is preferred at runtime; this is the fallback seed.")]
         public float attackHitDelay = 0.35f;
         public float attackMoveLock = 0.45f;
         public float autoAimRange = 3.5f;
+        [Tooltip("Full swing arc, in degrees, that a basic melee hit can land within.")]
+        public float meleeArcDegrees = MobileCombatRules.MeleeArcDegrees;
 
         [Header("Ward Step")]
         [Tooltip("Combat-only Ward Flow. Capacity is fixed at 60 for every brawler.")]
@@ -141,6 +144,9 @@ namespace BrawlArena
         public bool IsPlayer { get; private set; }
         public int MatchSpawnSlot { get; private set; } = -1;
         public bool IsRespawning => respawning;
+        public float RespawnRemaining =>
+            respawning ? Mathf.Max(0f, respawnReadyAt - Time.time) : 0f;
+        public float WardStepCost => wardStepCost;
         public bool CanContestObjective => gameObject.activeInHierarchy && enabled &&
                                            !IsDead && !respawning;
         public bool IsSpawnProtected => Health != null && Health.Invulnerable;
@@ -153,6 +159,8 @@ namespace BrawlArena
         public float Stamina { get; private set; }
         public float WardFlow => Stamina;
         public bool WardStepping { get; private set; }
+        /// <summary>True while a knockback displacement coroutine is driving this body.</summary>
+        public bool KnockbackActive => knockbackRoutine != null;
         public bool CanWardStep =>
             CanAct && !WardStepping && !superInProgress && knockbackRoutine == null &&
             Stamina + 0.0001f >= wardStepCost;
@@ -170,8 +178,16 @@ namespace BrawlArena
                 return IsSlowed ? "SLOWED" : string.Empty;
             }
         }
-        public float CurrentSpeed => moveSpeed * spellSlowMultiplier *
-            (attackRoutine != null ? MobileCombatRules.CastMovementMultiplier : 1f);
+        public float CurrentSpeed => moveSpeed * spellSlowMultiplier * AttackMovementMultiplier;
+        float AttackMovementMultiplier
+        {
+            get
+            {
+                if (attackRoutine == null) return 1f;
+                bool isMelee = projectilePrefab == null;
+                return MobileCombatRules.AttackPhaseMovementMultiplier(isMelee, attackPreImpact);
+            }
+        }
         public float CooldownFraction =>
             Mathf.Clamp01((nextAttackTime - Time.time) / Mathf.Max(0.01f, attackCooldown));
         public int BasicAttackCharges => basicAttackCharges;
@@ -229,6 +245,8 @@ namespace BrawlArena
         [SerializeField, HideInInspector] MonoBehaviour weaponPresentationSource;
         [SerializeField, HideInInspector] bool weaponPresentationLocked;
         IBrawlerWeaponPresentation weaponPresentation;
+        BrawlerMotionFlourish motionFlourish;
+        bool motionFlourishResolved;
         Transform spellOrigin;
         AudioSource audioSource;
         SkinnedMeshRenderer[] skins;
@@ -238,11 +256,13 @@ namespace BrawlArena
             MobileCombatRules.BasicAttackChargeCapacity;
         float basicAttackReloadElapsed;
         float attackLockUntil;
+        bool attackPreImpact;
         float nextFlinchTime;
         float staminaRegenAt;
         float lastDamagedAt;
         float nextHealthRegenAt;
         bool respawning;
+        float respawnReadyAt;
         bool initialized;
         bool superInProgress;
         Coroutine attackRoutine;
@@ -527,6 +547,24 @@ namespace BrawlArena
             if (weaponPresentation == null &&
                 weaponPresentationSource is IBrawlerWeaponPresentation restored)
                 weaponPresentation = restored;
+        }
+
+        /// <summary>
+        /// Optional cosmetic sibling attached after Start by production
+        /// assembly. Missing on non-production actors (tests, previews), so
+        /// callers must treat this as best-effort presentation, never authority.
+        /// </summary>
+        BrawlerMotionFlourish MotionFlourish
+        {
+            get
+            {
+                if (!motionFlourishResolved)
+                {
+                    motionFlourish = GetComponent<BrawlerMotionFlourish>();
+                    motionFlourishResolved = true;
+                }
+                return motionFlourish;
+            }
         }
 
         /// <summary>
@@ -1345,7 +1383,7 @@ namespace BrawlArena
             nextAttackTime = Time.time + attackCooldown;
             attackLockUntil = Time.time + attackMoveLock;
             AttacksUsed++;
-            FaceInstant(transform.position + worldDirection);
+            FaceCombat(transform.position + worldDirection);
             PresentWeaponAim(worldDirection);
             attackRoutine = StartCoroutine(AttackRoutine(target, worldDirection));
             BalanceTelemetryRuntime.RecordAttack(this);
@@ -1398,7 +1436,7 @@ namespace BrawlArena
             superInProgress = true;
             nextAttackTime = Mathf.Max(nextAttackTime, Time.time + 0.3f);
             attackLockUntil = Mathf.Max(attackLockUntil, Time.time + 0.28f);
-            FaceInstant(transform.position + worldDirection);
+            FaceCombat(transform.position + worldDirection);
             PresentWeaponAim(worldDirection);
             superRoutine = StartCoroutine(SuperRoutine(target, worldDirection));
             BalanceTelemetryRuntime.RecordSuper(this);
@@ -1413,14 +1451,28 @@ namespace BrawlArena
             Motor?.Face(dir, true);
         }
 
+        /// <summary>
+        /// Attack/Super presentation turns at the bounded combat turn rate
+        /// instead of snapping. Ward Step and spawn/teleport facing remain
+        /// instant via FaceInstant.
+        /// </summary>
+        void FaceCombat(Vector3 worldPoint)
+        {
+            Vector3 dir = worldPoint - transform.position;
+            dir.y = 0f;
+            Motor?.Face(dir, false);
+        }
+
         IEnumerator AttackRoutine(BrawlerController target, Vector3 worldDirection)
         {
             try
             {
+                attackPreImpact = true;
                 TryPresent(AnimationPresentationOperation.PlayBasicAttack);
                 CombatFeedback.TryPlaySfx(audioSource, attackSfx);
 
-                yield return new WaitForSeconds(attackHitDelay);
+                float hitDelay = ResolveAttackImpactDelay(false);
+                yield return new WaitForSeconds(hitDelay);
                 if (!CanAct) yield break;
 
                 // Auto-aim may make a small correction during the windup, but it
@@ -1432,15 +1484,74 @@ namespace BrawlArena
                     worldDirection = MobileCombatRules.LimitAimCorrection(
                         worldDirection, trackedDirection);
                 }
-                FaceInstant(transform.position + worldDirection);
+                FaceCombat(transform.position + worldDirection);
 
                 if (projectilePrefab != null) FireProjectile(target, worldDirection);
                 else MeleeStrike(worldDirection);
+
+                // Movement commitment continues into a brief recovery window
+                // after the hit lands, filling out the rest of attackMoveLock.
+                attackPreImpact = false;
+                float recovery = Mathf.Max(0f, attackMoveLock - hitDelay);
+                if (recovery > 0f) yield return new WaitForSeconds(recovery);
             }
             finally
             {
+                attackPreImpact = false;
                 PresentWeaponAim(Vector3.zero);
                 attackRoutine = null;
+            }
+        }
+
+        /// <summary>
+        /// Prefers the Invector clip's authored timing but never lets it exceed
+        /// the current attackHitDelay seed, so CharacterSkill's AttackSpeed
+        /// progression (which scales attackHitDelay directly) still speeds up
+        /// hit timing for heroes with a resolvable animation override.
+        /// </summary>
+        float ResolveAttackImpactDelay(bool strongAttack)
+        {
+            float fallback = Mathf.Max(0.05f, attackHitDelay);
+            IBrawlerAnimationDriver driver = AnimationDriver;
+            if (driver == null) return fallback;
+
+            try
+            {
+                float derived = driver.GetAttackImpactDelay(strongAttack, fallback);
+                return MobileCombatRules.ApplyAttackSpeedProgression(derived, fallback);
+            }
+            catch (System.Exception exception)
+            {
+                AnimationPresentationFailureCount++;
+                LastAnimationPresentationFailure = exception;
+                LastAnimationPresentationFailureOperation = "GetAttackImpactDelay";
+                LastAnimationPresentationFailureType = exception.GetType().FullName;
+                LastAnimationPresentationFailureMessage = exception.Message;
+                return fallback;
+            }
+        }
+
+        /// <summary>
+        /// Best-effort hit-stop: failures are retained for diagnostics and never
+        /// escape into damage, movement, or match-lifecycle authority.
+        /// </summary>
+        public void RequestHitStop(float seconds)
+        {
+            if (seconds <= 0f) return;
+            IBrawlerAnimationDriver driver = AnimationDriver;
+            if (driver == null) return;
+
+            try
+            {
+                driver.PauseAnimation(seconds);
+            }
+            catch (System.Exception exception)
+            {
+                AnimationPresentationFailureCount++;
+                LastAnimationPresentationFailure = exception;
+                LastAnimationPresentationFailureOperation = "PauseAnimation";
+                LastAnimationPresentationFailureType = exception.GetType().FullName;
+                LastAnimationPresentationFailureMessage = exception.Message;
             }
         }
 
@@ -1448,15 +1559,20 @@ namespace BrawlArena
         {
             try
             {
+                // The Super clip request and its procedural windup crouch both
+                // fire before the windup wait so a Burst-style Super reads as
+                // an intentional wind-up-and-release even when the physical
+                // delay below is short.
                 TryPresent(AnimationPresentationOperation.PlaySuper);
+                float windupSeconds = superStyle == BrawlerSuperStyle.Dash ? 0.04f : 0.14f;
+                MotionFlourish?.PresentSuperWindup(windupSeconds);
                 if (superVfx != null)
                     SpawnVfx(superVfx, transform.position + Vector3.up * 0.8f, transform.rotation, 2.8f);
                 if (secondarySuperVfx != null && secondarySuperVfx != superVfx)
                     SpawnVfx(secondarySuperVfx, transform.position + Vector3.up * 0.8f,
                         transform.rotation, 2.8f);
 
-                yield return new WaitForSeconds(
-                    superStyle == BrawlerSuperStyle.Dash ? 0.04f : 0.14f);
+                yield return new WaitForSeconds(windupSeconds);
                 if (!CanAct) yield break;
 
                 if (target != null && !target.IsDead)
@@ -1466,7 +1582,7 @@ namespace BrawlArena
                     if (trackedDirection.sqrMagnitude > 0.0001f)
                         worldDirection = trackedDirection.normalized;
                 }
-                FaceInstant(transform.position + worldDirection);
+                FaceCombat(transform.position + worldDirection);
 
                 switch (superStyle)
                 {
@@ -1510,6 +1626,9 @@ namespace BrawlArena
             Projectile proj = CombatObjectPool.SpawnProjectile(
                 projectilePrefab, muzzle, Quaternion.LookRotation(dir));
             if (proj == null) return;
+            // A drag-committed manual shot has no target and flies exactly
+            // where it was aimed; only tap/auto shots may home.
+            proj.manualAim = target == null;
             PresentWeaponMuzzle(muzzle, dir);
             // Basic shots use only the authored projectile and compact primary
             // hit. The secondary collision layer is reserved for Supers.
@@ -1536,6 +1655,7 @@ namespace BrawlArena
             Projectile proj = CombatObjectPool.SpawnProjectile(
                 prefab, muzzle, Quaternion.LookRotation(dir));
             if (proj == null) return;
+            proj.manualAim = target == null;
             PresentWeaponMuzzle(muzzle, dir);
             GameObject superImpact = superImpactVfx != null ? superImpactVfx : impactVfx;
             proj.Launch(this, dir, attackDamage * superDamageMultiplier,
@@ -1560,7 +1680,12 @@ namespace BrawlArena
             var manager = MatchManager.Instance;
             if (manager == null || manager.State == MatchState.Ended) return;
             var brawlers = manager.GetBrawlers();
-            bool specialtyChainUsed = false;
+
+            // A basic melee swing commits to a single best (nearest valid)
+            // target inside the capsule and swing arc rather than cleaving
+            // every overlapping enemy; Burst Supers keep their own radial AoE.
+            BrawlerController best = null;
+            float bestDistanceSq = float.MaxValue;
             for (int i = 0; i < brawlers.Count; i++)
             {
                 var other = brawlers[i];
@@ -1568,25 +1693,32 @@ namespace BrawlArena
                 if (!CombatPhysics.PointInsideCapsule(other.CombatAimPoint, origin, tip,
                         attackRadius + other.CombatHitRadius))
                     continue;
+                if (!CombatPhysics.WithinMeleeArc(origin, direction, other.CombatAimPoint,
+                        meleeArcDegrees))
+                    continue;
                 if (!CombatPhysics.HasLineOfSight(origin, other.CombatAimPoint)) continue;
 
-                float applied = other.Health.TakeDamage(attackDamage, gameObject);
-                if (impactVfx != null)
-                    SpawnVfx(impactVfx, other.transform.position + Vector3.up * 1.1f, Quaternion.identity, 2.5f);
-                if (secondaryImpactVfx != null && secondaryImpactVfx != impactVfx)
-                    SpawnVfx(secondaryImpactVfx, other.transform.position + Vector3.up * 1.1f,
-                        Quaternion.identity, 2.5f);
-                if (applied > 0f)
-                {
-                    if (specialty.knockback > 0f)
-                        other.ApplyKnockback(other.transform.position - transform.position,
-                            specialty.knockback);
-                    ApplySpellSpecialtyHit(other, applied, other.CombatAimPoint,
-                        secondaryImpactVfx, !specialtyChainUsed);
-                    if (specialty.school == SpellSchool.Storm)
-                        specialtyChainUsed = true;
-                }
-                if (manager.State == MatchState.Ended) break;
+                float distanceSq = (other.transform.position - transform.position).sqrMagnitude;
+                if (distanceSq >= bestDistanceSq) continue;
+                bestDistanceSq = distanceSq;
+                best = other;
+            }
+            if (best == null) return;
+
+            float applied = best.Health.TakeDamage(attackDamage, gameObject);
+            if (impactVfx != null)
+                SpawnVfx(impactVfx, best.transform.position + Vector3.up * 1.1f, Quaternion.identity, 2.5f);
+            if (secondaryImpactVfx != null && secondaryImpactVfx != impactVfx)
+                SpawnVfx(secondaryImpactVfx, best.transform.position + Vector3.up * 1.1f,
+                    Quaternion.identity, 2.5f);
+            if (applied > 0f)
+            {
+                RequestHitStop(MobileCombatRules.HitStopLightAttacker);
+                best.RequestHitStop(MobileCombatRules.HitStopLightVictim);
+                if (specialty.knockback > 0f)
+                    best.ApplyKnockback(best.transform.position - transform.position,
+                        specialty.knockback);
+                ApplySpellSpecialtyHit(best, applied, best.CombatAimPoint, secondaryImpactVfx);
             }
         }
 
@@ -1614,6 +1746,8 @@ namespace BrawlArena
                 float applied = other.Health.TakeDamage(damage, gameObject);
                 if (applied > 0f && manager.IsCombatActive)
                 {
+                    RequestHitStop(MobileCombatRules.HitStopHeavyAttacker);
+                    other.RequestHitStop(MobileCombatRules.HitStopHeavyVictim);
                     other.ApplyKnockback(other.transform.position - transform.position,
                         Mathf.Max(superKnockback, specialty.knockback));
                     ApplySpellSpecialtyHit(other, applied, other.CombatAimPoint,
@@ -1681,11 +1815,13 @@ namespace BrawlArena
 
         IEnumerator KnockbackRoutine(Vector3 direction, float distance)
         {
-            float duration = Mathf.Clamp(0.1f + distance * 0.018f, 0.12f, 0.28f);
+            float duration = MobileCombatRules.KnockbackDuration(distance);
             float moved = 0f;
             for (float elapsed = 0f; elapsed < duration; elapsed += Time.deltaTime)
             {
-                float next = Mathf.SmoothStep(0f, distance, Mathf.Clamp01((elapsed + Time.deltaTime) / duration));
+                float progress = MobileCombatRules.KnockbackProgress(
+                    Mathf.Clamp01((elapsed + Time.deltaTime) / duration));
+                float next = distance * progress;
                 Vector3 delta = direction * (next - moved);
                 moved = next;
                 Motor.Displace(delta, false);
@@ -1749,6 +1885,14 @@ namespace BrawlArena
 
         // ---------------- damage / death / respawn ----------------
 
+        // Nearby-hit camera shake, scaled down to zero at CombatFeedback.ProximityShakeRange.
+        const float NearbyHitShakeAmplitude = 0.14f;
+        const float NearbyHitShakeDuration = 0.1f;
+        // KO shake out-flashes a routine hit so the bigger moment reads as bigger.
+        const float NearbyKnockoutShakeAmplitude = 0.45f;
+        const float NearbyKnockoutShakeDuration = 0.28f;
+        const float KoVfxScale = 1.4f;
+
         void OnDamaged(float amount, GameObject attacker)
         {
             lastDamagedAt = Time.time;
@@ -1762,15 +1906,17 @@ namespace BrawlArena
             }
             AddSuperCharge(amount * superChargeFromDamageTaken);
             CombatFeedback.TryPlaySfx(audioSource, hitSfx);
-            if (IsPlayer)
-            {
-                if (!IsDead) CombatFeedback.ReportLocalReceivedHit();
-                BrawlCamera.Shake(0.28f, 0.18f);
-            }
+            if (IsPlayer && !IsDead) CombatFeedback.ReportLocalReceivedHit();
+            // Un-gated from IsPlayer: any hit near what the camera is
+            // following should read on screen, not just the local player's own.
+            CombatFeedback.ReportProximityShake(transform.position,
+                NearbyHitShakeAmplitude, NearbyHitShakeDuration);
             if (IsDead) return;
-            if (Time.time > attackLockUntil && Time.time > nextFlinchTime && Random.value < 0.6f)
+            // Every confirmed hit plays a reaction now; only the throttle window
+            // keeps a rapid multi-hit burst from stacking replays on one body.
+            if (Time.time >= nextFlinchTime)
             {
-                nextFlinchTime = Time.time + 1.1f;
+                nextFlinchTime = Time.time + MobileCombatRules.HitReactionThrottleSeconds;
                 TryPresent(AnimationPresentationOperation.PlayHitReaction);
             }
         }
@@ -1794,8 +1940,19 @@ namespace BrawlArena
             moveInput = Vector3.zero;
             PresentWeaponVisibility(false);
             TryPresent(AnimationPresentationOperation.PlayDeath);
-            if (koVfx != null) SpawnVfx(koVfx, transform.position + Vector3.up * 0.5f, Quaternion.identity, 3f);
-            if (IsPlayer) BrawlCamera.Shake(0.5f, 0.3f);
+            Vector3 koPoint = transform.position + Vector3.up * 0.5f;
+            if (koVfx != null)
+            {
+                // A KO must visually out-flash a routine damage tick, so its
+                // VFX runs scaled up rather than at the same size as any hit.
+                GameObject koInstance = CombatObjectPool.SpawnVfx(koVfx, koPoint, Quaternion.identity, 3f);
+                if (koInstance != null) koInstance.transform.localScale *= KoVfxScale;
+            }
+            StartCoroutine(KoFlashRingRoutine(koPoint));
+            // Un-gated from IsPlayer: any nearby KO should read on screen, and
+            // it must hit harder than a routine hit's shake.
+            CombatFeedback.ReportProximityShake(transform.position,
+                NearbyKnockoutShakeAmplitude, NearbyKnockoutShakeDuration);
             Motor?.Stop(true);
             if (MatchManager.Instance != null)
             {
@@ -1803,6 +1960,55 @@ namespace BrawlArena
                 if (MatchManager.Instance.State == MatchState.Ended) return;
             }
             StartCoroutine(RespawnRoutine());
+        }
+
+        /// <summary>
+        /// Brief expanding ring/flash that reinforces a KO as the bigger
+        /// moment: a world-space circle grows and fades out over a fraction
+        /// of a second, independent of any prefab-driven koVfx.
+        /// </summary>
+        IEnumerator KoFlashRingRoutine(Vector3 center)
+        {
+            const float duration = 0.32f;
+            const float startRadius = 0.5f;
+            const float endRadius = 2.6f;
+
+            GameObject ringObject = new GameObject("Brawl KO Flash");
+            ringObject.layer = CombatPhysics.VfxLayer;
+            ringObject.transform.position = center;
+            LineRenderer ring = ringObject.AddComponent<LineRenderer>();
+            ring.sharedMaterial = ProjectileReadabilityRuntime.SharedCueMaterial;
+            ring.useWorldSpace = false;
+            ring.loop = true;
+            ring.positionCount = 40;
+            ring.numCornerVertices = 2;
+            ring.numCapVertices = 2;
+            ring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            ring.receiveShadows = false;
+            for (int i = 0; i < ring.positionCount; i++)
+            {
+                float angle = i * Mathf.PI * 2f / ring.positionCount;
+                ring.SetPosition(i, new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)));
+            }
+
+            Color color = Color.Lerp(TeamUtil.Color(team), Color.white, 0.5f);
+            var block = new MaterialPropertyBlock();
+            float elapsed = 0f;
+            while (elapsed < duration && ringObject != null)
+            {
+                float t = elapsed / duration;
+                float radius = Mathf.Lerp(startRadius, endRadius, t);
+                ringObject.transform.localScale = new Vector3(radius, 1f, radius);
+                ring.widthMultiplier = Mathf.Lerp(0.22f, 0.04f, t);
+                Color faded = new Color(color.r, color.g, color.b, 1f - t);
+                block.Clear();
+                block.SetColor("_Color", faded);
+                block.SetColor("_BaseColor", faded);
+                ring.SetPropertyBlock(block);
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            if (ringObject != null) Destroy(ringObject);
         }
 
         IEnumerator RespawnRoutine()
@@ -1816,6 +2022,7 @@ namespace BrawlArena
             float delay = MatchManager.Instance != null
                 ? MatchManager.Instance.RespawnDelayFor(this)
                 : ControlZoneRules.RespawnDelay;
+            respawnReadyAt = Time.time + delay;
             if (IsPlayer && BrawlHUD.Instance != null) BrawlHUD.Instance.ShowRespawn(delay);
 
             yield return new WaitForSeconds(delay);

@@ -194,10 +194,11 @@ MonoBehaviour:
   attackHitDelay: 0.35
   attackMoveLock: 0.45
   autoAimRange: 3.5
+  meleeArcDegrees: 100
   maxStamina: 60
   wardStepCost: 20
   wardStepDistance: 2.75
-  wardStepDuration: 0.16
+  wardStepDuration: 0.22
   staminaRegenPerSec: 8
   staminaRegenDelay: 0.75
   healthRegenDelay: 3

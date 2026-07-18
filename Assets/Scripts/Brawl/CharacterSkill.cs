@@ -68,54 +68,14 @@ namespace BrawlArena
 
     public static class CharacterSkillBook
     {
-        static readonly CharacterSkillDefinition[] Aria =
-        {
-            new CharacterSkillDefinition("arcane_edge", "Arcane Edge", "Twin blades hit harder.",
-                CharacterSkillEffect.Damage, 0.05f),
-            new CharacterSkillDefinition("blade_tempo", "Blade Tempo", "Attacks recover faster.",
-                CharacterSkillEffect.AttackSpeed, 0.06f),
-            new CharacterSkillDefinition("duelist_footwork", "Duelist Footwork", "Move faster while dueling.",
-                CharacterSkillEffect.MoveSpeed, 0.04f),
-        };
-
         static readonly CharacterSkillDefinition[] Bastion =
         {
-            new CharacterSkillDefinition("iron_guard", "Iron Guard", "Maximum health is increased.",
-                CharacterSkillEffect.MaxHealth, 0.07f),
-            new CharacterSkillDefinition("second_wind", "Second Wind", "Out-of-combat regen restores more.",
-                CharacterSkillEffect.Regen, 0.025f),
-            new CharacterSkillDefinition("shield_drive", "Shield Drive", "Ward Flow recharges faster.",
-                CharacterSkillEffect.Stamina, 0.06f),
-        };
-
-        static readonly CharacterSkillDefinition[] Nova =
-        {
-            new CharacterSkillDefinition("storm_focus", "Storm Focus", "Spells recharge faster.",
-                CharacterSkillEffect.AttackSpeed, 0.06f),
-            new CharacterSkillDefinition("charged_bolts", "Charged Bolts", "Projectile damage is increased.",
-                CharacterSkillEffect.Damage, 0.06f),
-            new CharacterSkillDefinition("far_sight", "Far Sight", "Auto-aim reaches farther.",
-                CharacterSkillEffect.AutoAim, 0.75f),
-        };
-
-        static readonly CharacterSkillDefinition[] Grimm =
-        {
-            new CharacterSkillDefinition("heavy_cleaver", "Heavy Cleaver", "Greatsword damage is increased.",
-                CharacterSkillEffect.Damage, 0.07f),
-            new CharacterSkillDefinition("battle_hardened", "Battle Hardened", "Maximum health is increased.",
-                CharacterSkillEffect.MaxHealth, 0.06f),
-            new CharacterSkillDefinition("fast_windup", "Fast Windup", "Heavy swings recover faster.",
-                CharacterSkillEffect.AttackSpeed, 0.05f),
-        };
-
-        static readonly CharacterSkillDefinition[] Vex =
-        {
-            new CharacterSkillDefinition("shadow_step", "Shadow Step", "Movement speed is increased.",
-                CharacterSkillEffect.MoveSpeed, 0.05f),
-            new CharacterSkillDefinition("ambush_blades", "Ambush Blades", "Blade damage is increased.",
-                CharacterSkillEffect.Damage, 0.05f),
-            new CharacterSkillDefinition("quick_return", "Quick Return", "Respawn time is reduced.",
-                CharacterSkillEffect.Respawn, 0.06f),
+            new CharacterSkillDefinition("iron_guard", "Iron Guard", "Maximum health is increased — hold the line longer.",
+                CharacterSkillEffect.MaxHealth, 0.08f),
+            new CharacterSkillDefinition("shield_drive", "Shield Drive", "Dash recharges faster, letting the vanguard lunge into the zone more often.",
+                CharacterSkillEffect.Stamina, 0.07f),
+            new CharacterSkillDefinition("bulwark_recovery", "Bulwark Recovery", "Out-of-combat regen restores more between engages.",
+                CharacterSkillEffect.Regen, 0.03f),
         };
 
         static readonly CharacterSkillDefinition[] Thorn =
@@ -128,26 +88,6 @@ namespace BrawlArena
                 CharacterSkillEffect.MoveSpeed, 0.04f),
         };
 
-        static readonly CharacterSkillDefinition[] ArcaneWizard =
-        {
-            new CharacterSkillDefinition("arcane_mastery", "Restoration Mastery", "Life spells hit harder and trigger stronger smart-heals.",
-                CharacterSkillEffect.Damage, 0.06f),
-            new CharacterSkillDefinition("mana_weave", "Sanctuary Weave", "Out-of-combat recovery is improved.",
-                CharacterSkillEffect.Regen, 0.025f),
-            new CharacterSkillDefinition("astral_sight", "Merciful Sight", "Auto-aim reaches farther.",
-                CharacterSkillEffect.AutoAim, 0.75f),
-        };
-
-        static readonly CharacterSkillDefinition[] FireWizard =
-        {
-            new CharacterSkillDefinition("wildfire", "Wildfire", "Fire spell damage is increased.",
-                CharacterSkillEffect.Damage, 0.07f),
-            new CharacterSkillDefinition("quick_kindling", "Quick Kindling", "Fire spells recover faster.",
-                CharacterSkillEffect.AttackSpeed, 0.055f),
-            new CharacterSkillDefinition("cinder_ward", "Cinder Ward", "Maximum health is increased.",
-                CharacterSkillEffect.MaxHealth, 0.05f),
-        };
-
         static readonly CharacterSkillDefinition[] FrostWizard =
         {
             new CharacterSkillDefinition("ice_armor", "Ice Armor", "Maximum health is increased.",
@@ -156,36 +96,6 @@ namespace BrawlArena
                 CharacterSkillEffect.Regen, 0.025f),
             new CharacterSkillDefinition("cold_focus", "Cold Focus", "Auto-aim reaches farther.",
                 CharacterSkillEffect.AutoAim, 0.7f),
-        };
-
-        static readonly CharacterSkillDefinition[] StormWizard =
-        {
-            new CharacterSkillDefinition("overcharge", "Overcharge", "Storm spells recover faster.",
-                CharacterSkillEffect.AttackSpeed, 0.065f),
-            new CharacterSkillDefinition("tailwind", "Tailwind", "Movement speed is increased.",
-                CharacterSkillEffect.MoveSpeed, 0.05f),
-            new CharacterSkillDefinition("lightning_rod", "Lightning Rod", "Auto-aim reaches farther.",
-                CharacterSkillEffect.AutoAim, 0.8f),
-        };
-
-        static readonly CharacterSkillDefinition[] EarthWizard =
-        {
-            new CharacterSkillDefinition("stone_skin", "Stone Skin", "Maximum health is increased.",
-                CharacterSkillEffect.MaxHealth, 0.075f),
-            new CharacterSkillDefinition("fault_line", "Fault Line", "Earth spell damage is increased.",
-                CharacterSkillEffect.Damage, 0.06f),
-            new CharacterSkillDefinition("deep_roots", "Deep Roots", "Ward Flow recharges faster.",
-                CharacterSkillEffect.Stamina, 0.07f),
-        };
-
-        static readonly CharacterSkillDefinition[] VoidWizard =
-        {
-            new CharacterSkillDefinition("rift_walker", "Plaguebearer", "Movement speed is increased.",
-                CharacterSkillEffect.MoveSpeed, 0.055f),
-            new CharacterSkillDefinition("entropy", "Virulent Mixture", "Poison spells recover faster.",
-                CharacterSkillEffect.AttackSpeed, 0.055f),
-            new CharacterSkillDefinition("return_from_beyond", "Toxic Renewal", "Respawn time is reduced.",
-                CharacterSkillEffect.Respawn, 0.07f),
         };
 
         static readonly CharacterSkillDefinition[] DefaultMelee =
@@ -213,18 +123,9 @@ namespace BrawlArena
             if (def == null) return DefaultMelee;
             switch (def.id)
             {
-                case "aria": return Aria;
                 case "bastion": return Bastion;
-                case "nova": return Nova;
-                case "grimm": return Grimm;
-                case "vex": return Vex;
                 case "thorn": return Thorn;
-                case "arcane": return ArcaneWizard;
-                case "fire": return FireWizard;
                 case "frost": return FrostWizard;
-                case "storm": return StormWizard;
-                case "earth": return EarthWizard;
-                case "void": return VoidWizard;
                 default: return def.projectilePrefab != null ? DefaultRanged : DefaultMelee;
             }
         }

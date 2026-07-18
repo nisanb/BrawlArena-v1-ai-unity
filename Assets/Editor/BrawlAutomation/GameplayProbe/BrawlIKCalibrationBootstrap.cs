@@ -429,22 +429,18 @@ namespace BrawlArena.EditorAutomation
         static string NormalizeRoster(string value)
         {
             string roster = (value ?? string.Empty).Trim().ToLowerInvariant();
-            if (roster == "fire" || roster == "frost" || roster == "storm")
+            if (roster == "frost")
                 return roster;
             throw new ArgumentException(
-                "Calibration roster must be fire, frost, or storm.", nameof(value));
+                "Calibration roster must be frost.", nameof(value));
         }
 
         static string PrefabPathForRoster(string roster)
         {
             switch (roster)
             {
-                case "fire":
-                    return InvectorMigrationPilotBuilder.ProductionHumanPrefabPath;
                 case "frost":
                     return InvectorRimeMigrationBuilder.ProductionHumanPrefabPath;
-                case "storm":
-                    return InvectorTempestMigrationBuilder.ProductionHumanPrefabPath;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(roster));
             }
@@ -454,9 +450,7 @@ namespace BrawlArena.EditorAutomation
         {
             switch (roster)
             {
-                case "fire": return "Cinder";
                 case "frost": return "Rime";
-                case "storm": return "Tempest";
                 default: return roster;
             }
         }

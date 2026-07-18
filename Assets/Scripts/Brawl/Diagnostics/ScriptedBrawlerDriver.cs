@@ -29,6 +29,10 @@ namespace BrawlArena.EditorAutomation
         {
             public string name;
             public string rosterId;
+            // Motion-review scenarios only need the driver and cameras, not a
+            // verified weapon-IK pose; melee presenters never satisfy the
+            // strict pose gate that the wand/bow IK studies rely on.
+            public bool relaxedPresentationGate;
             public List<ProbeStep> steps = new List<ProbeStep>();
         }
 

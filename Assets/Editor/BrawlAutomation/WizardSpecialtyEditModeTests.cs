@@ -7,12 +7,10 @@ namespace BrawlArena.EditorAutomation
 {
     public class WizardSpecialtyEditModeTests
     {
-        [TestCase("arcane", SpellSchool.Arcane, "SANCTUARY NOVA")]
-        [TestCase("fire", SpellSchool.Fire, "INFERNO COMET")]
         [TestCase("frost", SpellSchool.Frost, "ABSOLUTE ZERO")]
-        [TestCase("storm", SpellSchool.Storm, "TEMPEST CHAIN")]
-        [TestCase("earth", SpellSchool.Earth, "TECTONIC WAVE")]
-        [TestCase("void", SpellSchool.Poison, "TOXIC BLOOM")]
+        [TestCase("thorn", SpellSchool.None, "EXPLOSIVE ARROW")]
+        [TestCase("bastion", SpellSchool.None, "AEGIS SHOCKWAVE")]
+        [TestCase("unknown", SpellSchool.None, "POWER BURST")]
         public void WizardIdsResolveSchoolAndSuper(string id, SpellSchool expectedSchool,
             string expectedSuper)
         {
@@ -23,37 +21,6 @@ namespace BrawlArena.EditorAutomation
             Assert.AreEqual(expectedSchool, definition.specialty.school);
             Assert.AreEqual(expectedSuper, definition.superName);
             Assert.Greater(definition.superDamageMultiplier, 1f);
-        }
-
-        [Test]
-        public void LegacySerializedWizardPayloadsReceiveNewRpgRoles()
-        {
-            var healer = new BrawlerDefinition
-            {
-                id = "arcane",
-                role = "Arcane Savant",
-                specialty = SpellSpecialty.ForSchool(SpellSchool.Arcane),
-                superName = "ARCANE OVERLOAD",
-            };
-            var poison = new BrawlerDefinition
-            {
-                id = "void",
-                displayName = "Nyx",
-                role = "Voidweaver",
-                specialty = SpellSpecialty.ForSchool(SpellSchool.Void),
-                superName = "EVENT HORIZON",
-            };
-
-            healer.EnsureSuperConfiguration();
-            poison.EnsureSuperConfiguration();
-
-            Assert.AreEqual("Lifeweaver", healer.role);
-            Assert.Greater(healer.specialty.allyHealFraction, 0f);
-            Assert.Greater(healer.specialty.ritualHealFraction, 0f);
-            Assert.AreEqual("Mire", poison.displayName);
-            Assert.AreEqual("Plagueweaver", poison.role);
-            Assert.AreEqual(SpellSchool.Poison, poison.specialty.school);
-            Assert.Greater(poison.specialty.poisonDamageFraction, 0f);
         }
 
         [Test]
@@ -109,13 +76,13 @@ namespace BrawlArena.EditorAutomation
         [Test]
         public void WizardSkillIdsAreDistinctAndSchoolSpecific()
         {
-            string[] schools = { "arcane", "fire", "frost", "storm", "earth", "void" };
+            string[] rosterIds = { "frost", "thorn", "bastion" };
             var ids = new HashSet<string>();
 
-            for (int i = 0; i < schools.Length; i++)
+            for (int i = 0; i < rosterIds.Length; i++)
             {
                 CharacterSkillDefinition[] skills = CharacterSkillBook.For(
-                    new BrawlerDefinition { id = schools[i] });
+                    new BrawlerDefinition { id = rosterIds[i] });
                 Assert.AreEqual(3, skills.Length);
                 for (int j = 0; j < skills.Length; j++)
                     Assert.IsTrue(ids.Add(skills[j].id), "Duplicate wizard skill id: " + skills[j].id);

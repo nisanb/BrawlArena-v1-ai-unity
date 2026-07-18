@@ -55,9 +55,103 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
-        public void CastMovementMultiplierIsEightyPercent()
+        public void AttackPhaseMovementMultiplierMatchesWindupAndRecoveryPhases()
         {
-            Assert.That(MobileCombatRules.CastMovementMultiplier, Is.EqualTo(0.8f));
+            Assert.That(MobileCombatRules.AttackPhaseMovementMultiplier(true, true),
+                Is.EqualTo(MobileCombatRules.MeleeWindupMovementMultiplier).Within(Tolerance));
+            Assert.That(MobileCombatRules.AttackPhaseMovementMultiplier(false, true),
+                Is.EqualTo(MobileCombatRules.RangedWindupMovementMultiplier).Within(Tolerance));
+            Assert.That(MobileCombatRules.AttackPhaseMovementMultiplier(true, false),
+                Is.EqualTo(MobileCombatRules.RecoveryMovementMultiplier).Within(Tolerance));
+            Assert.That(MobileCombatRules.AttackPhaseMovementMultiplier(false, false),
+                Is.EqualTo(MobileCombatRules.RecoveryMovementMultiplier).Within(Tolerance));
+        }
+
+        [Test]
+        public void WardStepDurationIsTwoHundredTwentyMilliseconds()
+        {
+            Assert.That(MobileCombatRules.WardStepDuration, Is.EqualTo(0.22f).Within(Tolerance));
+        }
+
+        [Test]
+        public void KnockbackDurationClampsBetweenMinimumAndMaximum()
+        {
+            Assert.That(MobileCombatRules.KnockbackDuration(0f), Is.EqualTo(0.16f).Within(Tolerance));
+            Assert.That(MobileCombatRules.KnockbackDuration(1f),
+                Is.EqualTo(0.22f).Within(Tolerance));
+            Assert.That(MobileCombatRules.KnockbackDuration(100f), Is.EqualTo(0.5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void KnockbackProgressIsEaseOutCubicFastStartSlowFinish()
+        {
+            Assert.That(MobileCombatRules.KnockbackProgress(0f), Is.EqualTo(0f).Within(Tolerance));
+            Assert.That(MobileCombatRules.KnockbackProgress(1f), Is.EqualTo(1f).Within(Tolerance));
+
+            float early = MobileCombatRules.KnockbackProgress(0.25f);
+            float linear = 0.25f;
+            Assert.Greater(early, linear, "Ease-out cubic must front-load displacement.");
+
+            float quarterStep = MobileCombatRules.KnockbackProgress(0.25f);
+            float nextQuarterStep = MobileCombatRules.KnockbackProgress(0.5f) - quarterStep;
+            Assert.Greater(quarterStep, nextQuarterStep,
+                "Displacement covered must decay across equal time steps.");
+        }
+
+        [Test]
+        public void MeleeArcDegreesDefaultIsOneHundred()
+        {
+            Assert.That(MobileCombatRules.MeleeArcDegrees, Is.EqualTo(100f));
+        }
+
+        [Test]
+        public void WithinMeleeArcAcceptsCenterAndBoundaryButRejectsBehind()
+        {
+            Vector3 origin = Vector3.zero;
+            Vector3 committed = Vector3.forward;
+
+            Assert.IsTrue(CombatPhysics.WithinMeleeArc(origin, committed,
+                new Vector3(0f, 0f, 5f), 100f), "Dead-ahead must always be inside the arc.");
+            Assert.IsTrue(CombatPhysics.WithinMeleeArc(origin, committed,
+                new Vector3(1f, 0f, 1f), 100f), "45 degrees off-center is inside a 100 degree arc.");
+            Assert.IsFalse(CombatPhysics.WithinMeleeArc(origin, committed,
+                new Vector3(0f, 0f, -5f), 100f), "Directly behind must be outside a 100 degree arc.");
+        }
+
+        [Test]
+        public void ResolveAnimationImpactDelayClampsClipLengthAndFallsBackWhenMissing()
+        {
+            Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(0f, 0.35f),
+                Is.EqualTo(0.35f).Within(Tolerance), "A missing/zero clip must use the fallback seed.");
+
+            // 0.2s clip * 0.42 = 0.084, clamped up to the 0.15s floor.
+            Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(0.2f, 0.35f),
+                Is.EqualTo(MobileCombatRules.AttackImpactDelayMinSeconds).Within(Tolerance));
+
+            // 3s clip * 0.42 = 1.26, clamped down to the 0.9s ceiling.
+            Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(3f, 0.35f),
+                Is.EqualTo(MobileCombatRules.AttackImpactDelayMaxSeconds).Within(Tolerance));
+
+            // A mid-range clip lands on the plain scaled value.
+            Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(1f, 0.35f),
+                Is.EqualTo(0.42f).Within(Tolerance));
+        }
+
+        [Test]
+        public void AttackSpeedProgressionNeverLetsTheDerivedDelayExceedTheScaledFallback()
+        {
+            // Progression scaled the fallback down to 0.3s; a slower derived
+            // value must be capped at the purchased speed-up.
+            Assert.That(MobileCombatRules.ApplyAttackSpeedProgression(0.6f, 0.3f),
+                Is.EqualTo(0.3f).Within(Tolerance));
+
+            // A derived value already faster than the fallback passes through.
+            Assert.That(MobileCombatRules.ApplyAttackSpeedProgression(0.2f, 0.3f),
+                Is.EqualTo(0.2f).Within(Tolerance));
+
+            // A missing derived value (<=0) always uses the fallback.
+            Assert.That(MobileCombatRules.ApplyAttackSpeedProgression(0f, 0.3f),
+                Is.EqualTo(0.3f).Within(Tolerance));
         }
 
         [Test]
@@ -271,7 +365,7 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
-        public void RightCastSurfaceOwnsHalfScreenAndActionButtonsStayAboveIt()
+        public void RightCastSurfaceOwnsBottomRightQuadrantAndActionButtonsStayAboveIt()
         {
             var hudObject = new GameObject("HudLayoutTest");
             hudObject.SetActive(false);
@@ -285,8 +379,8 @@ namespace BrawlArena.EditorAutomation
 
                 RectTransform surface = hud.RightCastSurface;
                 Assert.NotNull(surface);
-                Assert.That(surface.anchorMin, Is.EqualTo(new Vector2(0.5f, 0f)));
-                Assert.That(surface.anchorMax, Is.EqualTo(Vector2.one));
+                Assert.That(surface.anchorMin, Is.EqualTo(new Vector2(0.55f, 0f)));
+                Assert.That(surface.anchorMax, Is.EqualTo(new Vector2(1f, 0.7f)));
                 Assert.IsTrue(surface.GetComponent<Image>().raycastTarget);
                 Assert.IsTrue(surface.GetComponent<AttackButtonWidget>().cameraOrbitEnabled);
 

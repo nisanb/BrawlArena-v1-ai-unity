@@ -16,7 +16,7 @@ namespace BrawlArena
     /// </summary>
     public class BrawlHUD : MonoBehaviour
     {
-        const int MaxClanRosterRows = 5;
+        const int MaxSquadRows = 5;
 
         enum HudTextStyle
         {
@@ -25,7 +25,8 @@ namespace BrawlArena
             Display,
         }
 
-        sealed class ClanRosterRow
+        /// <summary>A row in the squad panel: portrait, name, HP, and Super readiness.</summary>
+        sealed class SquadRow
         {
             public GameObject root;
             public CanvasGroup group;
@@ -33,19 +34,15 @@ namespace BrawlArena
             public Image portraitFrame;
             public Image portrait;
             public TextMeshProUGUI identity;
-            public TextMeshProUGUI level;
-            public TextMeshProUGUI health;
             public Image healthFill;
-            public TextMeshProUGUI flow;
-            public Image flowFill;
+            public Image superDiamond;
+            public Image superGlow;
+            public GameObject respawnOverlay;
+            public TextMeshProUGUI respawnText;
             public BrawlerController owner;
-            public HeroMatchProgression progression;
             public Sprite shownPortrait;
-            public int shownLevel = -1;
             public int shownHealth = -1;
             public int shownMaxHealth = -1;
-            public int shownFlow = -1;
-            public int shownMaxFlow = -1;
             public bool shownDead;
             public string shownIdentity;
         }
@@ -87,6 +84,7 @@ namespace BrawlArena
         TextMeshProUGUI superReadinessText;
         TextMeshProUGUI superFeedbackText;
         TextMeshProUGUI playerHealthText;
+        Image playerSuperStrip;
         TextMeshProUGUI playerMatchLevelText;
         TextMeshProUGUI playerMatchExperienceText;
         Image playerMatchExperienceFill;
@@ -100,8 +98,13 @@ namespace BrawlArena
         GameObject announcementRoot;
         TextMeshProUGUI centerText;
         UiTheme theme;
-        TextMeshProUGUI objectiveText;
-        TextMeshProUGUI objectiveSubText;
+        TextMeshProUGUI zoneModeLabel;
+        TextMeshProUGUI zoneObjectiveLabel;
+        Image zoneBarBlueFill;
+        Image zoneBarRedFill;
+        Image zoneCenterChip;
+        readonly Image[] zoneBluePips = new Image[3];
+        readonly Image[] zoneRedPips = new Image[3];
         TextMeshProUGUI respawnText;
         TextMeshProUGUI protectionText;
         TextMeshProUGUI bannerTitle;
@@ -126,14 +129,14 @@ namespace BrawlArena
         Button menuButton;
         GameObject respawnRoot;
         GameObject protectionRoot;
-        GameObject clanRosterRoot;
-        TextMeshProUGUI clanRosterHeader;
+        GameObject squadRoot;
+        TextMeshProUGUI squadHeader;
         BrawlerController player;
         HeroMatchProgression playerMatchProgression;
-        TeamId? shownClanRosterTeam;
+        TeamId? shownSquadTeam;
 
-        readonly ClanRosterRow[] clanRosterRows = new ClanRosterRow[MaxClanRosterRows];
-        readonly BrawlerController[] orderedClanMembers = new BrawlerController[MaxClanRosterRows];
+        readonly SquadRow[] squadRows = new SquadRow[MaxSquadRows];
+        readonly BrawlerController[] orderedSquadMembers = new BrawlerController[MaxSquadRows];
 
         int lastBlue = -1;
         int lastRed = -1;
@@ -189,9 +192,35 @@ namespace BrawlArena
 
         void Start()
         {
-            var pi = FindFirstObjectByType<PlayerBrawlerInput>();
-            if (pi != null) player = pi.GetComponent<BrawlerController>();
+            player = ResolveLocalPlayer();
             if (MatchManager.Instance != null) MatchManager.Instance.MatchEnded += OnMatchEnded;
+        }
+
+        /// <summary>
+        /// Binds the HUD to whichever brawler the human plays. The normal
+        /// path finds the live PlayerBrawlerInput component; a bot-driven or
+        /// autopilot-controlled session never spawns one, which used to leave
+        /// every widget (HP, XP, squad, respawn, super strip) stuck at "--/--"
+        /// for the whole match. GameFlow always pins the human lineup slot at
+        /// Blue team, match spawn slot 0, regardless of who is driving it, so
+        /// that is the fallback anchor.
+        /// </summary>
+        BrawlerController ResolveLocalPlayer()
+        {
+            var pi = FindFirstObjectByType<PlayerBrawlerInput>();
+            if (pi != null) return pi.GetComponent<BrawlerController>();
+
+            MatchManager mm = MatchManager.Instance;
+            if (mm == null) return null;
+            var brawlers = mm.GetBrawlers();
+            for (int i = 0; i < brawlers.Count; i++)
+            {
+                BrawlerController candidate = brawlers[i];
+                if (candidate != null && candidate.team == TeamId.Blue &&
+                    candidate.MatchSpawnSlot == 0)
+                    return candidate;
+            }
+            return null;
         }
 
         public bool ConsumeAttackPressed()
@@ -252,9 +281,9 @@ namespace BrawlArena
             bool unavailable = player == null || !player.CanAct;
             bool charging = !unavailable && !player.SuperReady;
             superFeedbackText.text = unavailable
-                ? "RITUAL UNAVAILABLE"
+                ? "SUPER UNAVAILABLE"
                 : charging
-                    ? "RITUAL CHARGING"
+                    ? "SUPER CHARGING"
                     : "NO VALID TARGET";
             superFeedbackText.color = charging
                 ? new Color(1f, 0.72f, 0.22f)
@@ -268,8 +297,8 @@ namespace BrawlArena
             wardFeedbackUntil = Time.unscaledTime + 0.75f;
             if (wardFeedbackText == null) return;
             wardFeedbackText.text = player != null &&
-                                    player.WardFlow + 0.0001f < player.wardStepCost
-                ? "WARD RECHARGING"
+                                    player.WardFlow + 0.0001f < player.WardStepCost
+                ? "RECHARGING"
                 : "PATH BLOCKED";
             wardFeedbackText.gameObject.SetActive(true);
         }
@@ -329,24 +358,22 @@ namespace BrawlArena
                 lastZoneOvertime = zoneOvertime;
                 if (controlMode)
                 {
-                    objectiveText.text = zoneOvertime ? "OVERTIME" : "CONTROL ZONE";
-                    string control = zoneState == ControlZoneState.BlueControlled
-                        ? "BLUE CONTROL"
-                        : zoneState == ControlZoneState.RedControlled
-                            ? "RED CONTROL"
-                            : zoneState == ControlZoneState.Contested
-                                ? "CONTESTED"
-                                : "ZONE EMPTY";
-                    objectiveSubText.text = zoneOvertime
-                        ? control + " - NEXT POINT WINS"
-                        : control + " - FIRST TO " + mm.scoreToWin;
+                    // Two separate, properly kerned lines read as words at a
+                    // glance; personas misread the old single-line "CONTROL
+                    // ZONE - FIRST TO 90" mash as a debug counter, so the mode
+                    // name is its own badge and the objective is a distinct
+                    // sub-line beneath it.
+                    zoneModeLabel.text = zoneOvertime ? "OVERTIME" : "CONTROL ZONE";
+                    zoneObjectiveLabel.text = zoneOvertime
+                        ? "NEXT POINT WINS"
+                        : "FIRST TO " + mm.scoreToWin;
                 }
                 else
                 {
-                    objectiveText.text = gemMode ? "GEM RUSH" : "BANISHMENT";
-                    objectiveSubText.text = gemMode
-                        ? "CHANNEL " + gems.gemsToWin + " CRYSTALS TO WIN"
-                        : "FIRST TO " + mm.scoreToWin + " BANISHMENTS";
+                    zoneModeLabel.text = gemMode ? "GEM GRAB" : "KNOCKOUT";
+                    zoneObjectiveLabel.text = gemMode
+                        ? "FIRST TO " + gems.gemsToWin + " GEMS"
+                        : "FIRST TO " + mm.scoreToWin + " KOS";
                 }
             }
 
@@ -362,6 +389,11 @@ namespace BrawlArena
                 lastRed = redValue;
                 redScoreText.text = redValue.ToString();
             }
+
+            int zoneTarget = gemMode ? Mathf.Max(1, gems.gemsToWin) : Mathf.Max(1, mm.scoreToWin);
+            zoneBarBlueFill.fillAmount = Mathf.Clamp01(blueValue / (float)zoneTarget);
+            zoneBarRedFill.fillAmount = Mathf.Clamp01(redValue / (float)zoneTarget);
+            UpdateZoneCenterChip(controlMode, zoneState, zone);
             if (blueGemIcon != null && blueGemIcon.activeSelf != gemMode)
             {
                 blueGemIcon.SetActive(gemMode);
@@ -376,11 +408,11 @@ namespace BrawlArena
 
             if (mm.State == MatchState.Intro)
             {
-                ShowAnnouncement("WANDS READY", Color.white);
+                ShowAnnouncement("READY", Color.white);
             }
             else if (Time.time < fightFlashUntil)
             {
-                ShowAnnouncement("CAST!", new Color(1f, 0.88f, 0.28f));
+                ShowAnnouncement("FIGHT!", new Color(1f, 0.88f, 0.28f));
             }
             else if (gemMode && gems.CountdownTeam.HasValue && mm.State == MatchState.Playing)
             {
@@ -398,20 +430,31 @@ namespace BrawlArena
                 HideAnnouncement();
             }
 
-            if (respawnRoot != null && respawnRoot.activeSelf)
-            {
-                int tenths = Mathf.Max(0, Mathf.CeilToInt((respawnEndsAt - Time.time) * 10f));
-                if (tenths != lastRespawnTenths)
-                {
-                    lastRespawnTenths = tenths;
-                    respawnText.text = $"RESPAWNING IN {tenths / 10f:0.0}";
-                }
-            }
+            if (player == null) player = ResolveLocalPlayer();
 
-            if (player == null)
+            // Polled directly from the bound player rather than only reacting
+            // to BrawlerController's ShowRespawn/HideRespawn push, which is
+            // gated on its own IsPlayer flag and never fires for a spectated
+            // or autopilot-controlled human slot (no PlayerBrawlerInput to
+            // set that flag).
+            if (respawnRoot != null)
             {
-                var pi = FindFirstObjectByType<PlayerBrawlerInput>();
-                if (pi != null) player = pi.GetComponent<BrawlerController>();
+                bool respawningNow = !matchEnded && player != null && player.IsRespawning;
+                if (respawnRoot.activeSelf != respawningNow)
+                    respawnRoot.SetActive(respawningNow);
+                if (respawningNow)
+                {
+                    int tenths = Mathf.Max(0, Mathf.CeilToInt(player.RespawnRemaining * 10f));
+                    if (tenths != lastRespawnTenths)
+                    {
+                        lastRespawnTenths = tenths;
+                        respawnText.text = $"RESPAWNING IN {tenths / 10f:0.0}";
+                    }
+                }
+                else
+                {
+                    lastRespawnTenths = -1;
+                }
             }
             if (protectionRoot != null && player != null)
             {
@@ -434,7 +477,7 @@ namespace BrawlArena
                 }
             }
             UpdatePlayerMatchProgression();
-            UpdateClanRoster(mm);
+            UpdateSquadPanel(mm);
             if (player != null && cooldownOverlay != null)
                 cooldownOverlay.fillAmount = player.CooldownFraction;
             UpdateBasicAttackChargeFeedback();
@@ -488,7 +531,7 @@ namespace BrawlArena
 
                 if (wardStepOuter != null)
                 {
-                    bool ready = player.WardFlow + 0.0001f >= player.wardStepCost;
+                    bool ready = player.WardFlow + 0.0001f >= player.WardStepCost;
                     wardStepOuter.color = Time.unscaledTime < wardFeedbackUntil
                         ? new Color(1f, 0.32f, 0.24f)
                         : ready
@@ -502,6 +545,13 @@ namespace BrawlArena
                 int superPercent = Mathf.RoundToInt(player.SuperCharge01 * 100f);
                 if (superChargeOverlay != null)
                     superChargeOverlay.fillAmount = 1f - player.SuperCharge01;
+                if (playerSuperStrip != null)
+                {
+                    playerSuperStrip.fillAmount = player.SuperCharge01;
+                    playerSuperStrip.color = player.SuperReady
+                        ? new Color(1f, 0.86f, 0.28f)
+                        : new Color(0.62f, 0.24f, 0.92f);
+                }
                 if (superAbilityText != null && lastSuperName != player.SuperName)
                 {
                     lastSuperName = player.SuperName;
@@ -535,6 +585,64 @@ namespace BrawlArena
             if (mm.State == MatchState.Ended && Keyboard.current != null &&
                 Keyboard.current.rKey.wasPressedThisFrame)
                 Restart();
+        }
+
+        /// <summary>
+        /// Colors the zone-meter center chip and lights the per-team occupant
+        /// pips. Pips and zone-state coloring only mean something in Control
+        /// Zone; other modes show a neutral chip with the pips dark.
+        /// </summary>
+        void UpdateZoneCenterChip(bool controlMode, ControlZoneState zoneState, ControlZoneManager zone)
+        {
+            if (zoneCenterChip == null) return;
+
+            Color chipColor;
+            int blueOccupants = 0;
+            int redOccupants = 0;
+            if (controlMode)
+            {
+                chipColor = zoneState == ControlZoneState.BlueControlled
+                    ? TeamUtil.Color(TeamId.Blue)
+                    : zoneState == ControlZoneState.RedControlled
+                        ? TeamUtil.Color(TeamId.Red)
+                        : zoneState == ControlZoneState.Contested
+                            ? new Color(1f, 0.68f, 0.12f)
+                            : new Color(0.32f, 0.4f, 0.5f);
+                if (zoneState == ControlZoneState.Contested)
+                {
+                    float pulse = AccessibilitySettings.ReducedMotionEnabled
+                        ? 1f
+                        : 0.82f + 0.18f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 5f));
+                    chipColor *= pulse;
+                }
+                if (zone != null)
+                {
+                    blueOccupants = zone.BlueOccupants;
+                    redOccupants = zone.RedOccupants;
+                }
+            }
+            else
+            {
+                chipColor = new Color(0.16f, 0.2f, 0.26f, 0.96f);
+            }
+            zoneCenterChip.color = chipColor;
+
+            for (int i = 0; i < zoneBluePips.Length; i++)
+            {
+                if (zoneBluePips[i] == null) continue;
+                zoneBluePips[i].enabled = controlMode;
+                zoneBluePips[i].color = i < blueOccupants
+                    ? new Color(0.4f, 0.82f, 1f)
+                    : new Color(0.4f, 0.82f, 1f, 0.22f);
+            }
+            for (int i = 0; i < zoneRedPips.Length; i++)
+            {
+                if (zoneRedPips[i] == null) continue;
+                zoneRedPips[i].enabled = controlMode;
+                zoneRedPips[i].color = i < redOccupants
+                    ? new Color(1f, 0.48f, 0.42f)
+                    : new Color(1f, 0.48f, 0.42f, 0.22f);
+            }
         }
 
         void UpdatePlayerMatchProgression()
@@ -583,80 +691,75 @@ namespace BrawlArena
             playerMatchExperienceFill.fillAmount = progression.Experience01;
         }
 
-        void UpdateClanRoster(MatchManager manager)
+        void UpdateSquadPanel(MatchManager manager)
         {
-            if (clanRosterRoot == null) return;
+            if (squadRoot == null) return;
             bool hasLocalPlayer = player != null;
-            if (clanRosterRoot.activeSelf != hasLocalPlayer)
-                clanRosterRoot.SetActive(hasLocalPlayer);
+            if (squadRoot.activeSelf != hasLocalPlayer)
+                squadRoot.SetActive(hasLocalPlayer);
             if (!hasLocalPlayer)
             {
-                shownClanRosterTeam = null;
-                for (int i = 0; i < clanRosterRows.Length; i++)
-                    SetClanRosterOwner(clanRosterRows[i], null);
+                shownSquadTeam = null;
+                for (int i = 0; i < squadRows.Length; i++)
+                    SetSquadRowOwner(squadRows[i], null);
                 return;
             }
 
-            if (!shownClanRosterTeam.HasValue || shownClanRosterTeam.Value != player.team)
+            if (!shownSquadTeam.HasValue || shownSquadTeam.Value != player.team)
             {
-                shownClanRosterTeam = player.team;
-                clanRosterHeader.text = TeamUtil.ClanName(player.team) + "  •  " +
-                                        TeamUtil.CueLabel(player.team, player.team);
-                clanRosterHeader.color = Color.Lerp(TeamUtil.Color(player.team), Color.white, 0.34f);
+                shownSquadTeam = player.team;
+                squadHeader.text = TeamUtil.ClanName(player.team) + "  •  " +
+                                    TeamUtil.CueLabel(player.team, player.team);
+                squadHeader.color = Color.Lerp(TeamUtil.Color(player.team), Color.white, 0.34f);
             }
 
             int memberCount = 0;
-            orderedClanMembers[memberCount++] = player;
+            orderedSquadMembers[memberCount++] = player;
             var brawlers = manager.GetBrawlers();
-            for (int i = 0; i < brawlers.Count && memberCount < MaxClanRosterRows; i++)
+            for (int i = 0; i < brawlers.Count && memberCount < MaxSquadRows; i++)
             {
                 BrawlerController candidate = brawlers[i];
                 if (candidate == null || candidate == player || candidate.team != player.team)
                     continue;
-                orderedClanMembers[memberCount++] = candidate;
+                orderedSquadMembers[memberCount++] = candidate;
             }
 
-            for (int i = 0; i < clanRosterRows.Length; i++)
+            for (int i = 0; i < squadRows.Length; i++)
             {
-                BrawlerController member = i < memberCount ? orderedClanMembers[i] : null;
-                SetClanRosterOwner(clanRosterRows[i], member);
-                if (member != null) RefreshClanRosterRow(clanRosterRows[i], i);
-                orderedClanMembers[i] = null;
+                BrawlerController member = i < memberCount ? orderedSquadMembers[i] : null;
+                SetSquadRowOwner(squadRows[i], member);
+                if (member != null) RefreshSquadRow(squadRows[i], i);
+                orderedSquadMembers[i] = null;
             }
         }
 
-        void SetClanRosterOwner(ClanRosterRow row, BrawlerController owner)
+        void SetSquadRowOwner(SquadRow row, BrawlerController owner)
         {
             if (row == null || row.owner == owner) return;
             row.owner = owner;
-            row.progression = owner != null ? owner.GetComponent<HeroMatchProgression>() : null;
             row.shownPortrait = null;
             row.shownIdentity = null;
-            row.shownLevel = -1;
             row.shownHealth = -1;
             row.shownMaxHealth = -1;
-            row.shownFlow = -1;
-            row.shownMaxFlow = -1;
             row.shownDead = false;
             if (row.root != null) row.root.SetActive(owner != null);
         }
 
-        void RefreshClanRosterRow(ClanRosterRow row, int rowIndex)
+        void RefreshSquadRow(SquadRow row, int rowIndex)
         {
             BrawlerController member = row.owner;
             if (member == null) return;
-            if (row.progression == null)
-                row.progression = member.GetComponent<HeroMatchProgression>();
 
             bool isLocal = member == player;
             bool isDead = member.Health == null || member.IsDead;
+            bool isRespawning = member.IsRespawning;
             Color teamColor = TeamUtil.Color(member.team);
             row.background.color = isLocal
                 ? new Color(teamColor.r * 0.42f, teamColor.g * 0.42f,
                     teamColor.b * 0.42f, 0.96f)
                 : new Color(0.025f, 0.075f, 0.14f, 0.9f);
             row.portraitFrame.color = teamColor;
-            row.group.alpha = isDead ? 0.58f : 1f;
+            row.group.alpha = isRespawning ? 0.55f : isDead ? 0.58f : 1f;
 
             string tag = string.IsNullOrWhiteSpace(member.playerTag)
                 ? isLocal ? "YOU" : "ALLY"
@@ -674,13 +777,6 @@ namespace BrawlArena
                 row.identity.color = isLocal ? Color.white : new Color(0.9f, 0.96f, 1f);
             }
 
-            int level = row.progression != null ? row.progression.Level : 1;
-            if (level != row.shownLevel)
-            {
-                row.shownLevel = level;
-                row.level.text = "LV " + level;
-            }
-
             Sprite portrait = member.portrait;
             if (portrait == null && theme != null)
                 portrait = theme.SchoolIcon(member.specialty.school.ToString(),
@@ -694,34 +790,42 @@ namespace BrawlArena
 
             int health = member.Health != null ? Mathf.CeilToInt(member.Health.Current) : 0;
             int maxHealth = member.Health != null ? Mathf.CeilToInt(member.Health.Max) : 0;
-            if (health != row.shownHealth || maxHealth != row.shownMaxHealth ||
-                isDead != row.shownDead)
-            {
-                row.shownHealth = health;
-                row.shownMaxHealth = maxHealth;
-                row.health.text = isDead
-                    ? "DOWN  •  " + health + " / " + maxHealth + " HP"
-                    : health + " / " + maxHealth + " HP";
-                row.health.color = isDead
-                    ? new Color(1f, 0.67f, 0.36f)
-                    : Color.white;
-            }
+            row.shownHealth = health;
+            row.shownMaxHealth = maxHealth;
+            row.shownDead = isDead;
             row.healthFill.fillAmount = maxHealth > 0
                 ? Mathf.Clamp01(health / (float)maxHealth)
                 : 0f;
+            row.healthFill.color = isDead
+                ? new Color(0.5f, 0.5f, 0.5f, 0.6f)
+                : new Color(0.25f, 0.94f, 0.48f);
 
-            int flow = Mathf.CeilToInt(member.Stamina);
-            int maxFlow = Mathf.CeilToInt(member.maxStamina);
-            if (flow != row.shownFlow || maxFlow != row.shownMaxFlow)
+            bool superReady = member.SuperReady;
+            row.superDiamond.fillAmount = member.SuperCharge01;
+            row.superDiamond.color = superReady
+                ? new Color(1f, 0.86f, 0.28f)
+                : new Color(0.62f, 0.24f, 0.92f);
+            if (row.superGlow != null)
             {
-                row.shownFlow = flow;
-                row.shownMaxFlow = maxFlow;
-                row.flow.text = "FLOW  " + flow + " / " + maxFlow;
+                if (superReady)
+                {
+                    float pulse = AccessibilitySettings.ReducedMotionEnabled
+                        ? 0.55f
+                        : 0.42f + 0.24f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 4.2f + rowIndex));
+                    row.superGlow.color = new Color(1f, 0.82f, 0.24f, pulse);
+                }
+                else
+                {
+                    row.superGlow.color = new Color(1f, 0.82f, 0.24f, 0f);
+                }
             }
-            row.flowFill.fillAmount = maxFlow > 0
-                ? Mathf.Clamp01(flow / (float)maxFlow)
-                : 0f;
-            row.shownDead = isDead;
+
+            if (row.respawnOverlay != null)
+            {
+                row.respawnOverlay.SetActive(isRespawning);
+                if (isRespawning && row.respawnText != null)
+                    row.respawnText.SetText("{0:0.0}s", Mathf.Max(0f, member.RespawnRemaining));
+            }
         }
 
         /// <summary>
@@ -1013,7 +1117,7 @@ namespace BrawlArena
             BuildSuperButton(gameplay);
             BuildTopBar(gameplay);
             BuildPlayerStatus(gameplay);
-            BuildClanRoster(gameplay);
+            BuildSquadPanel(gameplay);
             BuildKillFeed(gameplay);
             var minimap = MinimapView.Create(gameplay, theme, 330f);
             if (minimap != null && theme != null && theme.minimapFrame != null)
@@ -1085,40 +1189,40 @@ namespace BrawlArena
             joyBase.SetActive(false);
         }
 
-        void BuildClanRoster(Transform root)
+        void BuildSquadPanel(Transform root)
         {
-            clanRosterRoot = NewRect("ClanRoster", root);
-            var rosterRt = (RectTransform)clanRosterRoot.transform;
+            squadRoot = NewRect("SquadPanel", root);
+            var rosterRt = (RectTransform)squadRoot.transform;
             rosterRt.anchorMin = rosterRt.anchorMax = new Vector2(0f, 1f);
             rosterRt.pivot = new Vector2(0f, 1f);
             rosterRt.anchoredPosition = new Vector2(34f, -126f);
-            rosterRt.sizeDelta = new Vector2(680f, 428f);
+            rosterRt.sizeDelta = new Vector2(560f, 380f);
 
-            clanRosterHeader = MakeText("Header", clanRosterRoot.transform,
-                "CLAN SQUAD", 22f,
+            squadHeader = MakeText("Header", squadRoot.transform,
+                "SQUAD", 22f,
                 new Color(0.84f, 0.94f, 1f), TextAlignmentOptions.MidlineLeft,
                 HudTextStyle.Button);
-            var headerRt = clanRosterHeader.rectTransform;
+            var headerRt = squadHeader.rectTransform;
             headerRt.anchorMin = headerRt.anchorMax = new Vector2(0f, 1f);
             headerRt.pivot = new Vector2(0f, 1f);
             headerRt.anchoredPosition = Vector2.zero;
-            headerRt.sizeDelta = new Vector2(500f, 34f);
+            headerRt.sizeDelta = new Vector2(400f, 34f);
 
-            for (int i = 0; i < MaxClanRosterRows; i++)
-                clanRosterRows[i] = BuildClanRosterRow(clanRosterRoot.transform, i);
+            for (int i = 0; i < MaxSquadRows; i++)
+                squadRows[i] = BuildSquadRow(squadRoot.transform, i);
 
-            clanRosterRoot.SetActive(false);
+            squadRoot.SetActive(false);
         }
 
-        ClanRosterRow BuildClanRosterRow(Transform root, int index)
+        SquadRow BuildSquadRow(Transform root, int index)
         {
-            var row = new ClanRosterRow();
-            row.root = NewRect("ClanMember" + (index + 1), root);
+            var row = new SquadRow();
+            row.root = NewRect("SquadMember" + (index + 1), root);
             var rowRt = (RectTransform)row.root.transform;
             rowRt.anchorMin = rowRt.anchorMax = new Vector2(0f, 1f);
             rowRt.pivot = new Vector2(0f, 1f);
-            rowRt.anchoredPosition = new Vector2(0f, -38f - index * 76f);
-            rowRt.sizeDelta = new Vector2(680f, 70f);
+            rowRt.anchoredPosition = new Vector2(0f, -38f - index * 68f);
+            rowRt.sizeDelta = new Vector2(560f, 62f);
 
             row.background = row.root.AddComponent<Image>();
             row.background.sprite = theme != null && theme.resourceCapsule != null
@@ -1137,8 +1241,8 @@ namespace BrawlArena
             var portraitFrameRt = (RectTransform)portraitFrame.transform;
             portraitFrameRt.anchorMin = portraitFrameRt.anchorMax = new Vector2(0f, 0.5f);
             portraitFrameRt.pivot = new Vector2(0f, 0.5f);
-            portraitFrameRt.anchoredPosition = new Vector2(8f, 0f);
-            portraitFrameRt.sizeDelta = new Vector2(58f, 58f);
+            portraitFrameRt.anchoredPosition = new Vector2(7f, 0f);
+            portraitFrameRt.sizeDelta = new Vector2(50f, 50f);
             row.portraitFrame = portraitFrame.AddComponent<Image>();
             row.portraitFrame.sprite = theme != null && theme.profileFrame != null
                 ? theme.profileFrame
@@ -1149,60 +1253,80 @@ namespace BrawlArena
             var portrait = NewRect("Portrait", portraitFrame.transform);
             var portraitRt = (RectTransform)portrait.transform;
             StretchRect(portraitRt);
-            portraitRt.offsetMin = new Vector2(5f, 5f);
-            portraitRt.offsetMax = new Vector2(-5f, -5f);
+            portraitRt.offsetMin = new Vector2(4f, 4f);
+            portraitRt.offsetMax = new Vector2(-4f, -4f);
             row.portrait = portrait.AddComponent<Image>();
             row.portrait.preserveAspect = true;
             row.portrait.raycastTarget = false;
             row.portrait.enabled = false;
 
-            row.identity = MakeText("Identity", row.root.transform, "ALLY  •  HERO", 20f,
+            row.identity = MakeText("Identity", row.root.transform, "ALLY  •  HERO", 19f,
                 Color.white, TextAlignmentOptions.MidlineLeft, HudTextStyle.Button);
             var identityRt = row.identity.rectTransform;
             identityRt.anchorMin = identityRt.anchorMax = new Vector2(0f, 1f);
             identityRt.pivot = new Vector2(0f, 1f);
-            identityRt.anchoredPosition = new Vector2(72f, -3f);
-            identityRt.sizeDelta = new Vector2(486f, 30f);
+            identityRt.anchoredPosition = new Vector2(64f, -4f);
+            identityRt.sizeDelta = new Vector2(420f, 26f);
             row.identity.overflowMode = TextOverflowModes.Ellipsis;
 
-            row.level = MakeText("Level", row.root.transform, "LV 1", 19f,
-                new Color(1f, 0.88f, 0.28f), TextAlignmentOptions.MidlineRight,
-                HudTextStyle.Button);
-            var levelRt = row.level.rectTransform;
-            levelRt.anchorMin = levelRt.anchorMax = new Vector2(1f, 1f);
-            levelRt.pivot = new Vector2(1f, 1f);
-            levelRt.anchoredPosition = new Vector2(-12f, -3f);
-            levelRt.sizeDelta = new Vector2(100f, 30f);
-
-            row.health = MakeText("Health", row.root.transform, "-- / -- HP", 17f,
-                Color.white, TextAlignmentOptions.MidlineLeft, HudTextStyle.Body);
-            var healthRt = row.health.rectTransform;
-            healthRt.anchorMin = healthRt.anchorMax = new Vector2(0f, 1f);
-            healthRt.pivot = new Vector2(0f, 1f);
-            healthRt.anchoredPosition = new Vector2(72f, -29f);
-            healthRt.sizeDelta = new Vector2(300f, 24f);
-
-            row.flow = MakeText("Flow", row.root.transform, "FLOW  -- / --", 17f,
-                new Color(1f, 0.9f, 0.52f), TextAlignmentOptions.MidlineRight,
-                HudTextStyle.Body);
-            var flowRt = row.flow.rectTransform;
-            flowRt.anchorMin = flowRt.anchorMax = new Vector2(1f, 1f);
-            flowRt.pivot = new Vector2(1f, 1f);
-            flowRt.anchoredPosition = new Vector2(-12f, -29f);
-            flowRt.sizeDelta = new Vector2(300f, 24f);
-
-            row.healthFill = BuildClanRosterMeter(row.root.transform, "HealthMeter",
-                new Vector2(72f, -61f), new Vector2(288f, 10f),
+            row.healthFill = BuildSquadMeter(row.root.transform, "HealthMeter",
+                new Vector2(64f, -34f), new Vector2(410f, 10f),
                 theme != null ? theme.barFillGreen : null, new Color(0.25f, 0.94f, 0.48f));
-            row.flowFill = BuildClanRosterMeter(row.root.transform, "FlowMeter",
-                new Vector2(380f, -61f), new Vector2(288f, 10f),
-                theme != null ? theme.barFillYellow : null, new Color(1f, 0.84f, 0.24f));
+
+            // Super diamond: a rotated square that fills bottom-up with
+            // SuperCharge01 and glows gold once SuperReady, mirroring the
+            // local player's Super button without duplicating its full UI.
+            var glowGo = NewRect("SuperGlow", row.root.transform);
+            var glowRt = (RectTransform)glowGo.transform;
+            glowRt.anchorMin = glowRt.anchorMax = new Vector2(1f, 0.5f);
+            glowRt.pivot = new Vector2(0.5f, 0.5f);
+            glowRt.anchoredPosition = new Vector2(-15f, 0f);
+            glowRt.sizeDelta = new Vector2(46f, 46f);
+            glowRt.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            row.superGlow = glowGo.AddComponent<Image>();
+            row.superGlow.sprite = GetCircleSprite();
+            row.superGlow.color = new Color(1f, 0.82f, 0.24f, 0f);
+            row.superGlow.raycastTarget = false;
+
+            var diamondGo = NewRect("SuperDiamond", row.root.transform);
+            var diamondRt = (RectTransform)diamondGo.transform;
+            diamondRt.anchorMin = diamondRt.anchorMax = new Vector2(1f, 0.5f);
+            diamondRt.pivot = new Vector2(0.5f, 0.5f);
+            diamondRt.anchoredPosition = new Vector2(-15f, 0f);
+            diamondRt.sizeDelta = new Vector2(30f, 30f);
+            diamondRt.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            var diamondBg = diamondGo.AddComponent<Image>();
+            diamondBg.sprite = GetWhiteSprite();
+            diamondBg.color = new Color(0.02f, 0.05f, 0.1f, 0.92f);
+            diamondBg.raycastTarget = false;
+
+            var diamondFillGo = NewRect("Fill", diamondGo.transform);
+            StretchRect((RectTransform)diamondFillGo.transform);
+            diamondFillGo.transform.localScale = Vector3.one * 0.78f;
+            row.superDiamond = diamondFillGo.AddComponent<Image>();
+            row.superDiamond.sprite = GetWhiteSprite();
+            row.superDiamond.type = Image.Type.Filled;
+            row.superDiamond.fillMethod = Image.FillMethod.Vertical;
+            row.superDiamond.fillOrigin = (int)Image.OriginVertical.Bottom;
+            row.superDiamond.fillAmount = 0f;
+            row.superDiamond.color = new Color(0.62f, 0.24f, 0.92f);
+            row.superDiamond.raycastTarget = false;
+
+            row.respawnOverlay = NewRect("RespawnOverlay", row.root.transform);
+            StretchRect((RectTransform)row.respawnOverlay.transform);
+            var respawnBg = row.respawnOverlay.AddComponent<Image>();
+            respawnBg.color = new Color(0f, 0f, 0f, 0.5f);
+            respawnBg.raycastTarget = false;
+            row.respawnText = MakeText("Text", row.respawnOverlay.transform, "4.2s", 20f,
+                Color.white, TextAlignmentOptions.Center, HudTextStyle.Button);
+            StretchRect(row.respawnText.rectTransform);
+            row.respawnOverlay.SetActive(false);
 
             row.root.SetActive(false);
             return row;
         }
 
-        Image BuildClanRosterMeter(Transform root, string name, Vector2 position,
+        Image BuildSquadMeter(Transform root, string name, Vector2 position,
             Vector2 size, Sprite fillSprite, Color fillColor)
         {
             var meter = NewRect(name, root);
@@ -1239,32 +1363,34 @@ namespace BrawlArena
 
         void BuildKillFeed(Transform root)
         {
-            var label = MakeText("BattleLogLabel", root, "ARCANE LOG", 22f,
-                new Color(1f, 1f, 1f, 0.82f), TextAlignmentOptions.MidlineLeft, HudTextStyle.Button);
+            var label = MakeText("KillFeedLabel", root, "KO FEED", 25f,
+                new Color(1f, 1f, 1f, 0.95f), TextAlignmentOptions.MidlineLeft, HudTextStyle.Button);
             var labelRt = label.rectTransform;
             labelRt.anchorMin = labelRt.anchorMax = new Vector2(0f, 1f);
             labelRt.pivot = new Vector2(0f, 1f);
-            labelRt.anchoredPosition = new Vector2(34f, -566f);
+            labelRt.anchoredPosition = new Vector2(34f, -520f);
             labelRt.sizeDelta = new Vector2(360f, 34f);
 
             var feed = NewRect("KillFeed", root);
             var feedRt = (RectTransform)feed.transform;
             feedRt.anchorMin = feedRt.anchorMax = new Vector2(0f, 1f);
             feedRt.pivot = new Vector2(0f, 1f);
-            feedRt.anchoredPosition = new Vector2(34f, -600f);
-            feedRt.sizeDelta = new Vector2(470f, 240f);
+            feedRt.anchoredPosition = new Vector2(34f, -554f);
+            feedRt.sizeDelta = new Vector2(420f, 220f);
             feed.AddComponent<KillFeed>();
         }
 
         void BuildAttackButton(Transform root)
         {
-            // The whole right half is one authoritative cast surface. The CAST
-            // orb below is visual-only; Ward Step and Ritual are created later
-            // and therefore remain the topmost interactive raycast targets.
+            // The cast surface is scoped to the bottom-right quadrant only, so
+            // it neither overlaps the left-side joystick nor the minimap/top
+            // bar above it. The ATTACK orb below is visual-only; Dash and
+            // Super are created later and therefore remain the topmost
+            // interactive raycast targets over any part of this surface they cover.
             var zone = NewRect("RightCastSurface", root);
             RightCastSurface = (RectTransform)zone.transform;
-            RightCastSurface.anchorMin = new Vector2(0.5f, 0f);
-            RightCastSurface.anchorMax = Vector2.one;
+            RightCastSurface.anchorMin = new Vector2(0.55f, 0f);
+            RightCastSurface.anchorMax = new Vector2(1f, 0.7f);
             RightCastSurface.offsetMin = Vector2.zero;
             RightCastSurface.offsetMax = Vector2.zero;
             var zoneImage = zone.AddComponent<Image>();
@@ -1273,9 +1399,9 @@ namespace BrawlArena
             attackButton.cameraOrbitEnabled = true;
 
             BuildActionButton(root, "CastButton", new Vector2(1f, 0f),
-                new Vector2(-190f, 190f), new Vector2(238f, 238f),
+                new Vector2(-210f, 210f), new Vector2(250f, 250f),
                 theme != null && theme.spellCastIcon != null ? theme.spellCastIcon : theme != null ? theme.swordIcon : null,
-                "CAST", new Color(0.26f, 0.72f, 1f), true, false, attackButton);
+                "ATTACK", new Color(0.26f, 0.72f, 1f), true, false, attackButton);
             BuildBasicAttackChargeFeedback(root.Find("CastButton"));
         }
 
@@ -1376,9 +1502,9 @@ namespace BrawlArena
         void BuildWardStepControls(Transform root)
         {
             wardStepButton = BuildActionButton(root, "WardStepButton", new Vector2(1f, 0f),
-                new Vector2(-450f, 160f), new Vector2(190f, 190f),
+                new Vector2(-470f, 150f), new Vector2(170f, 170f),
                 theme != null && theme.spellHasteIcon != null ? theme.spellHasteIcon : theme != null ? theme.speedIcon : null,
-                "WARD STEP", new Color(0.25f, 0.9f, 0.82f), false);
+                "DASH", new Color(0.25f, 0.9f, 0.82f), false);
             wardStepOuter = wardStepButton.GetComponent<Image>();
 
             var meter = NewRect("StaminaMeter", root);
@@ -1388,7 +1514,7 @@ namespace BrawlArena
             meterRt.anchoredPosition = new Vector2(-420f, 58f);
             meterRt.sizeDelta = new Vector2(640f, 58f);
 
-            var label = MakeText("Label", meter.transform, "WARD FLOW", 22f,
+            var label = MakeText("Label", meter.transform, "ENERGY", 22f,
                 new Color(1f, 1f, 1f, 0.84f), TextAlignmentOptions.MidlineLeft, HudTextStyle.Button);
             var labelRt = label.rectTransform;
             labelRt.anchorMin = labelRt.anchorMax = new Vector2(0.12f, 0.8f);
@@ -1451,11 +1577,11 @@ namespace BrawlArena
                 dividerImage.raycastTarget = false;
             }
 
-            wardFeedbackText = MakeText("WardFeedback", root, "WARD RECHARGING", 20f,
+            wardFeedbackText = MakeText("WardFeedback", root, "RECHARGING", 20f,
                 new Color(1f, 0.42f, 0.3f), TextAlignmentOptions.Center, HudTextStyle.Button);
             var feedbackRt = wardFeedbackText.rectTransform;
             feedbackRt.anchorMin = feedbackRt.anchorMax = new Vector2(1f, 0f);
-            feedbackRt.anchoredPosition = new Vector2(-450f, 285f);
+            feedbackRt.anchoredPosition = new Vector2(-470f, 265f);
             feedbackRt.sizeDelta = new Vector2(300f, 36f);
             wardFeedbackText.gameObject.SetActive(false);
         }
@@ -1463,13 +1589,13 @@ namespace BrawlArena
         void BuildSuperButton(Transform root)
         {
             superButton = BuildActionButton(root, "RitualButton", new Vector2(1f, 0f),
-                new Vector2(-220f, 430f), new Vector2(214f, 214f),
+                new Vector2(-210f, 470f), new Vector2(200f, 200f),
                 theme != null && theme.spellUltimateIcon != null ? theme.spellUltimateIcon : theme != null ? theme.energyIcon : null,
-                "RITUAL", new Color(0.62f, 0.24f, 0.92f), false);
+                "SUPER", new Color(0.62f, 0.24f, 0.92f), false);
             superButtonOuter = superButton.GetComponent<Image>();
             superChargeOverlay = CreateRadialOverlay(superButton.transform, "ChargeMask");
 
-            superAbilityText = MakeText("AbilityName", superButton.transform, "ARCANE RITUAL", 18f,
+            superAbilityText = MakeText("AbilityName", superButton.transform, "SUPER", 18f,
                 Color.white, TextAlignmentOptions.Center, HudTextStyle.Button);
             var abilityRt = superAbilityText.rectTransform;
             abilityRt.anchorMin = abilityRt.anchorMax = new Vector2(0.5f, 1.16f);
@@ -1489,7 +1615,7 @@ namespace BrawlArena
                 new Color(1f, 0.34f, 0.28f), TextAlignmentOptions.Center, HudTextStyle.Button);
             var feedbackRt = superFeedbackText.rectTransform;
             feedbackRt.anchorMin = feedbackRt.anchorMax = new Vector2(1f, 0f);
-            feedbackRt.anchoredPosition = new Vector2(-230f, 570f);
+            feedbackRt.anchoredPosition = new Vector2(-220f, 603f);
             feedbackRt.sizeDelta = new Vector2(420f, 42f);
             superFeedbackText.gameObject.SetActive(false);
         }
@@ -1528,10 +1654,37 @@ namespace BrawlArena
             playerHealthText = MakeText("NumericHealth", status.transform, "-- / -- HP", 25f,
                 Color.white, TextAlignmentOptions.Center, HudTextStyle.Display);
             var healthRt = playerHealthText.rectTransform;
-            healthRt.anchorMin = new Vector2(0.08f, 0f);
+            healthRt.anchorMin = new Vector2(0.08f, 0.3f);
             healthRt.anchorMax = new Vector2(0.37f, 1f);
             healthRt.offsetMin = Vector2.zero;
             healthRt.offsetMax = Vector2.zero;
+
+            // A slim Super readout under HP so charge/readiness is visible
+            // without looking away toward the bottom-right Super button.
+            var superStripBg = NewRect("SuperStripBg", status.transform);
+            var superStripBgRt = (RectTransform)superStripBg.transform;
+            superStripBgRt.anchorMin = new Vector2(0.08f, 0.08f);
+            superStripBgRt.anchorMax = new Vector2(0.37f, 0.2f);
+            superStripBgRt.offsetMin = Vector2.zero;
+            superStripBgRt.offsetMax = Vector2.zero;
+            var superStripBgImage = superStripBg.AddComponent<Image>();
+            superStripBgImage.sprite = theme != null && theme.barBg != null ? theme.barBg : GetWhiteSprite();
+            superStripBgImage.type = superStripBgImage.sprite != null && theme != null
+                ? Image.Type.Sliced
+                : Image.Type.Simple;
+            superStripBgImage.color = new Color(0.015f, 0.04f, 0.08f, 0.95f);
+            superStripBgImage.raycastTarget = false;
+
+            var superStripFill = NewRect("Fill", superStripBg.transform);
+            StretchRect((RectTransform)superStripFill.transform);
+            playerSuperStrip = superStripFill.AddComponent<Image>();
+            playerSuperStrip.sprite = GetWhiteSprite();
+            playerSuperStrip.type = Image.Type.Filled;
+            playerSuperStrip.fillMethod = Image.FillMethod.Horizontal;
+            playerSuperStrip.fillOrigin = 0;
+            playerSuperStrip.fillAmount = 0f;
+            playerSuperStrip.color = new Color(0.62f, 0.24f, 0.92f);
+            playerSuperStrip.raycastTarget = false;
 
             playerMatchLevelText = MakeText("MatchLevel", status.transform, "LV 1", 24f,
                 new Color(1f, 0.88f, 0.28f), TextAlignmentOptions.Center,
@@ -1759,27 +1912,112 @@ namespace BrawlArena
             blueScoreText = MakeScoreChip(root, TeamId.Blue, new Vector2(-242f, -58f), out blueGemIcon);
             redScoreText = MakeScoreChip(root, TeamId.Red, new Vector2(242f, -58f), out redGemIcon);
 
-            var objective = NewRect("ObjectiveBadge", root);
-            var objectiveRt = (RectTransform)objective.transform;
-            objectiveRt.anchorMin = objectiveRt.anchorMax = new Vector2(0.5f, 1f);
-            objectiveRt.anchoredPosition = new Vector2(0f, -121f);
-            objectiveRt.sizeDelta = new Vector2(500f, 46f);
+            BuildZoneMeter(root);
+        }
 
-            objectiveText = MakeText("Mode", objective.transform, "KNOCKOUT", 24f,
-                new Color(1f, 0.9f, 0.35f), TextAlignmentOptions.MidlineRight, HudTextStyle.Button);
-            var modeRt = objectiveText.rectTransform;
-            modeRt.anchorMin = new Vector2(0f, 0f);
-            modeRt.anchorMax = new Vector2(0.5f, 1f);
-            modeRt.offsetMin = new Vector2(0f, 0f);
-            modeRt.offsetMax = new Vector2(-10f, 0f);
+        /// <summary>
+        /// Dual-fill objective bar centered under the timer: blue fills from
+        /// the left edge toward the middle, red from the right edge toward
+        /// the middle, both capped at the mode's score/gem/KO target. The
+        /// center chip carries Control Zone's state color and per-team
+        /// occupant pips; other modes show a neutral chip and the same bar
+        /// doubling as their score-progress readout.
+        /// </summary>
+        void BuildZoneMeter(Transform root)
+        {
+            // Badge (mode name) and sub-text (objective) are separate, letter-
+            // spaced labels rather than one concatenated string, so both read
+            // as words instead of mashing into an unreadable debug-counter
+            // look (e.g. "CONTROLZONE FIRSTTO90").
+            zoneModeLabel = MakeText("ZoneModeLabel", root, "CONTROL ZONE", 20f,
+                new Color(1f, 1f, 1f, 0.9f), TextAlignmentOptions.Center, HudTextStyle.Button);
+            var modeLabelRt = zoneModeLabel.rectTransform;
+            modeLabelRt.anchorMin = modeLabelRt.anchorMax = new Vector2(0.5f, 1f);
+            modeLabelRt.anchoredPosition = new Vector2(0f, -126f);
+            modeLabelRt.sizeDelta = new Vector2(900f, 26f);
+            zoneModeLabel.characterSpacing = 4f;
 
-            objectiveSubText = MakeText("Sub", objective.transform, "FIRST TO 8 KOs", 18f,
-                new Color(1f, 1f, 1f, 0.72f), TextAlignmentOptions.MidlineLeft, HudTextStyle.Body);
-            var subRt = objectiveSubText.rectTransform;
-            subRt.anchorMin = new Vector2(0.5f, 0f);
-            subRt.anchorMax = new Vector2(1f, 1f);
-            subRt.offsetMin = new Vector2(10f, 0f);
-            subRt.offsetMax = Vector2.zero;
+            zoneObjectiveLabel = MakeText("ZoneObjectiveLabel", root, "FIRST TO 90", 16f,
+                new Color(1f, 1f, 1f, 0.6f), TextAlignmentOptions.Center, HudTextStyle.Button);
+            var objectiveLabelRt = zoneObjectiveLabel.rectTransform;
+            objectiveLabelRt.anchorMin = objectiveLabelRt.anchorMax = new Vector2(0.5f, 1f);
+            objectiveLabelRt.anchoredPosition = new Vector2(0f, -150f);
+            objectiveLabelRt.sizeDelta = new Vector2(900f, 20f);
+            zoneObjectiveLabel.characterSpacing = 2f;
+
+            var meterRoot = NewRect("ZoneMeter", root);
+            var meterRt = (RectTransform)meterRoot.transform;
+            meterRt.anchorMin = meterRt.anchorMax = new Vector2(0.5f, 1f);
+            meterRt.anchoredPosition = new Vector2(0f, -180f);
+            meterRt.sizeDelta = new Vector2(900f, 54f);
+
+            var barBg = meterRoot.AddComponent<Image>();
+            barBg.sprite = theme != null && theme.barBg != null ? theme.barBg : GetWhiteSprite();
+            barBg.type = barBg.sprite != null && theme != null ? Image.Type.Sliced : Image.Type.Simple;
+            barBg.color = new Color(0.02f, 0.05f, 0.1f, 0.92f);
+            barBg.raycastTarget = false;
+
+            var blueHalf = NewRect("BlueHalf", meterRoot.transform);
+            var blueHalfRt = (RectTransform)blueHalf.transform;
+            blueHalfRt.anchorMin = Vector2.zero;
+            blueHalfRt.anchorMax = new Vector2(0.5f, 1f);
+            blueHalfRt.offsetMin = new Vector2(4f, 4f);
+            blueHalfRt.offsetMax = new Vector2(-2f, -4f);
+            var blueFillGo = NewRect("Fill", blueHalf.transform);
+            StretchRect((RectTransform)blueFillGo.transform);
+            zoneBarBlueFill = blueFillGo.AddComponent<Image>();
+            zoneBarBlueFill.sprite = theme != null && theme.barFillBlue != null ? theme.barFillBlue : GetWhiteSprite();
+            zoneBarBlueFill.type = Image.Type.Filled;
+            zoneBarBlueFill.fillMethod = Image.FillMethod.Horizontal;
+            zoneBarBlueFill.fillOrigin = (int)Image.OriginHorizontal.Left;
+            zoneBarBlueFill.fillAmount = 0f;
+            zoneBarBlueFill.color = TeamUtil.Color(TeamId.Blue);
+            zoneBarBlueFill.raycastTarget = false;
+
+            var redHalf = NewRect("RedHalf", meterRoot.transform);
+            var redHalfRt = (RectTransform)redHalf.transform;
+            redHalfRt.anchorMin = new Vector2(0.5f, 0f);
+            redHalfRt.anchorMax = Vector2.one;
+            redHalfRt.offsetMin = new Vector2(2f, 4f);
+            redHalfRt.offsetMax = new Vector2(-4f, -4f);
+            var redFillGo = NewRect("Fill", redHalf.transform);
+            StretchRect((RectTransform)redFillGo.transform);
+            zoneBarRedFill = redFillGo.AddComponent<Image>();
+            zoneBarRedFill.sprite = theme != null && theme.barFillRed != null ? theme.barFillRed : GetWhiteSprite();
+            zoneBarRedFill.type = Image.Type.Filled;
+            zoneBarRedFill.fillMethod = Image.FillMethod.Horizontal;
+            zoneBarRedFill.fillOrigin = (int)Image.OriginHorizontal.Right;
+            zoneBarRedFill.fillAmount = 0f;
+            zoneBarRedFill.color = TeamUtil.Color(TeamId.Red);
+            zoneBarRedFill.raycastTarget = false;
+
+            var chipGo = NewRect("CenterChip", meterRoot.transform);
+            var chipRt = (RectTransform)chipGo.transform;
+            chipRt.anchorMin = chipRt.anchorMax = new Vector2(0.5f, 0.5f);
+            chipRt.sizeDelta = new Vector2(96f, 54f);
+            zoneCenterChip = chipGo.AddComponent<Image>();
+            zoneCenterChip.sprite = theme != null && theme.labelChip != null ? theme.labelChip : GetWhiteSprite();
+            zoneCenterChip.type = zoneCenterChip.sprite != null && theme != null ? Image.Type.Sliced : Image.Type.Simple;
+            zoneCenterChip.color = new Color(0.16f, 0.2f, 0.26f, 0.96f);
+            zoneCenterChip.raycastTarget = false;
+
+            for (int i = 0; i < zoneBluePips.Length; i++)
+                zoneBluePips[i] = BuildZonePip(chipGo.transform, new Vector2(-34f + i * 13f, 0f));
+            for (int i = 0; i < zoneRedPips.Length; i++)
+                zoneRedPips[i] = BuildZonePip(chipGo.transform, new Vector2(9f + i * 13f, 0f));
+        }
+
+        Image BuildZonePip(Transform root, Vector2 position)
+        {
+            var pip = NewRect("Pip", root);
+            var pipRt = (RectTransform)pip.transform;
+            pipRt.anchorMin = pipRt.anchorMax = new Vector2(0.5f, 0.5f);
+            pipRt.anchoredPosition = position;
+            pipRt.sizeDelta = new Vector2(9f, 9f);
+            var image = pip.AddComponent<Image>();
+            image.sprite = GetCircleSprite();
+            image.raycastTarget = false;
+            return image;
         }
 
         TextMeshProUGUI MakeScoreChip(Transform root, TeamId team, Vector2 position, out GameObject gemIcon)
@@ -1952,7 +2190,7 @@ namespace BrawlArena
                 glowImage.raycastTarget = false;
             }
 
-            var resultLabel = MakeText("ResultLabel", card.transform, "TRIAL RESULT", 22f,
+            var resultLabel = MakeText("ResultLabel", card.transform, "MATCH RESULT", 22f,
                 new Color(1f, 1f, 1f, 0.72f), TextAlignmentOptions.Center, HudTextStyle.Button);
             var resultLabelRt = resultLabel.rectTransform;
             resultLabelRt.anchorMin = resultLabelRt.anchorMax = new Vector2(0.5f, 0.96f);
@@ -1978,7 +2216,7 @@ namespace BrawlArena
             subRt.anchorMin = subRt.anchorMax = new Vector2(0.5f, 0.63f);
             subRt.sizeDelta = new Vector2(660f, 52f);
 
-            eliminationsRow = BuildResultStatRow(card.transform, "BANISHMENTS",
+            eliminationsRow = BuildResultStatRow(card.transform, "KOS",
                 theme != null ? theme.swordIcon : null, new Color(1f, 0.42f, 0.3f),
                 new Vector2(0.5f, 0.48f), out eliminationsValue);
             brawlerPointsRow = BuildResultStatRow(card.transform, "ARCANE POINTS",
@@ -2489,7 +2727,7 @@ namespace BrawlArena
             }
 
             // Non-cast widgets must not turn a right/middle click over their
-            // artwork into a Ward Step or Ritual activation.
+            // artwork into a Dash or Super activation.
             if (eventData.button != PointerEventData.InputButton.Left) return;
 
             if (cameraOrbitEnabled)

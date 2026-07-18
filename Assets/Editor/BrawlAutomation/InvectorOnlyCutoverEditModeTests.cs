@@ -49,24 +49,21 @@ namespace BrawlArena.EditorAutomation.Tests
             "Assets/Scripts/Brawl/Integration/Legacy/LegacyBrawlerNavigation.cs",
         };
 
+        // Full three-hero roster: frost, thorn, bastion.
         static readonly ExpectedRosterEntry[] ExpectedRoster =
         {
-            new ExpectedRosterEntry(
-                "fire",
-                InvectorMigrationPilotBuilder.ProductionHumanPrefabPath,
-                InvectorMigrationPilotBuilder.ProductionAIPrefabPath),
             new ExpectedRosterEntry(
                 InvectorRimeMigrationBuilder.RosterId,
                 InvectorRimeMigrationBuilder.ProductionHumanPrefabPath,
                 InvectorRimeMigrationBuilder.ProductionAIPrefabPath),
             new ExpectedRosterEntry(
-                InvectorTempestMigrationBuilder.RosterId,
-                InvectorTempestMigrationBuilder.ProductionHumanPrefabPath,
-                InvectorTempestMigrationBuilder.ProductionAIPrefabPath),
-            new ExpectedRosterEntry(
                 InvectorThornMigrationBuilder.RosterId,
                 InvectorThornMigrationBuilder.ProductionHumanPrefabPath,
                 InvectorThornMigrationBuilder.ProductionAIPrefabPath),
+            new ExpectedRosterEntry(
+                InvectorBastionMigrationBuilder.RosterId,
+                InvectorBastionMigrationBuilder.ProductionHumanPrefabPath,
+                InvectorBastionMigrationBuilder.ProductionAIPrefabPath),
         };
 
         [Test]
@@ -115,7 +112,7 @@ namespace BrawlArena.EditorAutomation.Tests
 
         [Test]
         [Category(CategoryName)]
-        public void ExistingRosterAssignsAllFourExactInactiveInvectorRolePrefabs()
+        public void ExistingRosterAssignsAllExactInactiveInvectorRolePrefabs()
         {
             BrawlerDefinition[] roster = ArenaSceneBuilder.BuildRosterFromExistingAssets();
 

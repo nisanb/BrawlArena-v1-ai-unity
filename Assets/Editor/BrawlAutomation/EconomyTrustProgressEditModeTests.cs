@@ -12,6 +12,46 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
+        public void BattleEnergyRegeneratesOverRealTimeWithoutBankingPastTheCap()
+        {
+            long interval = Progress.EnergyRegenSecondsPerPoint *
+                            System.TimeSpan.TicksPerSecond;
+            var save = new ProgressData { energy = 0, energyRegenAnchorTicks = 0 };
+
+            // First observation only plants the anchor; no free energy.
+            Assert.IsTrue(Progress.AccrueEnergyRegen(save, interval * 10));
+            Assert.AreEqual(0, save.energy);
+            Assert.AreEqual(interval * 10, save.energyRegenAnchorTicks);
+
+            // Partial interval: nothing credited, anchor holds partial progress.
+            Assert.IsFalse(Progress.AccrueEnergyRegen(save, interval * 10 + interval / 2));
+            Assert.AreEqual(0, save.energy);
+
+            // Two and a half intervals later: exactly two points, half banked.
+            Assert.IsTrue(Progress.AccrueEnergyRegen(save, interval * 12 + interval / 2));
+            Assert.AreEqual(2, save.energy);
+            Assert.AreEqual(interval * 12, save.energyRegenAnchorTicks);
+
+            // A month offline fills to capacity and never overshoots.
+            Assert.IsTrue(Progress.AccrueEnergyRegen(save, interval * 40000));
+            Assert.AreEqual(Progress.EnergyCapacity, save.energy);
+
+            // While full, the anchor tracks now so no regen is banked.
+            long later = interval * 40010;
+            Progress.AccrueEnergyRegen(save, later);
+            Assert.AreEqual(later, save.energyRegenAnchorTicks);
+            save.energy = Progress.EnergyCapacity - 1;
+            Assert.IsFalse(Progress.AccrueEnergyRegen(save, later + interval / 2),
+                "No point may arrive earlier than one full interval after leaving the cap.");
+
+            // A rewound clock (corrupt anchor) self-heals instead of crediting.
+            save.energyRegenAnchorTicks = long.MaxValue;
+            Assert.IsTrue(Progress.AccrueEnergyRegen(save, later + interval));
+            Assert.AreEqual(later + interval, save.energyRegenAnchorTicks);
+            Assert.AreEqual(Progress.EnergyCapacity - 1, save.energy);
+        }
+
+        [Test]
         public void LegacySaveMigrationReconstructsKnownLifetimeEarnings()
         {
             var legacy = new ProgressData

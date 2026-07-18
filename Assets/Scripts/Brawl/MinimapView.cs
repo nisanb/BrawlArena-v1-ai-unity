@@ -22,6 +22,7 @@ namespace BrawlArena
         readonly List<Image> brawlerMarkers = new List<Image>();
         readonly List<BrawlerController> markerOwners = new List<BrawlerController>();
         readonly List<Image> gemMarkers = new List<Image>();
+        Image zoneCircle;
 
         static Sprite dotSprite;
 
@@ -68,6 +69,18 @@ namespace BrawlArena
             mapImg.raycastTarget = false;
 
             var view = root.AddComponent<MinimapView>();
+
+            var zoneGo = new GameObject("ZoneCircle", typeof(RectTransform));
+            zoneGo.transform.SetParent(mapGo.transform, false);
+            var zrt = (RectTransform)zoneGo.transform;
+            zrt.anchorMin = zrt.anchorMax = new Vector2(0.5f, 0.5f);
+            zrt.sizeDelta = Vector2.zero;
+            view.zoneCircle = zoneGo.AddComponent<Image>();
+            view.zoneCircle.sprite = GetDotSprite();
+            view.zoneCircle.raycastTarget = false;
+            view.zoneCircle.color = new Color(1f, 1f, 1f, 0f);
+            view.zoneCircle.enabled = false;
+
             var markers = new GameObject("Markers", typeof(RectTransform));
             markers.transform.SetParent(mapGo.transform, false);
             var krt = (RectTransform)markers.transform;
@@ -109,6 +122,43 @@ namespace BrawlArena
             if (mm == null) return;
             UpdateBrawlerMarkers(mm);
             UpdateGemMarkers();
+            UpdateZoneCircle();
+        }
+
+        /// <summary>
+        /// Draws the Control Zone as a translucent disc tinted by whichever
+        /// team holds it, pulsing while contested (skipped under reduced
+        /// motion). Hidden outside Control Zone or before the zone activates.
+        /// </summary>
+        void UpdateZoneCircle()
+        {
+            if (zoneCircle == null) return;
+            ControlZoneManager zone = ControlZoneManager.Instance;
+            if (zone == null || !zone.ActiveMode || zone.State == ControlZoneState.Inactive)
+            {
+                zoneCircle.enabled = false;
+                return;
+            }
+
+            zoneCircle.enabled = true;
+            zoneCircle.rectTransform.anchoredPosition = ToMap(zone.ZoneCenter);
+            float scale = mapHalf / Mathf.Max(0.01f, worldHalfExtent);
+            float diameter = zone.ZoneRadius * 2f * scale;
+            zoneCircle.rectTransform.sizeDelta = new Vector2(diameter, diameter);
+
+            Color tint = zone.HasControllingTeam
+                ? TeamUtil.Color(zone.ControllingTeam)
+                : zone.IsContested
+                    ? new Color(1f, 0.68f, 0.12f)
+                    : new Color(0.7f, 0.8f, 0.9f);
+            float alpha = 0.3f;
+            if (zone.IsContested)
+            {
+                alpha = AccessibilitySettings.ReducedMotionEnabled
+                    ? 0.32f
+                    : 0.22f + 0.14f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 5f));
+            }
+            zoneCircle.color = new Color(tint.r, tint.g, tint.b, alpha);
         }
 
         void UpdateBrawlerMarkers(MatchManager mm)

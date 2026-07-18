@@ -57,6 +57,8 @@ namespace BrawlArena
         public bool HasPendingRecoilPresentationTrigger => hasPendingRecoilPresentationTrigger;
         public bool HasPendingLifecyclePresentationTrigger =>
             hasPendingLifecyclePresentationTrigger;
+        /// <summary>Read-only Animator access for presentation-only queries (clip lookups, hit-stop).</summary>
+        internal Animator PresentationAnimator => animator;
         public float InternalMotorStamina => currentStamina;
         public bool IsInternalMotorStaminaPinned => Mathf.Approximately(currentStamina, maxStamina);
         public int RegisteredAnimatorStateInfoLayerCount =>
@@ -134,14 +136,28 @@ namespace BrawlArena
             animator.SetInteger(vAnimatorParameters.RecoilID, recoilId);
             animator.SetTrigger(vAnimatorParameters.TriggerRecoil);
             animator.SetTrigger(vAnimatorParameters.ResetState);
-            animator.ResetTrigger(vAnimatorParameters.WeakAttack);
-            animator.ResetTrigger(vAnimatorParameters.StrongAttack);
+
+            // A hit landing mid-swing must not erase this body's own already
+            // committed attack presentation. Simplification: the only state we
+            // track here is "an attack trigger is still in flight"; only clear
+            // the weak/strong triggers when that is not the case, so a victim
+            // who is also mid-attack keeps their own swing playing out.
+            if (!hasPendingMeleePresentationTrigger)
+            {
+                animator.ResetTrigger(vAnimatorParameters.WeakAttack);
+                animator.ResetTrigger(vAnimatorParameters.StrongAttack);
+                pendingMeleePresentationTriggerHash = 0;
+                pendingMeleePresentationStateHash = 0;
+            }
             lastPresentationRecoilId = recoilId;
-            hasPendingMeleePresentationTrigger = false;
-            pendingMeleePresentationTriggerHash = 0;
-            pendingMeleePresentationStateHash = 0;
             hasPendingRecoilPresentationTrigger = true;
             recoilPresentationWriteCount++;
+        }
+
+        /// <summary>Hit-stop support: freezes/resumes Animator playback without touching Time.timeScale.</summary>
+        internal void SetAnimatorSpeed(float speed)
+        {
+            if (animator != null) animator.speed = speed;
         }
 
         /// <summary>

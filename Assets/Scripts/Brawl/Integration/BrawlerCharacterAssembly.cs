@@ -61,7 +61,27 @@ namespace BrawlArena
         {
             IBrawlerCharacterAssembler assembler = Resolve(
                 definition, asHumanPlayer, context);
-            return assembler.Assemble(definition, team, position, asHumanPlayer, statMultiplier);
+            BrawlerController controller = assembler.Assemble(
+                definition, team, position, asHumanPlayer, statMultiplier);
+            AttachMotionFlourish(controller);
+            return controller;
+        }
+
+        /// <summary>
+        /// Presentation-only procedural motion (run bob, lean, Ward Step
+        /// burst, Super windup, contact blob shadow) attached at the single
+        /// choke point both human and AI production assembly pass through.
+        /// Dormant-safe: Configure resolves the model's visual bone anchor
+        /// and no-ops the component if one cannot be found, and this only
+        /// ever runs on a live (already-activated) Play mode actor.
+        /// </summary>
+        static void AttachMotionFlourish(BrawlerController controller)
+        {
+            if (controller == null || !Application.isPlaying) return;
+            if (controller.GetComponent<BrawlerMotionFlourish>() != null) return;
+
+            BrawlerMotionFlourish flourish = controller.gameObject.AddComponent<BrawlerMotionFlourish>();
+            flourish.Configure(controller);
         }
 
         static IBrawlerCharacterAssembler Resolve(
@@ -165,6 +185,9 @@ namespace BrawlArena
             controller.attackHitDelay = definition.hitDelay;
             controller.attackMoveLock = definition.moveLock;
             controller.autoAimRange = definition.autoAimRange;
+            controller.wardStepDistance = definition.wardStepDistance;
+            controller.wardStepCost = definition.wardStepCost;
+            controller.meleeArcDegrees = definition.meleeArcDegrees;
             controller.projectilePrefab = definition.projectilePrefab;
             controller.projectileSpeed = definition.projectileSpeed;
             controller.castVfx = definition.castVfx;

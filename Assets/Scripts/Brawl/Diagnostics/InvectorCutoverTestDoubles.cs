@@ -119,6 +119,15 @@ namespace BrawlArena.EditorAutomation.Tests
         {
             VictoryCalls++;
         }
+
+        public float GetAttackImpactDelay(bool strongAttack, float fallbackSeconds)
+        {
+            return fallbackSeconds;
+        }
+
+        public void PauseAnimation(float seconds)
+        {
+        }
     }
 }
 #endif

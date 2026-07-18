@@ -14,9 +14,7 @@ namespace BrawlArena.EditorAutomation
         [MenuItem("Brawl Arena/Invector Migration/Apply Weapon Pose Overrides")]
         public static void ApplyAll()
         {
-            ApplyWizard(InvectorMigrationPilotBuilder.OverrideControllerPath);
             ApplyWizard(InvectorRimeMigrationBuilder.OverrideControllerPath);
-            ApplyWizard(InvectorTempestMigrationBuilder.OverrideControllerPath);
 
             var thorn = RequireController(
                 InvectorThornMigrationBuilder.OverrideControllerPath);

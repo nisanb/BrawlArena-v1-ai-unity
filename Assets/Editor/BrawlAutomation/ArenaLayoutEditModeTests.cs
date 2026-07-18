@@ -52,7 +52,7 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
-        public void PlayableRosterContainsThreeElementalMagesAndOneArcher()
+        public void PlayableRosterContainsOneMageOneArcherAndOneWarrior()
         {
             // Roster-content assertions only need the generated assets, not a
             // full rebuild: BuildRoster() replaces scenes (lab scene included),
@@ -62,24 +62,32 @@ namespace BrawlArena.EditorAutomation
             BrawlerDefinition[] roster =
                 ArenaSceneBuilder.BuildRosterFromExistingAssets();
 
-            CollectionAssert.AreEqual(new[] { "fire", "frost", "storm", "thorn" },
+            CollectionAssert.AreEqual(new[] { "frost", "thorn", "bastion" },
                 roster.Select(definition => definition.id).ToArray());
             CollectionAssert.AreEqual(new[]
                 {
-                    SpellSchool.Fire,
                     SpellSchool.Frost,
-                    SpellSchool.Storm,
+                    SpellSchool.None,
                     SpellSchool.None,
                 },
                 roster.Select(definition => definition.specialty.school).ToArray());
-            Assert.AreEqual("Archer", roster[3].role);
-            Assert.IsNotNull(roster[3].invectorHumanPrefab);
-            Assert.IsNotNull(roster[3].invectorAIPrefab);
-            StringAssert.Contains("Thorn", roster[3].invectorHumanPrefab.name);
-            StringAssert.Contains("Thorn", roster[3].invectorAIPrefab.name);
-            Assert.AreEqual("Arrow01", roster[3].projectilePrefab.name);
-            Assert.AreEqual("EXPLOSIVE ARROW", roster[3].superName);
-            Assert.AreEqual(3, CharacterSkillBook.For(roster[3]).Length);
+            Assert.AreEqual("Archer", roster[1].role);
+            Assert.IsNotNull(roster[1].invectorHumanPrefab);
+            Assert.IsNotNull(roster[1].invectorAIPrefab);
+            StringAssert.Contains("Thorn", roster[1].invectorHumanPrefab.name);
+            StringAssert.Contains("Thorn", roster[1].invectorAIPrefab.name);
+            Assert.AreEqual("Arrow01", roster[1].projectilePrefab.name);
+            Assert.AreEqual("EXPLOSIVE ARROW", roster[1].superName);
+            Assert.AreEqual(3, CharacterSkillBook.For(roster[1]).Length);
+
+            Assert.AreEqual("Vanguard", roster[2].role);
+            Assert.IsNotNull(roster[2].invectorHumanPrefab);
+            Assert.IsNotNull(roster[2].invectorAIPrefab);
+            StringAssert.Contains("Bastion", roster[2].invectorHumanPrefab.name);
+            StringAssert.Contains("Bastion", roster[2].invectorAIPrefab.name);
+            Assert.IsNull(roster[2].projectilePrefab);
+            Assert.AreEqual("AEGIS SHOCKWAVE", roster[2].superName);
+            Assert.AreEqual(3, CharacterSkillBook.For(roster[2]).Length);
         }
 
         [Test]

@@ -347,17 +347,9 @@ namespace BrawlArena.EditorAutomation.Tests
             string[] priorRosterBefore =
             {
                 AssetDatabase.AssetPathToGUID(
-                    InvectorMigrationPilotBuilder.ProductionHumanPrefabPath),
-                AssetDatabase.AssetPathToGUID(
-                    InvectorMigrationPilotBuilder.ProductionAIPrefabPath),
-                AssetDatabase.AssetPathToGUID(
                     InvectorRimeMigrationBuilder.ProductionHumanPrefabPath),
                 AssetDatabase.AssetPathToGUID(
                     InvectorRimeMigrationBuilder.ProductionAIPrefabPath),
-                AssetDatabase.AssetPathToGUID(
-                    InvectorTempestMigrationBuilder.ProductionHumanPrefabPath),
-                AssetDatabase.AssetPathToGUID(
-                    InvectorTempestMigrationBuilder.ProductionAIPrefabPath),
             };
             Assert.That(before.All(value => !string.IsNullOrEmpty(value)), Is.True);
             Assert.That(priorRosterBefore.All(
@@ -380,17 +372,9 @@ namespace BrawlArena.EditorAutomation.Tests
             string[] priorRosterAfter =
             {
                 AssetDatabase.AssetPathToGUID(
-                    InvectorMigrationPilotBuilder.ProductionHumanPrefabPath),
-                AssetDatabase.AssetPathToGUID(
-                    InvectorMigrationPilotBuilder.ProductionAIPrefabPath),
-                AssetDatabase.AssetPathToGUID(
                     InvectorRimeMigrationBuilder.ProductionHumanPrefabPath),
                 AssetDatabase.AssetPathToGUID(
                     InvectorRimeMigrationBuilder.ProductionAIPrefabPath),
-                AssetDatabase.AssetPathToGUID(
-                    InvectorTempestMigrationBuilder.ProductionHumanPrefabPath),
-                AssetDatabase.AssetPathToGUID(
-                    InvectorTempestMigrationBuilder.ProductionAIPrefabPath),
             };
             Assert.That(priorRosterAfter, Is.EqualTo(priorRosterBefore));
 
@@ -409,7 +393,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 InvectorThornMigrationBuilder.ProductionAIPrefabPath);
             var definition = new BrawlerDefinition
             {
-                id = InvectorTempestMigrationBuilder.RosterId,
+                id = InvectorRimeMigrationBuilder.RosterId,
                 displayName = "Wrong Thorn Assignment",
                 invectorHumanPrefab = human,
                 invectorAIPrefab = ai,
@@ -451,18 +435,13 @@ namespace BrawlArena.EditorAutomation.Tests
         [Category("InvectorProductionThorn")]
         public void GeneratedRosterKeepsThornBrawlArrowAuthoritative()
         {
+            // Three-hero roster (frost, thorn, bastion).
             BrawlerDefinition[] roster = ArenaSceneBuilder.BuildRosterFromExistingAssets();
-            BrawlerDefinition cinder = roster.Single(value => value.id == "fire");
             BrawlerDefinition rime = roster.Single(value => value.id == "frost");
-            BrawlerDefinition tempest = roster.Single(value => value.id == "storm");
             BrawlerDefinition thorn = roster.Single(value =>
                 value.id == InvectorThornMigrationBuilder.RosterId);
-            Assert.That(cinder.invectorHumanPrefab, Is.Not.Null);
-            Assert.That(cinder.invectorAIPrefab, Is.Not.Null);
             Assert.That(rime.invectorHumanPrefab, Is.Not.Null);
             Assert.That(rime.invectorAIPrefab, Is.Not.Null);
-            Assert.That(tempest.invectorHumanPrefab, Is.Not.Null);
-            Assert.That(tempest.invectorAIPrefab, Is.Not.Null);
 
             Assert.That(thorn.invectorHumanPrefab,
                 Is.SameAs(Require(

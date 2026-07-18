@@ -5,24 +5,41 @@ namespace BrawlArena
 {
     /// <summary>
     /// Brawler chase camera: third-person 3/4 angle with a player-driven
-    /// orbit. Mobile play keeps yaw stable so drag-aim always maps to the same
-    /// world frame; optional desktop orbit hooks remain available. Small perlin shake for hit
-    /// feedback. Before a target exists (character select / loading), it
-    /// slowly orbits the arena as a backdrop vista.
+    /// orbit. Default framing sits at a ~42.5 deg pitch and ~13.0 unit
+    /// distance for wider peripheral coverage, so offscreen threats (long-range
+    /// archer shots, HUD-adjacent nameplates) stay legible. Mobile play keeps
+    /// yaw stable so drag-aim always maps to the same world frame; optional
+    /// desktop orbit hooks remain available. The focus point leads slightly
+    /// ahead of the target's planar velocity so runners get screen space in
+    /// front of them instead of behind. Small perlin shake for hit feedback.
+    /// Before a target exists (character select / loading), it slowly orbits
+    /// the arena as a backdrop vista.
     /// </summary>
     public class BrawlCamera : MonoBehaviour
     {
         public Transform target;
         [Tooltip("Follow offset at yaw 0; pitch and distance are derived from it.")]
-        public Vector3 offset = new Vector3(0f, 7.2f, -8.2f);
+        // (0, 8.8, -9.6) => pitch ~42.5 deg, distance ~13.0 (ORDER R rig
+        // pass): slightly lower pitch + longer distance than before so the
+        // cliff ring/horizon parallax enters the top of frame, paired with
+        // the wider 54 deg fov set in ArenaSceneBuilder.BuildCamera. This is
+        // the single source of truth for the rig — the scene builder must
+        // not override it.
+        public Vector3 offset = new Vector3(0f, 8.8f, -9.6f);
         public float smoothTime = 0.12f;
         public float vistaOrbitSpeed = 4f;
+
+        [Header("Movement Lead")]
+        [Tooltip("Max planar distance the focus point leads ahead of the target's velocity.")]
+        public float movementLeadMax = 2.4f;
+        [Tooltip("Lerp rate (per second) smoothing the lead offset toward its target value.")]
+        public float movementLeadSmoothing = 4f;
 
         [Header("Orbit")]
         [Tooltip("Degrees per reference-resolution pixel of horizontal drag.")]
         public float dragYawSensitivity = 0.22f;
         public float dragPitchSensitivity = 0.1f;
-        public float minPitch = 26f;
+        public float minPitch = 30f;
         public float maxPitch = 62f;
         [Tooltip("Max degrees/second the camera auto-swings behind the run direction.")]
         public float autoTurnSpeed = 30f;
@@ -39,7 +56,7 @@ namespace BrawlArena
         [Min(0.05f)] public float obstructionSphereRadius = 0.38f;
         [Min(0f)] public float obstructionPadding = 0.18f;
         [Tooltip("Never pull closer than this; very near visible blockers are hidden for the frame instead.")]
-        [Min(0.1f)] public float minimumObstructionDistance = 2.8f;
+        [Min(0.1f)] public float minimumObstructionDistance = 3.2f;
         [Tooltip("Fast response used when geometry appears between the player and camera.")]
         [Min(0.01f)] public float obstructionPullInTime = 0.045f;
         [Tooltip("Slower recovery prevents the camera popping back after clearing a wall.")]
@@ -52,6 +69,8 @@ namespace BrawlArena
         float distance;
         Vector3 followVelocity;
         Vector3 lastTargetPos;
+        Vector3 lastLeadSamplePos;
+        Vector3 leadOffset;
         float noAutoTurnUntil;
         float shakeAmplitude;
         float shakeUntil;
@@ -106,6 +125,8 @@ namespace BrawlArena
             DeriveRigFromOffset();
             yaw = 0f;
             lastTargetPos = target.position;
+            lastLeadSamplePos = target.position;
+            leadOffset = Vector3.zero;
             ApplyRig(target.position, true);
             followVelocity = Vector3.zero;
             obstructionVelocity = 0f;
@@ -227,7 +248,8 @@ namespace BrawlArena
 
             if (movementAutoTurn) UpdateAutoTurn();
             else lastTargetPos = target.position;
-            ApplyRig(target.position, false);
+            UpdateMovementLead();
+            ApplyRig(target.position + leadOffset, false);
 
             if (!AccessibilitySettings.ReducedMotionEnabled && Time.time < shakeUntil)
             {
@@ -264,6 +286,22 @@ namespace BrawlArena
             if (lateral < 0.1f) return;
             float step = autoTurnSpeed * lateral * Time.deltaTime;
             yaw = Mathf.Repeat(yaw + Mathf.Clamp(delta, -step, step), 360f);
+        }
+
+        /// <summary>
+        /// Shifts the follow focus point ahead of the target's planar
+        /// velocity so a running player has framed space in front of them
+        /// instead of behind. Decays to zero once the target stops; never
+        /// applied to shake or the idle vista orbit.
+        /// </summary>
+        void UpdateMovementLead()
+        {
+            Vector3 vel = (target.position - lastLeadSamplePos) / Mathf.Max(Time.deltaTime, 0.0001f);
+            lastLeadSamplePos = target.position;
+            vel.y = 0f;
+
+            Vector3 desiredLead = Vector3.ClampMagnitude(vel, movementLeadMax);
+            leadOffset = Vector3.Lerp(leadOffset, desiredLead, Mathf.Clamp01(movementLeadSmoothing * Time.deltaTime));
         }
 
         public static void Shake(float amplitude, float duration)

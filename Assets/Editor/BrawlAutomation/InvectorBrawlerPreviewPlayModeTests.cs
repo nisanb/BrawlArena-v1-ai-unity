@@ -24,14 +24,18 @@ namespace BrawlArena.EditorAutomation.Tests
         public IEnumerator RosterPreviewsKeepExactIdentityEquipmentAndLifecycleBoundary()
         {
             yield return new EnterPlayMode();
-            string[] expectedIds = { "fire", "frost", "storm", "thorn" };
+            // This deep presentation loop only covers the two role-specific
+            // equipment quirks (wand vs bow) that the "thorn" flag below
+            // branches on; Bastion's sword presentation is validated
+            // separately by InvectorBastionProductionEditModeTests. The
+            // full three-hero roster order is asserted after the loop.
+            string[] expectedIds = { "frost", "thorn" };
             string[] expectedPaths =
             {
-                InvectorMigrationPilotBuilder.ProductionHumanPrefabPath,
                 InvectorRimeMigrationBuilder.ProductionHumanPrefabPath,
-                InvectorTempestMigrationBuilder.ProductionHumanPrefabPath,
                 InvectorThornMigrationBuilder.ProductionHumanPrefabPath,
             };
+            string[] fullRosterIds = { "frost", "thorn", "bastion" };
             var failures = new List<string>();
             BrawlerDefinition[] roster =
                 ArenaSceneBuilder.BuildRosterFromExistingAssets();
@@ -189,7 +193,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 yield return null;
             }
             bool rosterOrderExact =
-                roster.Select(value => value.id).SequenceEqual(expectedIds);
+                roster.Select(value => value.id).SequenceEqual(fullRosterIds);
             bool failuresEmpty = failures.Count == 0;
             string failureEvidence = string.Join("\n", failures);
             yield return new ExitPlayMode();

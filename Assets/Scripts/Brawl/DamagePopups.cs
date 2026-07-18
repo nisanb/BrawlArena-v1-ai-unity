@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using DamageNumbersPro;
 using UnityEngine;
@@ -22,18 +23,51 @@ namespace BrawlArena
 
         static readonly Color HealGreen = new Color(0.35f, 1f, 0.5f);
 
+        // A routine tick and a lucky big hit must not read the same size: this
+        // caps how large the prefab's own number-based scale curve is allowed
+        // to grow, so no single popup dominates the screen.
+        const float MaxPopupScale = 1.5f;
+        // Hits on the same victim inside this window are "simultaneous" for
+        // fan/stagger purposes; anything slower reads as a fresh, isolated hit.
+        const float PopupStaggerWindow = 0.14f;
+        const float PopupStaggerDelayStep = 0.045f;
+
         readonly List<(Health health, System.Action<float, GameObject> handler)> hooks =
             new List<(Health, System.Action<float, GameObject>)>();
         readonly List<(Health health, System.Action<float> handler)> healHooks =
             new List<(Health, System.Action<float>)>();
+        readonly Dictionary<BrawlerController, float> lastPopupAt =
+            new Dictionary<BrawlerController, float>();
+        readonly Dictionary<BrawlerController, int> popupFanSlot =
+            new Dictionary<BrawlerController, int>();
         bool managerHooked;
 
         void Start()
         {
             TryHookManager();
+            CapPopupScale(enemyHitPrefab);
+            CapPopupScale(allyHurtPrefab);
             if (enemyHitPrefab != null) enemyHitPrefab.PrewarmPool();
             if (allyHurtPrefab != null) allyHurtPrefab.PrewarmPool();
             if (healPrefab != null) healPrefab.PrewarmPool();
+        }
+
+        static void CapPopupScale(DamageNumberMesh prefab)
+        {
+            if (prefab == null || !prefab.enableScaleByNumber) return;
+            var settings = prefab.scaleByNumberSettings;
+            bool changed = false;
+            if (settings.toScale > MaxPopupScale)
+            {
+                settings.toScale = MaxPopupScale;
+                changed = true;
+            }
+            if (settings.fromScale > MaxPopupScale)
+            {
+                settings.fromScale = MaxPopupScale;
+                changed = true;
+            }
+            if (changed) prefab.scaleByNumberSettings = settings;
         }
 
         void Update()
@@ -76,10 +110,41 @@ namespace BrawlArena
             var prefab = victim.team == TeamId.Blue ? allyHurtPrefab : enemyHitPrefab;
             if (prefab == null) return;
 
-            // Slight jitter so rapid hits don't stack into one unreadable pile;
-            // following the victim keeps numbers glued to moving targets.
+            int fan = NextPopupFanSlot(victim);
+            // The first hit in a burst keeps the old light jitter; every hit
+            // that lands on the same victim inside the stagger window fans
+            // further out and lands a beat later, so "24"+"24" can never
+            // render as one garbled "2424".
+            float horizontalOffset = fan == 0
+                ? Random.Range(-0.25f, 0.25f)
+                : (fan % 2 == 1 ? 1f : -1f) * (0.55f + 0.4f * ((fan - 1) / 2));
+            float delay = fan * PopupStaggerDelayStep;
+            StartCoroutine(SpawnDamagePopupDelayed(prefab, victim, amount, horizontalOffset, delay));
+        }
+
+        int NextPopupFanSlot(BrawlerController victim)
+        {
+            float now = Time.time;
+            bool withinWindow = lastPopupAt.TryGetValue(victim, out float last) &&
+                                now - last < PopupStaggerWindow;
+            int slot = withinWindow
+                ? (popupFanSlot.TryGetValue(victim, out int previous) ? previous + 1 : 1)
+                : 0;
+            popupFanSlot[victim] = slot;
+            lastPopupAt[victim] = now;
+            return slot;
+        }
+
+        IEnumerator SpawnDamagePopupDelayed(DamageNumberMesh prefab, BrawlerController victim,
+            float amount, float horizontalOffset, float delay)
+        {
+            if (delay > 0f) yield return new WaitForSeconds(delay);
+            if (victim == null) yield break;
+
+            // Following the victim's transform keeps the number glued to a
+            // moving target even after the staggered delay.
             Vector3 pos = victim.transform.position + Vector3.up * 2.1f +
-                          new Vector3(Random.Range(-0.25f, 0.25f), 0f, 0f);
+                          new Vector3(horizontalOffset, 0f, 0f);
             prefab.Spawn(pos, Mathf.Round(amount), victim.transform);
         }
 

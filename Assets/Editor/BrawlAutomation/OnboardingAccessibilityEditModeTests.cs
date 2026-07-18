@@ -60,7 +60,7 @@ namespace BrawlArena.EditorAutomation
         [Test]
         public void CoachContainsFourReadableControlPages()
         {
-            string[] expected = { "MOVE", "CAST", "WARD STEP", "RITUAL" };
+            string[] expected = { "MOVE", "AIM & ATTACK", "DASH", "SUPER" };
             Assert.AreEqual(expected.Length, GameplayCoachState.PageCount);
 
             for (int i = 0; i < expected.Length; i++)

@@ -402,7 +402,22 @@ namespace BrawlArena
         {
             if (!Active || victim == null || attacker == null || attacker == victim) return;
             if (attacker.team == victim.team) return;
-            EnsureProgression(attacker)?.AddExperience(KnockoutExperience);
+
+            int amount = KnockoutExperience;
+            if (manager.mode == GameMode.ControlZone)
+            {
+                // Comeback lever: the trailing team's knockouts pay out more,
+                // so a losing lineup can claw back through fights it wins.
+                bool trailing = ControlZoneRules.IsTrailing(
+                    TeamScore(attacker.team), TeamScore(TeamUtil.Other(attacker.team)));
+                amount = ControlZoneRules.ApplyTrailingKnockoutXpMultiplier(amount, trailing);
+            }
+            EnsureProgression(attacker)?.AddExperience(amount);
+        }
+
+        int TeamScore(TeamId team)
+        {
+            return team == TeamId.Blue ? manager.BlueScore : manager.RedScore;
         }
 
         void OnMatchEnded(TeamId? winner)
@@ -543,7 +558,16 @@ namespace BrawlArena
             if (pickupDelta.sqrMagnitude > experienceBoxPickupRadius * experienceBoxPickupRadius)
                 return false;
 
-            EnsureProgression(collector)?.AddExperience(ExperienceBoxValue);
+            int amount = ExperienceBoxValue;
+            if (manager.mode == GameMode.ControlZone)
+            {
+                // Comeback lever: the leading team's box pickups are worth
+                // less, trimming the passive-XP gap instead of widening it.
+                bool leading = ControlZoneRules.IsLeading(
+                    TeamScore(collector.team), TeamScore(TeamUtil.Other(collector.team)));
+                amount = ControlZoneRules.ApplyLeadingExperienceBoxMultiplier(amount, leading);
+            }
+            EnsureProgression(collector)?.AddExperience(amount);
             experienceBoxes[slot] = null;
             boxRespawnAt[slot] = Time.time + ExperienceBoxRespawnDelay;
             box.MarkLooted();

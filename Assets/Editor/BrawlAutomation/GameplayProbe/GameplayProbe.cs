@@ -35,6 +35,7 @@ namespace BrawlArena.EditorAutomation
         static Health protectedHealth;
         static bool previousInvulnerable;
         static string rosterId;
+        static bool relaxedPresentationGate;
         static BrawlerController securedCandidate;
         static BrawlerController readyCandidate;
         static double readySince = -1.0;
@@ -120,6 +121,7 @@ namespace BrawlArena.EditorAutomation
             scenarioJson = File.ReadAllText(scenarioPath);
             var scenario = JsonUtility.FromJson<ScriptedBrawlerDriver.ProbeScenario>(scenarioJson);
             rosterId = scenario != null ? scenario.rosterId : string.Empty;
+            relaxedPresentationGate = scenario != null && scenario.relaxedPresentationGate;
             string name = scenario != null && !string.IsNullOrEmpty(scenario.name)
                 ? scenario.name
                 : Path.GetFileNameWithoutExtension(scenarioPath);
@@ -178,13 +180,18 @@ namespace BrawlArena.EditorAutomation
 
                 InvectorBrawlerWeaponPresentation presenter =
                     player.GetComponent<InvectorBrawlerWeaponPresentation>();
-                bool presentationReady = player.CanAct && presenter != null &&
-                    presenter.RuntimeEnabled &&
-                    (presenter.LastSuppression ==
-                        InvectorWeaponPresentationSuppression.None ||
-                     presenter.LastSuppression ==
-                        InvectorWeaponPresentationSuppression.IgnoreSupportHandIKTag) &&
-                    string.IsNullOrEmpty(presenter.LastInvalidPoseStage);
+                // Motion-review scenarios opt out of the strict wand/bow IK
+                // pose gate: melee presenters legitimately report suppression
+                // states the pose studies treat as not-ready.
+                bool presentationReady = relaxedPresentationGate
+                    ? player.CanAct
+                    : player.CanAct && presenter != null &&
+                      presenter.RuntimeEnabled &&
+                      (presenter.LastSuppression ==
+                          InvectorWeaponPresentationSuppression.None ||
+                       presenter.LastSuppression ==
+                          InvectorWeaponPresentationSuppression.IgnoreSupportHandIKTag) &&
+                      string.IsNullOrEmpty(presenter.LastInvalidPoseStage);
                 if (!presentationReady)
                 {
                     readyCandidate = null;

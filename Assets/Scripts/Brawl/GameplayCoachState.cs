@@ -20,7 +20,7 @@ namespace BrawlArena
     /// <summary>Versioned completion and readable content for first-match coaching.</summary>
     public static class GameplayCoachState
     {
-        public const int CurrentVersion = 3;
+        public const int CurrentVersion = 4;
         public const string CompletionPreferenceKey =
             "BrawlArena.GameplayCoach.CompletedVersion";
 
@@ -31,17 +31,17 @@ namespace BrawlArena
                 "LEFT SIDE / DRAG",
                 "Drag the left joystick to move. Keep your distance from heavy hitters and use arena cover."),
             new GameplayCoachPage(
-                "CAST",
-                "RIGHT HALF / CAST + ORBIT",
-                "Tap the right half for auto-aim; drag and release to cast manually. Right/middle-drag, or add a second touch, to orbit without casting."),
+                "AIM & ATTACK",
+                "RIGHT HALF / ATTACK + ORBIT",
+                "Tap the right half to auto-aim; drag and release to attack in a chosen direction. Right/middle-drag, or add a second touch, to orbit without attacking."),
             new GameplayCoachPage(
-                "WARD STEP",
-                "RIGHT SIDE / TAP WARD STEP",
-                "Move, then tap WARD STEP to commit a short escape or gap-close. Each step uses 20 of 60 Ward Flow."),
+                "DASH",
+                "RIGHT SIDE / TAP DASH",
+                "Move, then tap DASH to commit a short escape or gap-close. Each dash spends Energy that recharges over time."),
             new GameplayCoachPage(
-                "RITUAL",
-                "DEAL DAMAGE / CHARGE RITUAL",
-                "Deal damage until RITUAL is ready. Tap for auto-aim, or drag and release for a directed Ritual."),
+                "SUPER",
+                "DEAL DAMAGE / CHARGE SUPER",
+                "Deal damage until SUPER is ready. Tap for auto-aim, or drag and release for a directed Super."),
         };
 
         public static int PageCount => CoachPages.Length;

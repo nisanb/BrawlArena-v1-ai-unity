@@ -28,9 +28,7 @@ namespace BrawlArena.EditorAutomation
     {
         static readonly (string id, string path)[] ProductionHumans =
         {
-            ("fire", "Assets/Generated/InvectorMigration/Cinder/Prefabs/CinderInvectorHuman.prefab"),
             ("frost", "Assets/Generated/InvectorMigration/Rime/Prefabs/RimeInvectorHuman.prefab"),
-            ("storm", "Assets/Generated/InvectorMigration/Tempest/Prefabs/TempestInvectorHuman.prefab"),
             ("thorn", "Assets/Generated/InvectorMigration/Thorn/Prefabs/ThornInvectorHuman.prefab"),
         };
 
@@ -170,9 +168,9 @@ namespace BrawlArena.EditorAutomation
         public void ResolverRejectsMissingOrMismatchedHumanData()
         {
             Assert.Throws<System.InvalidOperationException>(() =>
-                BrawlerPreviewAdapter.ResolvePrefab(new BrawlerDefinition { id = "fire" }));
+                BrawlerPreviewAdapter.ResolvePrefab(new BrawlerDefinition { id = "frost" }));
 
-            BrawlerDefinition mismatched = LoadDefinition("frost", ProductionHumans[0].path);
+            BrawlerDefinition mismatched = LoadDefinition("thorn", ProductionHumans[0].path);
             Assert.Throws<System.InvalidOperationException>(() =>
                 BrawlerPreviewAdapter.ResolvePrefab(mismatched));
         }

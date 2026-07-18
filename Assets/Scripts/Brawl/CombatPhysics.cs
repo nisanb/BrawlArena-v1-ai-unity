@@ -124,6 +124,26 @@ namespace BrawlArena
             return hitDistance >= 0f && hitDistance <= distance;
         }
 
+        /// <summary>
+        /// True when the target sits within the given full arc (degrees),
+        /// centered on the committed planar direction. Melee basic attacks use
+        /// this to gate candidates before picking the single best target.
+        /// </summary>
+        public static bool WithinMeleeArc(Vector3 origin, Vector3 committedDir,
+            Vector3 targetPos, float arcDegrees)
+        {
+            committedDir.y = 0f;
+            if (committedDir.sqrMagnitude <= 0.0001f) return true;
+
+            Vector3 toTarget = targetPos - origin;
+            toTarget.y = 0f;
+            if (toTarget.sqrMagnitude <= 0.0001f) return true;
+
+            float halfArc = Mathf.Max(0f, arcDegrees) * 0.5f;
+            float angle = Vector3.Angle(committedDir.normalized, toTarget.normalized);
+            return angle <= halfArc;
+        }
+
         public static void SetLayerRecursively(GameObject root, int layer)
         {
             if (root == null || layer < 0) return;

@@ -22,7 +22,7 @@ namespace BrawlArena.EditorAutomation.Tests
 
         [UnityTest]
         [Category("InvectorProductionHumanCinder")]
-        public IEnumerator LiveContextGatedHumanCinderPreservesBrawlAuthorityAndTeardown()
+        public IEnumerator LiveContextGatedHumanRimePreservesBrawlAuthorityAndTeardown()
         {
             Scene original = SceneManager.GetActiveScene();
             SessionState.SetString(OriginalScenePathSessionKey, original.path);
@@ -91,13 +91,13 @@ namespace BrawlArena.EditorAutomation.Tests
             authoredProjectile.hitRadius = 0.3f;
 
             GameObject productionPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                InvectorMigrationPilotBuilder.ProductionHumanPrefabPath);
+                InvectorRimeMigrationBuilder.ProductionHumanPrefabPath);
             Assert.That(productionPrefab, Is.Not.Null);
             var definition = new BrawlerDefinition
             {
-                id = "fire",
-                displayName = "Cinder",
-                role = "Pyromancer",
+                id = "frost",
+                displayName = "Rime",
+                role = "Cryomancer",
                 invectorHumanPrefab = productionPrefab,
                 maxHealth = 92f,
                 damage = 22f,
@@ -111,7 +111,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 autoAimRange = 12f,
                 projectilePrefab = projectilePrefab,
                 projectileSpeed = 18f,
-                specialty = SpellSpecialty.ForSchool(SpellSchool.Fire),
+                specialty = SpellSpecialty.ForSchool(SpellSchool.Frost),
             };
 
             GameObject targetRoot = BuildTargetFixture(proofScene, definition);

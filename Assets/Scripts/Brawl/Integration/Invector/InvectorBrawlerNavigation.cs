@@ -15,6 +15,15 @@ namespace BrawlArena
     {
         const float Acceleration = 40f;
         const float MinimumProbeRadius = 0.05f;
+        // Knockback impulses and dashes are physically swept against world
+        // geometry, not the baked NavMesh, so a hard hit can legally deposit
+        // the body a body-width or two outside mesh coverage. Without a
+        // bounded re-anchor the planner fail-closes forever: the AI will not
+        // move without a ready planner, and a motionless body never re-enters
+        // the mesh. The recovery probe breaks that deadlock; total mesh loss
+        // still fails closed because no probe radius can sample a mesh that
+        // does not exist.
+        const float PlannerRecoveryProbeRadius = 2.5f;
         const float SameDestinationTolerance = 0.05f;
         const float StuckObservationSeconds = 0.75f;
         const float StuckMinimumProgress = 0.08f;
@@ -665,6 +674,9 @@ namespace BrawlArena
                 MinimumProbeRadius, plannerAgent.radius * 0.5f);
             if (!NavMesh.SamplePosition(
                     worldPosition, out NavMeshHit hit, probeRadius,
+                    plannerAgent.areaMask) &&
+                !NavMesh.SamplePosition(
+                    worldPosition, out hit, PlannerRecoveryProbeRadius,
                     plannerAgent.areaMask))
             {
                 if (recordTrace) plannerSyncFailureCount++;

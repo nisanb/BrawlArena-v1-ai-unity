@@ -11,7 +11,7 @@ namespace BrawlArena
     /// </summary>
     public static class BrawlerPreviewAdapter
     {
-        const string SharedLifecycleControllerName = "CinderInvectorPilot";
+        const string SharedLifecycleControllerName = "BrawlSharedInvectorLifecycle";
 
         static readonly string[] SharedControllerLayers =
         {

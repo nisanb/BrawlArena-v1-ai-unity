@@ -10,9 +10,12 @@ namespace BrawlArena
     public class Projectile : MonoBehaviour
     {
         public const float DefaultHitRadius = 0.3f;
-        public const float DefaultHomingTurnRate = 150f;
-        public const float DefaultHomingAcquireHalfAngle = 52f;
+        public const float DefaultHomingTurnRate = 90f;
+        public const float DefaultHomingAcquireHalfAngle = 30f;
         const float HomingReacquireInterval = 0.1f;
+        const string VisualArcRootName = "ProjectileVisualArc";
+        const float VisualArcPeakPerMeter = 0.12f;
+        const float VisualArcMaxPeak = 0.55f;
 
         public float lifeTime = 3f;
         public float hitRadius = DefaultHitRadius;
@@ -20,6 +23,8 @@ namespace BrawlArena
         public float homingTurnRate = DefaultHomingTurnRate;
         [Tooltip("Manual shots may acquire enemies inside this forward half-angle.")]
         public float homingAcquireHalfAngle = DefaultHomingAcquireHalfAngle;
+        [Tooltip("Drag-committed shots fly exactly where aimed: no homing regardless of homingTurnRate.")]
+        public bool manualAim;
 
         public BrawlerController HomingTarget => homingTarget;
         public Vector3 TravelDirection => dir;
@@ -40,6 +45,7 @@ namespace BrawlArena
         BrawlerController homingTarget;
         float homingAcquireRange;
         float nextHomingAcquireAt;
+        float activeHomingTurnRate;
         bool launched;
         bool destroyRequested;
         bool specialtyChainTriggered;
@@ -47,6 +53,13 @@ namespace BrawlArena
         ProjectileReadabilityProfile readabilityProfile;
         ProjectileAttackTier attackTier;
         ProjectileReadabilityLease readabilityLease;
+
+        // Visual-only flight arc. traveledDistance/visualArcRoot never affect
+        // transform.position, which CombatPhysics and every hit check above
+        // read directly -- only a wrapped visual child is nudged vertically.
+        Transform visualArcRoot;
+        bool visualArcChecked;
+        float traveledDistance;
 
         public void Launch(BrawlerController owner, Vector3 direction, float damage, float speed,
             GameObject impactVfx)
@@ -130,6 +143,7 @@ namespace BrawlArena
         {
             ClearRuntimeState();
             destroyRequested = false;
+            EnsureVisualArcRoot();
             this.owner = owner;
             this.damage = Mathf.Max(0f, damage);
             this.speed = Mathf.Max(0f, speed);
@@ -147,6 +161,9 @@ namespace BrawlArena
                 : 0f;
             float travelRange = maxTravelDistance > 0f ? maxTravelDistance : ownerAimRange;
             homingAcquireRange = Mathf.Clamp(Mathf.Max(4f, travelRange + 2f), 4f, 24f);
+            // A drag-committed manual shot flies exactly where it was aimed;
+            // tap/auto shots keep the authored homing turn rate.
+            activeHomingTurnRate = manualAim ? 0f : homingTurnRate;
             dir = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector3.forward;
             dieAt = Time.time + Mathf.Max(0f, lifeTime);
             transform.rotation = Quaternion.LookRotation(dir);
@@ -175,7 +192,7 @@ namespace BrawlArena
 
             homingTarget = IsValidHomingTarget(lockedTarget) ? lockedTarget : null;
             nextHomingAcquireAt = Time.time;
-            if (homingTarget == null) TryAcquireHomingTarget();
+            if (homingTarget == null && !manualAim) TryAcquireHomingTarget();
         }
 
         internal void PrepareForReuse()
@@ -234,6 +251,7 @@ namespace BrawlArena
             homingTarget = null;
             homingAcquireRange = 0f;
             nextHomingAcquireAt = 0f;
+            activeHomingTurnRate = 0f;
             launched = false;
             specialtyChainTriggered = false;
             sourceTeam = TeamId.Blue;
@@ -243,6 +261,62 @@ namespace BrawlArena
                 readabilityLease = GetComponent<ProjectileReadabilityLease>();
             if (readabilityLease != null) readabilityLease.ResetLease();
             readabilityLease = null;
+
+            traveledDistance = 0f;
+            if (visualArcRoot != null) visualArcRoot.localPosition = Vector3.zero;
+        }
+
+        /// <summary>
+        /// Wraps every pre-existing child (the authored visual: mesh, trail
+        /// particle systems, etc.) under one new runtime child the first time
+        /// this instance is used, so the flight arc can offset the whole
+        /// visual as a rigid unit. Idempotent across pool reuse. If the
+        /// prefab has no distinct visual child -- everything lives on this
+        /// same transform -- there is nothing safe to wrap without risking
+        /// the position CombatPhysics reads, so the arc is skipped entirely.
+        /// </summary>
+        void EnsureVisualArcRoot()
+        {
+            if (visualArcChecked) return;
+            visualArcChecked = true;
+
+            Transform existing = transform.Find(VisualArcRootName);
+            if (existing != null)
+            {
+                visualArcRoot = existing;
+                return;
+            }
+            if (transform.childCount == 0) return;
+
+            var wrapper = new GameObject(VisualArcRootName);
+            wrapper.transform.SetParent(transform, false);
+
+            int originalChildCount = transform.childCount - 1;
+            for (int i = 0; i < originalChildCount; i++)
+                transform.GetChild(0).SetParent(wrapper.transform, true);
+
+            visualArcRoot = wrapper.transform;
+        }
+
+        /// <summary>
+        /// Advances the tracked flight distance by exactly what this frame
+        /// moved (a partial step on an impact frame, the full step otherwise)
+        /// and repositions the visual-arc wrapper. peak grows with distance
+        /// traveled (capped) and the sine shape follows the fraction of the
+        /// expected total range, so short hops stay flat while longer shots
+        /// read as a lobbed arc that comes back down before impact/range end.
+        /// </summary>
+        void AdvanceVisualArc(float distanceAdvanced)
+        {
+            if (distanceAdvanced > 0f) traveledDistance += distanceAdvanced;
+            if (visualArcRoot == null) return;
+
+            float totalRange = float.IsPositiveInfinity(remainingTravelDistance)
+                ? Mathf.Max(0.01f, speed * Mathf.Max(0.01f, lifeTime))
+                : Mathf.Max(0.01f, traveledDistance + Mathf.Max(0f, remainingTravelDistance));
+            float fraction = Mathf.Clamp01(traveledDistance / totalRange);
+            float peak = Mathf.Clamp(VisualArcPeakPerMeter * traveledDistance, 0f, VisualArcMaxPeak);
+            visualArcRoot.localPosition = new Vector3(0f, peak * Mathf.Sin(Mathf.PI * fraction), 0f);
         }
 
         bool MatchAllowsDamage()
@@ -273,6 +347,7 @@ namespace BrawlArena
                 out BrawlerController target, out float targetDistance);
             if (hitBrawler && targetDistance <= worldDistance + 0.0001f)
             {
+                AdvanceVisualArc(targetDistance);
                 Vector3 impactPoint = position + dir * targetDistance;
                 if (blastRadius <= 0f) DamageTarget(target, impactPoint);
                 Explode(impactPoint, ProjectileImpactOutcome.DirectHit);
@@ -281,6 +356,7 @@ namespace BrawlArena
 
             if (hitWorld)
             {
+                AdvanceVisualArc(Mathf.Max(0f, worldHit.distance));
                 Vector3 impactPoint = worldHit.distance > 0f
                     ? worldHit.point
                     : position;
@@ -288,6 +364,7 @@ namespace BrawlArena
                 return;
             }
 
+            AdvanceVisualArc(step);
             transform.position = position + dir * step;
             remainingTravelDistance -= step;
             if (remainingTravelDistance <= 0.0001f || Time.time >= dieAt)
@@ -296,7 +373,7 @@ namespace BrawlArena
 
         void UpdateHoming(float deltaTime)
         {
-            if (homingTurnRate <= 0f || owner == null) return;
+            if (activeHomingTurnRate <= 0f || owner == null) return;
 
             if (!IsValidHomingTarget(homingTarget)) homingTarget = null;
             if (homingTarget == null && Time.time >= nextHomingAcquireAt)
@@ -308,7 +385,7 @@ namespace BrawlArena
 
             Vector3 desired = homingTarget.CombatAimPoint - transform.position;
             if (desired.sqrMagnitude <= 0.0001f) return;
-            float radians = Mathf.Deg2Rad * Mathf.Max(0f, homingTurnRate) *
+            float radians = Mathf.Deg2Rad * Mathf.Max(0f, activeHomingTurnRate) *
                             Mathf.Max(0f, deltaTime);
             dir = Vector3.RotateTowards(dir, desired.normalized, radians, 0f).normalized;
             if (dir.sqrMagnitude > 0.0001f)
@@ -447,6 +524,15 @@ namespace BrawlArena
             float applied = target.Health.TakeDamage(damage,
                 owner != null ? owner.gameObject : gameObject);
             if (applied <= 0f || !MatchAllowsDamage()) return;
+
+            bool isSuperHit = attackTier == ProjectileAttackTier.Super;
+            target.RequestHitStop(isSuperHit
+                ? MobileCombatRules.HitStopHeavyVictim
+                : MobileCombatRules.HitStopLightVictim);
+            if (owner != null)
+                owner.RequestHitStop(isSuperHit
+                    ? MobileCombatRules.HitStopHeavyAttacker
+                    : MobileCombatRules.HitStopLightAttacker);
 
             if (knockback > 0f)
             {

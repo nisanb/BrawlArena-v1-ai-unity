@@ -12,6 +12,8 @@ namespace BrawlArena.EditorAutomation.Tests
     {
         const string BuilderSourcePath =
             "Assets/Editor/BrawlAutomation/InvectorMigrationPilotBuilder.cs";
+        const string RimeBuilderSourcePath =
+            "Assets/Editor/BrawlAutomation/InvectorRimeMigrationBuilder.cs";
         const string NavigationSourcePath =
             "Assets/Scripts/Brawl/Integration/Invector/InvectorBrawlerNavigation.cs";
 
@@ -22,7 +24,7 @@ namespace BrawlArena.EditorAutomation.Tests
             GameObject prefab = RequireProductionAIPrefab();
 
             Assert.DoesNotThrow(() =>
-                InvectorMigrationPilotBuilder.ValidateProductionAIPrefab(prefab));
+                InvectorRimeMigrationBuilder.ValidateAIPrefab(prefab));
             Assert.That(prefab.activeSelf, Is.False);
             Assert.That(prefab.layer,
                 Is.EqualTo(InvectorMigrationPilotBuilder.InvectorPlayerLayer));
@@ -32,9 +34,9 @@ namespace BrawlArena.EditorAutomation.Tests
             GameObject source = PrefabUtility.GetCorrespondingObjectFromSource(prefab);
             Assert.That(source, Is.Not.Null);
             Assert.That(AssetDatabase.GetAssetPath(source),
-                Is.EqualTo(InvectorMigrationPilotBuilder.PrefabPath));
+                Is.EqualTo(InvectorRimeMigrationBuilder.PilotPrefabPath));
             Assert.That(AssetDatabase.GetAssetPath(prefab),
-                Is.EqualTo(InvectorMigrationPilotBuilder.ProductionAIPrefabPath));
+                Is.EqualTo(InvectorRimeMigrationBuilder.ProductionAIPrefabPath));
         }
 
         [Test]
@@ -140,8 +142,9 @@ namespace BrawlArena.EditorAutomation.Tests
         public void BuilderOwnsAPreviewSceneOnlyAIRebuildPath()
         {
             string source = File.ReadAllText(BuilderSourcePath);
+            string rimeSource = File.ReadAllText(RimeBuilderSourcePath);
             string safeBuild = ExtractMethodSource(
-                source, nameof(InvectorMigrationPilotBuilder.BuildProductionAIPrefabSafely));
+                rimeSource, nameof(InvectorRimeMigrationBuilder.BuildRimePilotAssetsSafely));
             int genericVariantStart = source.IndexOf(
                 "internal static GameObject BuildProductionAIPrefab(",
                 System.StringComparison.Ordinal);
@@ -149,9 +152,9 @@ namespace BrawlArena.EditorAutomation.Tests
             string variantBuild = ExtractMethodSource(
                 source.Substring(genericVariantStart), "BuildProductionAIPrefab");
 
-            StringAssert.Contains("BuildProductionAIPrefab(pilotPrefab)", safeBuild);
-            StringAssert.Contains("ValidateGeneratedPrefab(pilotPrefab)", safeBuild);
-            StringAssert.Contains("ValidateProductionAIPrefab", safeBuild);
+            StringAssert.Contains("BuildProductionAIPrefab(", safeBuild);
+            StringAssert.Contains("ValidatePilot(pilot)", safeBuild);
+            StringAssert.Contains("ValidateAIPrefab", safeBuild);
             StringAssert.DoesNotContain("EditorSceneManager.NewScene", safeBuild);
             StringAssert.DoesNotContain("EditorSceneManager.OpenScene", safeBuild);
             StringAssert.DoesNotContain("EditorSceneManager.SaveScene", safeBuild);
@@ -186,9 +189,9 @@ namespace BrawlArena.EditorAutomation.Tests
         static GameObject RequireProductionAIPrefab()
         {
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                InvectorMigrationPilotBuilder.ProductionAIPrefabPath);
+                InvectorRimeMigrationBuilder.ProductionAIPrefabPath);
             Assert.That(prefab, Is.Not.Null,
-                "Run InvectorMigrationPilotBuilder.BuildProductionAIPrefabSafely first.");
+                "Run InvectorRimeMigrationBuilder.BuildRimePilotAssetsSafely first.");
             return prefab;
         }
 

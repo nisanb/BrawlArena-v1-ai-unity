@@ -15,30 +15,27 @@ namespace BrawlArena.EditorAutomation.Tests
         const string CategoryName = "InvectorArenaAcceptance";
         const string ArenaScenePath = "Assets/Scenes/Arena.unity";
 
+        // Full three-hero roster: frost, thorn, bastion.
         static readonly ExpectedRosterEntry[] ExpectedRoster =
         {
-            new ExpectedRosterEntry(
-                "fire",
-                InvectorMigrationPilotBuilder.ProductionHumanPrefabPath,
-                InvectorMigrationPilotBuilder.ProductionAIPrefabPath),
             new ExpectedRosterEntry(
                 InvectorRimeMigrationBuilder.RosterId,
                 InvectorRimeMigrationBuilder.ProductionHumanPrefabPath,
                 InvectorRimeMigrationBuilder.ProductionAIPrefabPath),
             new ExpectedRosterEntry(
-                InvectorTempestMigrationBuilder.RosterId,
-                InvectorTempestMigrationBuilder.ProductionHumanPrefabPath,
-                InvectorTempestMigrationBuilder.ProductionAIPrefabPath),
-            new ExpectedRosterEntry(
                 InvectorThornMigrationBuilder.RosterId,
                 InvectorThornMigrationBuilder.ProductionHumanPrefabPath,
                 InvectorThornMigrationBuilder.ProductionAIPrefabPath),
+            new ExpectedRosterEntry(
+                InvectorBastionMigrationBuilder.RosterId,
+                InvectorBastionMigrationBuilder.ProductionHumanPrefabPath,
+                InvectorBastionMigrationBuilder.ProductionAIPrefabPath),
         };
 
         [Test]
         [Category(CategoryName)]
         [Category("InvectorOnlyCutover")]
-        public void GeneratedArenaRosterClonesAllEightExactInvectorRolesWithSingleAuthorities()
+        public void GeneratedArenaRosterClonesAllExactInvectorRolesWithSingleAuthorities()
         {
             Scene preview = EditorSceneManager.OpenPreviewScene(ArenaScenePath);
             try

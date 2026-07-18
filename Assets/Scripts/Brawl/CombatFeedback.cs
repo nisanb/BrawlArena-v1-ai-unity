@@ -73,6 +73,14 @@ namespace BrawlArena
     {
         public const double ImpactHapticThrottleSeconds = 0.08d;
 
+        /// <summary>
+        /// Camera shake for a hit/KO only matters while it happens near what
+        /// the camera is actually following; beyond this world-unit radius
+        /// from the followed target it fades out entirely rather than
+        /// shaking the whole screen for an offscreen skirmish.
+        /// </summary>
+        public const float ProximityShakeRange = 9f;
+
         static readonly IHapticFeedbackBackend RuntimeHapticBackend =
             new MobileHandheldHapticBackend();
 
@@ -164,6 +172,33 @@ namespace BrawlArena
         {
             return feedbackEvent == CombatFeedbackEvent.LocalDealtHit ||
                    feedbackEvent == CombatFeedbackEvent.LocalReceivedHit;
+        }
+
+        /// <summary>
+        /// Shakes the camera for any hit/KO in the world, not just ones the
+        /// local player caused or received: proximity to what the camera
+        /// follows is what makes an impact feel present on screen, not who
+        /// is involved. Amplitude/duration fall off linearly to zero at
+        /// ProximityShakeRange. BrawlCamera.Shake already gates ReducedMotion.
+        /// </summary>
+        public static void ReportProximityShake(Vector3 worldPosition, float amplitude, float duration)
+        {
+            Transform followed = ResolveCameraFollowTarget();
+            if (followed == null) return;
+
+            float distance = Vector3.Distance(followed.position, worldPosition);
+            float falloff = Mathf.Clamp01(1f - distance / ProximityShakeRange);
+            if (falloff <= 0f) return;
+
+            BrawlCamera.Shake(amplitude * falloff, duration * falloff);
+        }
+
+        static Transform ResolveCameraFollowTarget()
+        {
+            BrawlCamera cam = UnityEngine.Object.FindFirstObjectByType<BrawlCamera>();
+            if (cam != null && cam.target != null) return cam.target;
+            Camera main = Camera.main;
+            return main != null ? main.transform : null;
         }
 
         static double DefaultRealtime()

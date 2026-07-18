@@ -13,12 +13,17 @@ namespace BrawlArena
         BrawlerController owner;
         HeroMatchProgression progression;
         Image fill;
+        Image shieldRing;
+        Image superTick;
         TextMeshProUGUI identity;
         CanvasGroup group;
         Camera cam;
         float displayed = 1f;
         int shownLevel = -1;
         string shownName;
+
+        const float LowHealthThreshold = 0.35f;
+        static readonly Color HotWarningColor = new Color(1f, 0.22f, 0.16f);
 
         public static HealthBarWorld Create(BrawlerController owner)
         {
@@ -57,6 +62,16 @@ namespace BrawlArena
             identityRt.offsetMin = Vector2.zero;
             identityRt.offsetMax = Vector2.zero;
 
+            // A slightly larger plate behind BG/Fill: normally hidden, it
+            // flashes white while the owner is spawn-protected to read as a ring.
+            shieldRing = NewImage("ShieldRing", canvasGo.transform, new Color(1f, 1f, 1f, 0f));
+            var shieldRt = shieldRing.rectTransform;
+            shieldRt.anchorMin = new Vector2(0.08f, 0.04f);
+            shieldRt.anchorMax = new Vector2(0.92f, 0.37f);
+            shieldRt.offsetMin = new Vector2(-3f, -3f);
+            shieldRt.offsetMax = new Vector2(3f, 3f);
+            shieldRing.enabled = false;
+
             var bg = NewImage("BG", canvasGo.transform, new Color(0.06f, 0.06f, 0.09f, 0.8f));
             var bgRt = bg.rectTransform;
             bgRt.anchorMin = new Vector2(0.08f, 0.04f);
@@ -74,6 +89,15 @@ namespace BrawlArena
             fill.sprite = GetWhiteSprite();
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
+
+            // Small gold tick on the bar frame: visible to any observer once
+            // this brawler's Super is ready, so it reads from a distance too.
+            superTick = NewImage("SuperTick", canvasGo.transform, new Color(1f, 0.85f, 0.25f, 1f));
+            var tickRt = superTick.rectTransform;
+            tickRt.anchorMin = tickRt.anchorMax = new Vector2(0.92f, 0.37f);
+            tickRt.sizeDelta = new Vector2(11f, 11f);
+            tickRt.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            superTick.enabled = false;
         }
 
         void LateUpdate()
@@ -91,6 +115,40 @@ namespace BrawlArena
             float target = owner.Health.Max > 0f ? owner.Health.Current / owner.Health.Max : 0f;
             displayed = Mathf.MoveTowards(displayed, target, Time.deltaTime * 2.5f);
             fill.fillAmount = displayed;
+
+            // Below the warning threshold the fill lerps toward a hot color and
+            // gains a slow pulse, so a nearly-dead brawler reads as urgent from
+            // across the arena and not just from its shrinking bar length.
+            Color teamColor = TeamUtil.Color(owner.team);
+            if (!owner.IsDead && displayed > 0f && displayed < LowHealthThreshold)
+            {
+                float severity = 1f - Mathf.Clamp01(displayed / LowHealthThreshold);
+                Color warned = Color.Lerp(teamColor, HotWarningColor, severity);
+                if (!AccessibilitySettings.ReducedMotionEnabled)
+                {
+                    float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 7f);
+                    warned = Color.Lerp(warned, Color.white, pulse * 0.22f * severity);
+                }
+                fill.color = warned;
+            }
+            else
+            {
+                fill.color = teamColor;
+            }
+
+            if (shieldRing != null)
+            {
+                bool shielded = owner.IsSpawnProtected;
+                shieldRing.enabled = shielded;
+                if (shielded)
+                {
+                    float pulse = AccessibilitySettings.ReducedMotionEnabled
+                        ? 0.6f
+                        : 0.35f + 0.35f * (0.5f + 0.5f * Mathf.Sin(Time.time * 10f));
+                    shieldRing.color = new Color(1f, 1f, 1f, pulse);
+                }
+            }
+            if (superTick != null) superTick.enabled = !owner.IsDead && owner.SuperReady;
 
             if (progression == null) progression = owner.GetComponent<HeroMatchProgression>();
             int level = progression != null ? progression.Level : 1;

@@ -53,20 +53,10 @@ namespace BrawlArena
             SpellSchool school)
         {
             string id = (rosterId ?? string.Empty).ToLowerInvariant();
-            if (id == "fire" || school == SpellSchool.Fire)
-            {
-                return Create(ProjectileThreatType.Burn,
-                    new Color(1f, 0.48f, 0.08f, 1f), 1.08f, 0.09f, 0.42f, 4.4f);
-            }
             if (id == "frost" || school == SpellSchool.Frost)
             {
                 return Create(ProjectileThreatType.Control,
                     new Color(0.38f, 0.95f, 1f, 1f), 1.12f, 0.1f, 0.52f, 2.8f);
-            }
-            if (id == "storm" || school == SpellSchool.Storm)
-            {
-                return Create(ProjectileThreatType.Chain,
-                    new Color(0.86f, 0.68f, 1f, 1f), 1.04f, 0.075f, 0.34f, 6.2f);
             }
 
             // Thorn and any future physical projectile use the precision cue.

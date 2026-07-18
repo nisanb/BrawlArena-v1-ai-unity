@@ -6,12 +6,10 @@ namespace BrawlArena.EditorAutomation
 {
     public class GameplayMechanicsEditModeTests
     {
-        [TestCase("aria", "ARCANE TEMPEST", BrawlerSuperStyle.Burst)]
+        [TestCase("frost", "ABSOLUTE ZERO", BrawlerSuperStyle.Burst)]
         [TestCase("bastion", "AEGIS SHOCKWAVE", BrawlerSuperStyle.Burst)]
-        [TestCase("nova", "THUNDERBURST", BrawlerSuperStyle.ProjectileBlast)]
-        [TestCase("grimm", "INFERNO BREAKER", BrawlerSuperStyle.Burst)]
-        [TestCase("vex", "SHADOW STEP", BrawlerSuperStyle.Dash)]
         [TestCase("thorn", "EXPLOSIVE ARROW", BrawlerSuperStyle.ProjectileBlast)]
+        [TestCase("unknown-legacy-id", "POWER BURST", BrawlerSuperStyle.Burst)]
         public void DefaultSuperConfigurationDefinesEveryBrawler(string id, string expectedName,
             BrawlerSuperStyle expectedStyle)
         {
@@ -30,7 +28,7 @@ namespace BrawlArena.EditorAutomation
         {
             var definition = new BrawlerDefinition
             {
-                id = "aria",
+                id = "frost",
                 superName = "AUTHORED TEST SUPER",
                 superStyle = BrawlerSuperStyle.Dash,
                 superDamageMultiplier = 3f,

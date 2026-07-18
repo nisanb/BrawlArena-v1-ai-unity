@@ -53,11 +53,9 @@ namespace BrawlArena.EditorAutomation
 
         static readonly SchoolLook[] Looks =
         {
-            // Only the three playable mage schools are generated. Their
-            // internal frost/storm IDs remain stable for saves and combat.
-            new SchoolLook("fire", C("FFD05A"), C("D33218"), C("300503"), C("FF4A12"), 1, "Fire"),
+            // Only the surviving mage school is generated. The internal frost
+            // ID remains stable for saves and combat.
             new SchoolLook("frost", C("F4FDFF"), C("55C9ED"), C("102A64"), C("75F0FF"), 2, "Frost"),
-            new SchoolLook("storm", C("D8C8FF"), C("6854D9"), C("172B58"), C("B58CFF"), 3, "Storm"),
         };
 
         static bool ensuredThisDomain;
@@ -75,12 +73,18 @@ namespace BrawlArena.EditorAutomation
             PrefabDir + "ArcaneWizard.prefab",
             PrefabDir + "EarthWizard.prefab",
             PrefabDir + "VoidWizard.prefab",
+            PrefabDir + "FireWizard.prefab",
+            PrefabDir + "StormWizard.prefab",
             MaterialDir + "ArcaneBody.mat",
             MaterialDir + "ArcaneStaff.mat",
             MaterialDir + "EarthBody.mat",
             MaterialDir + "EarthStaff.mat",
             MaterialDir + "VoidBody.mat",
             MaterialDir + "VoidStaff.mat",
+            MaterialDir + "FireBody.mat",
+            MaterialDir + "FireStaff.mat",
+            MaterialDir + "StormBody.mat",
+            MaterialDir + "StormStaff.mat",
         };
 
         public static string PrefabPath(string id)
@@ -101,9 +105,7 @@ namespace BrawlArena.EditorAutomation
                     ClipDir + "Die.anim") != null &&
                 AssetDatabase.LoadAssetAtPath<AnimationClip>(
                     ClipDir + "VictoryStart.anim") != null &&
-                AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath("fire")) != null &&
-                AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath("frost")) != null &&
-                AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath("storm")) != null)
+                AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath("frost")) != null)
                 return "Invector wizard source art already refreshed in this editor domain.";
 
             CopyClip("Die", false);

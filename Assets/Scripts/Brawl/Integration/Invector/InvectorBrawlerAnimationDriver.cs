@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BrawlArena
@@ -36,6 +38,10 @@ namespace BrawlArena
         BrawlInvectorLifecyclePresentation lastLifecycleStateEntered;
         BrawlInvectorLifecyclePresentation lastLifecycleStateExited;
         string lastLifecycleFault = string.Empty;
+        Coroutine hitStopRoutine;
+
+        const string WeakAttackClipName = "WeakAttack_UnarmedA";
+        const string StrongAttackClipName = "StrongAttack_PunchA";
 
         public bool PresentationRequestsEnabled => presentationRequestsEnabled;
         public int BasicAttackRequestCount => basicAttackRequestCount;
@@ -184,6 +190,62 @@ namespace BrawlArena
             RequestLifecycle(BrawlInvectorLifecyclePresentation.Victory);
         }
 
+        /// <summary>
+        /// Resolves the authored clip currently overriding the weak/strong
+        /// attack slot and scales its length into a hit-timing estimate.
+        /// Any missing link in that chain returns the fallback unmodified.
+        /// </summary>
+        public float GetAttackImpactDelay(bool strongAttack, float fallbackSeconds)
+        {
+            if (!HasSameRootReferences) return fallbackSeconds;
+
+            Animator animator = controller.PresentationAnimator;
+            if (animator == null) return fallbackSeconds;
+            if (!(animator.runtimeAnimatorController is AnimatorOverrideController overrides))
+                return fallbackSeconds;
+
+            string originalClipName = strongAttack ? StrongAttackClipName : WeakAttackClipName;
+            AnimationClip resolved = ResolveOverriddenClip(overrides, originalClipName);
+            float clipLength = resolved != null ? resolved.length : 0f;
+            return MobileCombatRules.ResolveAnimationImpactDelay(clipLength, fallbackSeconds);
+        }
+
+        /// <summary>
+        /// Hit-stop freezes the Animator without touching Time.timeScale.
+        /// Re-entrant calls simply restart the pause window; the latest call
+        /// always wins over one already in flight.
+        /// </summary>
+        public void PauseAnimation(float seconds)
+        {
+            if (seconds <= 0f || !HasSameRootReferences || !isActiveAndEnabled) return;
+
+            if (hitStopRoutine != null) StopCoroutine(hitStopRoutine);
+            hitStopRoutine = StartCoroutine(HitStopRoutine(seconds));
+        }
+
+        IEnumerator HitStopRoutine(float seconds)
+        {
+            controller.SetAnimatorSpeed(0f);
+            yield return new WaitForSeconds(seconds);
+            controller.SetAnimatorSpeed(1f);
+            hitStopRoutine = null;
+        }
+
+        static AnimationClip ResolveOverriddenClip(AnimatorOverrideController overrides,
+            string originalClipName)
+        {
+            var overridePairs = new List<KeyValuePair<AnimationClip, AnimationClip>>(
+                overrides.overridesCount);
+            overrides.GetOverrides(overridePairs);
+            for (int i = 0; i < overridePairs.Count; i++)
+            {
+                AnimationClip original = overridePairs[i].Key;
+                if (original == null || original.name != originalClipName) continue;
+                return overridePairs[i].Value != null ? overridePairs[i].Value : original;
+            }
+            return null;
+        }
+
         internal void NotifyLifecycleStateEntered(
             BrawlInvectorLifecyclePresentation presentation)
         {
@@ -205,6 +267,12 @@ namespace BrawlArena
             if (input != null)
                 input.RuntimeGateClosed -= HandleRuntimeGateClosed;
             presentationRequestsEnabled = false;
+            if (hitStopRoutine != null)
+            {
+                StopCoroutine(hitStopRoutine);
+                hitStopRoutine = null;
+            }
+            controller?.SetAnimatorSpeed(1f);
             if (schedulerStillOpen && controller != null)
                 controller.ResetMeleePresentation();
         }

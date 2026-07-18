@@ -50,6 +50,7 @@ namespace BrawlArena
         public int lastLoginRewardUtcDay;
         public int loginRewardIndex;
         public int loginRewardStreak;
+        public long energyRegenAnchorTicks;
         public List<CharacterProgress> characters = new List<CharacterProgress>();
     }
 
@@ -64,6 +65,8 @@ namespace BrawlArena
         public const int MaxLevel = 10;
         public const int BattleEnergyCost = 5;
         public const int LoginRewardCount = 7;
+        public const int EnergyCapacity = 60;
+        public const int EnergyRegenSecondsPerPoint = 90;
 
         const int CurrentSaveVersion = 2;
 
@@ -84,7 +87,61 @@ namespace BrawlArena
         public static int Coins => Data.coins;
         public static int LifetimeCoinsEarned => Data.lifetimeCoinsEarned;
         public static int Gems => Data.gems;
-        public static int Energy => Data.energy;
+
+        public static int Energy
+        {
+            get
+            {
+                if (TickEnergyRegen()) Save();
+                return Data.energy;
+            }
+        }
+
+        /// <summary>
+        /// Battle Energy refills over real time so an empty tank can never
+        /// permanently lock the player out of battles; Energy Cells and
+        /// rewards remain the instant refill path. Returns true when the
+        /// balance or anchor changed and the save should be written.
+        /// </summary>
+        public static bool TickEnergyRegen()
+        {
+            return AccrueEnergyRegen(Data, DateTime.UtcNow.Ticks);
+        }
+
+        /// <summary>
+        /// Pure regen arithmetic: credits one point per elapsed interval up
+        /// to capacity. The anchor advances by whole intervals only, so
+        /// partial progress toward the next point is never lost; at capacity
+        /// the anchor tracks 'now' so no regen is banked while full.
+        /// </summary>
+        public static bool AccrueEnergyRegen(ProgressData target, long nowTicks)
+        {
+            if (target == null) return false;
+            long interval = EnergyRegenSecondsPerPoint * TimeSpan.TicksPerSecond;
+            if (target.energyRegenAnchorTicks <= 0 ||
+                target.energyRegenAnchorTicks > nowTicks)
+            {
+                target.energyRegenAnchorTicks = nowTicks;
+                return true;
+            }
+
+            if (target.energy >= EnergyCapacity)
+            {
+                bool moved = target.energyRegenAnchorTicks != nowTicks;
+                target.energyRegenAnchorTicks = nowTicks;
+                return moved;
+            }
+
+            long earned = (nowTicks - target.energyRegenAnchorTicks) / interval;
+            if (earned <= 0) return false;
+            long credited = Math.Min(earned, EnergyCapacity - target.energy);
+            target.energy = Mathf.Clamp(
+                target.energy + (int)credited, 0, EnergyCapacity);
+            target.energyRegenAnchorTicks = target.energy >= EnergyCapacity
+                ? nowTicks
+                : target.energyRegenAnchorTicks + credited * interval;
+            return true;
+        }
         public static GameMode SelectedMode
         {
             get
@@ -530,15 +587,16 @@ namespace BrawlArena
 
         public static void AddEnergy(int amount)
         {
-            Data.energy = Mathf.Clamp(Data.energy + amount, 0, 60);
+            Data.energy = Mathf.Clamp(Data.energy + amount, 0, EnergyCapacity);
             Save();
         }
 
         public static bool TrySpendEnergy(int amount)
         {
             if (amount <= 0) return true;
+            TickEnergyRegen();
             if (Data.energy < amount) return false;
-            Data.energy = Mathf.Clamp(Data.energy - amount, 0, 60);
+            Data.energy = Mathf.Clamp(Data.energy - amount, 0, EnergyCapacity);
             Save();
             return true;
         }

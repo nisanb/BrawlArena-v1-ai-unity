@@ -14,5 +14,19 @@ namespace BrawlArena
         void PlayDeath();
         void PlayRespawn();
         void PlayVictory();
+
+        /// <summary>
+        /// Animation-derived hit timing for the currently equipped weapon clip.
+        /// Returns fallbackSeconds whenever the backing Animator, override
+        /// controller, or expected clip cannot be resolved.
+        /// </summary>
+        float GetAttackImpactDelay(bool strongAttack, float fallbackSeconds);
+
+        /// <summary>
+        /// Hit-stop: freezes presentation for the given seconds without
+        /// touching Time.timeScale. A no-op is an acceptable implementation
+        /// for test doubles. The latest call always wins over one in flight.
+        /// </summary>
+        void PauseAnimation(float seconds);
     }
 }

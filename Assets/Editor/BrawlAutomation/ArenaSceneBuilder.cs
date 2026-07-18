@@ -168,7 +168,7 @@ namespace BrawlArena.EditorAutomation
             return go;
         }
 
-        static GameObject Place(string path, Vector3 pos, float rotY, Transform parent, float scale = 1f, bool collider = false)
+        static GameObject Place(string path, Vector3 pos, float rotY, Transform parent, float scale = 1f, bool collider = false, bool groundSnap = false)
         {
             var prefab = Load(path);
             if (prefab == null) return null;
@@ -194,6 +194,24 @@ namespace BrawlArena.EditorAutomation
             go.transform.position = pos;
             go.transform.rotation = Quaternion.Euler(0f, rotY, 0f);
             if (!Mathf.Approximately(scale, 1f)) go.transform.localScale = Vector3.one * scale;
+            if (groundSnap)
+            {
+                // Several source meshes (skull/bone clutter especially) ship
+                // with a pivot that is not at their visual base, which reads
+                // as a hovering prop with a detached shadow. Re-measure the
+                // instantiated renderer bounds after rotation/scale and lift
+                // or drop the object so its lowest point rests exactly at the
+                // requested ground height instead of trusting the pivot.
+                var renderers = go.GetComponentsInChildren<Renderer>();
+                if (renderers.Length > 0)
+                {
+                    var bounds = renderers[0].bounds;
+                    for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+                    float correction = pos.y - bounds.min.y;
+                    if (Mathf.Abs(correction) > 0.001f)
+                        go.transform.position += new Vector3(0f, correction, 0f);
+                }
+            }
             return go;
         }
 
@@ -215,8 +233,10 @@ namespace BrawlArena.EditorAutomation
             groundRoot.SetParent(parent, false);
 
             var floorPrefab = Load(Arena + "Floors/Floor1.prefab");
-            var floorPrefab2 = Load(Arena + "Floors/Floor2.prefab");
             if (floorPrefab == null) return;
+            // Floor2's atlas UV samples a dark navy/purple cliff-face swatch —
+            // it reads as a missing-texture hole on the play surface and is
+            // never used for ground tiles (see ORDER M art-coherence pass).
 
             // Measure the tile so the grid is exact regardless of mesh size.
             var probe = (GameObject)PrefabUtility.InstantiatePrefab(floorPrefab);
@@ -229,21 +249,76 @@ namespace BrawlArena.EditorAutomation
             float tile = sourceTile * tileScale;
             Report.AppendLine($"Floor tile size: {sourceTile:0.00} x {tileScale:0.0} scale = {tile:0.00}");
 
-            var rng = new System.Random(42);
+            // Deliberate composition: a single straight lane runs from each
+            // spawn gate through the zone center, and a plaza ring sits under
+            // the control zone. Floor2 is banned (dark/purple), so the lane
+            // reads through Floor1 laid at one fixed orientation, breaking
+            // out of the surrounding two-rotation checker field instead of
+            // introducing a second, clashing material.
+            float laneHalfWidth = tile * 1.5f;
+            float plazaRadius = ControlZoneRules.RegulationRadius + tile * 0.5f;
+
+            // Verticality accent (ORDER R): the control-zone plaza and the
+            // two spawn-gate aprons sit a step above the open field so the
+            // arena reads with some relief instead of one flat slab. A true
+            // beveled ramp mesh was judged not worth the risk to author
+            // procedurally without an editor to preview it; the order's
+            // documented fallback — a clean vertical step, with the ground
+            // collider extended to match — is used instead. NavMeshAgent's
+            // default step-height tolerance (0.4) comfortably clears both
+            // 0.22 and 0.15, so the rebake below still walks it as one
+            // connected surface.
+            const float PlazaLiftHeight = 0.22f;
+            const float ApronLiftHeight = 0.15f;
+            float apronDepth = tile * 2f;
+
+            var sampleRenderer = floorPrefab.GetComponentInChildren<Renderer>();
+            bool supportsTint = sampleRenderer != null && sampleRenderer.sharedMaterial != null &&
+                                 sampleRenderer.sharedMaterial.HasProperty("_BaseColor");
+            var tintBlock = supportsTint ? new MaterialPropertyBlock() : null;
+
             int half = Mathf.CeilToInt(ArenaLayout.GroundHalfExtent / tile);
             for (int ix = -half; ix < half; ix++)
             {
                 for (int iz = -half; iz < half; iz++)
                 {
-                    // Mostly Floor1 with scattered Floor2 accents — strict
-                    // alternation read as a chess board from the game camera.
-                    bool alt = floorPrefab2 != null && rng.NextDouble() < 0.15;
-                    var prefab = alt ? floorPrefab2 : floorPrefab;
-                    var t = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                    float x = (ix + 0.5f) * tile;
+                    float z = (iz + 0.5f) * tile;
+                    bool onLane = Mathf.Abs(x) <= laneHalfWidth && Mathf.Abs(z) <= ArenaLayout.GateDepth;
+                    bool onPlaza = new Vector2(x, z).sqrMagnitude <= plazaRadius * plazaRadius;
+                    bool onApron = onLane && Mathf.Abs(z) >= ArenaLayout.GateDepth - apronDepth;
+                    float y = onPlaza ? PlazaLiftHeight : onApron ? ApronLiftHeight : 0f;
+                    Vector3 pos = new Vector3(x, y, z);
+                    // A fixed two-rotation checker (0/90, never random) keeps
+                    // the open field from reading as a uniform slab while
+                    // never producing the diagonal-seam "patchwork" the
+                    // random four-way rotation used to create. The lane and
+                    // plaza stay at a single orientation so the path reads as
+                    // deliberate rather than another checker cell.
+                    float rotY = (onLane || onPlaza) ? 0f : (((ix + iz) & 1) == 0 ? 0f : 90f);
+                    var t = (GameObject)PrefabUtility.InstantiatePrefab(floorPrefab);
                     t.transform.SetParent(groundRoot, false);
-                    t.transform.position = new Vector3((ix + 0.5f) * tile, 0f, (iz + 0.5f) * tile);
-                    t.transform.rotation = Quaternion.Euler(0f, 90f * rng.Next(4), 0f);
+                    t.transform.position = pos;
+                    t.transform.rotation = Quaternion.Euler(0f, rotY, 0f);
                     t.transform.localScale = Vector3.one * tileScale;
+
+                    if (supportsTint)
+                    {
+                        // Deterministic per-tile ±4% value variation (seeded
+                        // by tile coordinates) so the floor is not one flat
+                        // unbroken color, without adding new textures or
+                        // material instances (a MaterialPropertyBlock keeps
+                        // GPU instancing intact; it only forgoes SRP-Batcher
+                        // grouping for the ground renderers).
+                        float v = 1f + TileTintNoise(ix, iz) * 0.04f;
+                        var tileRenderers = t.GetComponentsInChildren<Renderer>();
+                        for (int i = 0; i < tileRenderers.Length; i++)
+                        {
+                            tileRenderers[i].GetPropertyBlock(tintBlock);
+                            tintBlock.SetColor("_BaseColor", new Color(v, v, v, 1f));
+                            tileRenderers[i].SetPropertyBlock(tintBlock);
+                        }
+                    }
                 }
             }
 
@@ -253,6 +328,48 @@ namespace BrawlArena.EditorAutomation
             var box = floorCol.AddComponent<BoxCollider>();
             box.center = new Vector3(0f, -0.25f, 0f);
             box.size = new Vector3(ArenaLayout.GroundSize, 0.5f, ArenaLayout.GroundSize);
+
+            // Extend the ground collider to match the raised plaza/apron
+            // visuals so characters step up onto them instead of clipping
+            // through to the base floor height. Named identically to the
+            // base collider above ("GroundCollider") so
+            // ArenaRuntimeOptimizer's runtime layer pass — which matches on
+            // that exact name — assigns these to the ground layer rather
+            // than the WorldBlocker layer.
+            void AddGroundStep(Vector3 center, Vector3 size)
+            {
+                var stepGo = new GameObject("GroundCollider");
+                stepGo.transform.SetParent(parent, false);
+                var stepBox = stepGo.AddComponent<BoxCollider>();
+                stepBox.center = center;
+                stepBox.size = size;
+            }
+
+            AddGroundStep(new Vector3(0f, PlazaLiftHeight - 0.25f, 0f),
+                new Vector3(plazaRadius * 2f, 0.5f, plazaRadius * 2f));
+
+            float apronWidth = laneHalfWidth * 2f;
+            float apronCenterZ = ArenaLayout.GateDepth - apronDepth * 0.5f;
+            AddGroundStep(new Vector3(0f, ApronLiftHeight - 0.25f, apronCenterZ),
+                new Vector3(apronWidth, 0.5f, apronDepth));
+            AddGroundStep(new Vector3(0f, ApronLiftHeight - 0.25f, -apronCenterZ),
+                new Vector3(apronWidth, 0.5f, apronDepth));
+        }
+
+        /// <summary>
+        /// Deterministic integer hash (Perlin-style) returning a value in
+        /// [-1, 1) for a tile grid coordinate, so re-running the builder
+        /// always produces the same ground tint pattern.
+        /// </summary>
+        static float TileTintNoise(int ix, int iz)
+        {
+            unchecked
+            {
+                int h = ix * 92821 + iz * 68917;
+                h = (h << 13) ^ h;
+                int n = (h * (h * h * 15731 + 789221) + 1376312589) & 0x7fffffff;
+                return (n / (float)int.MaxValue) * 2f - 1f;
+            }
         }
 
         static void BuildBoundary(Transform parent)
@@ -276,21 +393,28 @@ namespace BrawlArena.EditorAutomation
             }
 
             // Cliff ring for looks, with jitter so it reads organic from above.
+            // cliff01-04 are the warm rust/tan boulder set that matches the
+            // green/tan play surface; Cliff5/Cliff6 sample a blue-toned atlas
+            // swatch that clashed with the rest of the palette and are
+            // dropped (see ORDER M art-coherence pass).
             string[] cliffs =
             {
                 Arena + "Rocks/cliff01.prefab", Arena + "Rocks/cliff02.prefab",
                 Arena + "Rocks/cliff03.prefab", Arena + "Rocks/cliff04.prefab",
-                Arena + "Rocks/Cliff5.prefab", Arena + "Rocks/Cliff6.prefab",
             };
             var rng = new System.Random(7);
             int n = 0;
             for (float a = 0f; a < 360f; a += 12f)
             {
                 float rad = a * Mathf.Deg2Rad;
-                float dist = ArenaLayout.CliffMinRadius +
+                // Alternate a slight radius offset per placement so the ring
+                // reads as two shallow, depth-layered rings instead of one
+                // flat band.
+                float ringOffset = (n % 2 == 0) ? 0f : ArenaLayout.CliffRadiusJitter * 0.5f;
+                float dist = ArenaLayout.CliffMinRadius + ringOffset +
                              (float)rng.NextDouble() * ArenaLayout.CliffRadiusJitter;
                 Vector3 pos = new Vector3(Mathf.Sin(rad) * dist, 0f, Mathf.Cos(rad) * dist);
-                Place(cliffs[n % cliffs.Length], pos, a + 180f + rng.Next(-15, 15), boundary, 1f + (float)rng.NextDouble() * 0.4f);
+                Place(cliffs[n % cliffs.Length], pos, a + 180f + rng.Next(-15, 15), boundary, 1f + (float)rng.NextDouble() * 0.25f);
                 n++;
             }
 
@@ -306,36 +430,40 @@ namespace BrawlArena.EditorAutomation
 
             // Every solid gameplay prop is authored in a 180-degree pair so
             // both teams receive the same lanes and cover on the larger map.
-            void Pair(string path, Vector3 pos, float rotY, float scale = 1f, bool collider = true)
+            // groundSnap defaults off so naturally-embedded rocks/crystals
+            // keep their authored partial burial; it is switched on below
+            // only for the man-made cover pieces (pillars/crates/chariot)
+            // and clutter that is known to hover on its source pivot.
+            void Pair(string path, Vector3 pos, float rotY, float scale = 1f, bool collider = true, bool groundSnap = false)
             {
-                Place(path, pos, rotY, props, scale, collider);
+                Place(path, pos, rotY, props, scale, collider, groundSnap);
                 Vector3 mirror = new Vector3(-pos.x, pos.y, -pos.z);
-                Place(path, mirror, rotY + 180f, props, scale, collider);
+                Place(path, mirror, rotY + 180f, props, scale, collider, groundSnap);
             }
 
             // Symmetric pillars = the core cover of the arena.
-            Pair(Arena + "Props/Pilar1.prefab", new Vector3(-8f, 0f, -8f), 0f);
-            Pair(Arena + "Props/Pilar2.prefab", new Vector3(8f, 0f, -8f), 90f);
+            Pair(Arena + "Props/Pilar1.prefab", new Vector3(-8f, 0f, -8f), 0f, 1f, true, true);
+            Pair(Arena + "Props/Pilar2.prefab", new Vector3(8f, 0f, -8f), 90f, 1f, true, true);
 
             // A second pillar ring keeps the 80m field from becoming long,
             // uninterrupted ranged sightlines.
-            Pair(Arena + "Props/Pilar3.prefab", new Vector3(-24f, 0f, -12f), 0f);
-            Pair(Arena + "Props/Pilar4.prefab", new Vector3(24f, 0f, -12f), 90f);
+            Pair(Arena + "Props/Pilar3.prefab", new Vector3(-24f, 0f, -12f), 0f, 1f, true, true);
+            Pair(Arena + "Props/Pilar4.prefab", new Vector3(24f, 0f, -12f), 90f, 1f, true, true);
 
             // Midfield and approach-lane cover. The central channel remains
             // open enough to contest the Gem Grab mine from either side.
-            Pair(Arena + "Props/Barrel01.prefab", new Vector3(-14f, 0f, -2f), 20f);
-            Pair(Arena + "Props/Barrel02.prefab", new Vector3(-13f, 0f, 0.2f), 65f);
-            Pair(Arena + "Props/Box.prefab", new Vector3(-14f, 0f, 2.4f), 10f);
-            Pair(Arena + "Props/Box02.prefab", new Vector3(-12f, 0f, -21f), 12f);
-            Pair(Arena + "Props/Barrel01.prefab", new Vector3(12f, 0f, -21f), 105f);
+            Pair(Arena + "Props/Barrel01.prefab", new Vector3(-14f, 0f, -2f), 20f, 1f, true, true);
+            Pair(Arena + "Props/Barrel02.prefab", new Vector3(-13f, 0f, 0.2f), 65f, 1f, true, true);
+            Pair(Arena + "Props/Box.prefab", new Vector3(-14f, 0f, 2.4f), 10f, 1f, true, true);
+            Pair(Arena + "Props/Box02.prefab", new Vector3(-12f, 0f, -21f), 12f, 1f, true, true);
+            Pair(Arena + "Props/Barrel01.prefab", new Vector3(12f, 0f, -21f), 105f, 1f, true, true);
 
             // Broken chariots anchor the outer rotations without crowding the
             // objective or either five-person spawn fan.
-            Pair(Arena + "Props/Chariot.prefab", new Vector3(19f, 0f, 4f), -35f);
+            Pair(Arena + "Props/Chariot.prefab", new Vector3(19f, 0f, 4f), -35f, 1f, true, true);
 
             // Gem mine marker: small crystal cluster dead center.
-            Place(Arena + "Rocks/Crystal2.prefab", new Vector3(0f, 0f, 0f), 15f, props, 0.55f, true);
+            Place(Arena + "Rocks/Crystal2.prefab", new Vector3(0f, 0f, 0f), 15f, props, 0.55f, true, true);
 
             // Crystals glow near the expanded corners and double as outer cover.
             Pair(Arena + "Rocks/Crystal1.prefab", new Vector3(-31f, 0f, 29f), 30f, 1.2f);
@@ -370,14 +498,12 @@ namespace BrawlArena.EditorAutomation
                 Vector3 pos = new Vector3(rng.Next(-36, 37), 0f, rng.Next(-36, 37));
                 Pair(grass[rng.Next(grass.Length)], pos, rng.Next(360), 1f, false);
             }
-            string[] cracks = { Arena + "Floors/Crack1.prefab", Arena + "Floors/Crack2.prefab", Arena + "Floors/Crack3.prefab" };
-            for (int i = 0; i < 10; i++)
-            {
-                Vector3 pos = new Vector3(rng.Next(-32, 33), 0.01f, rng.Next(-32, 33));
-                Pair(cracks[rng.Next(cracks.Length)], pos, rng.Next(360), 1f, false);
-            }
-            Pair(Arena + "Props/skull1.prefab", new Vector3(-7f, 0f, 24f), 45f, 1f, false);
-            Pair(Arena + "Props/Bone1.prefab", new Vector3(8f, 0f, -25f), 100f, 1f, false);
+            // Crack decals removed entirely — personas read them as shader
+            // glitches rather than ground detail.
+            // Skull/bone clutter kept for flavor but ground-snapped so their
+            // off-base pivots no longer hover with a detached shadow.
+            Pair(Arena + "Props/skull1.prefab", new Vector3(-7f, 0f, 24f), 45f, 1f, false, true);
+            Pair(Arena + "Props/Bone1.prefab", new Vector3(8f, 0f, -25f), 100f, 1f, false, true);
         }
 
         static void BuildLighting()
@@ -389,7 +515,22 @@ namespace BrawlArena.EditorAutomation
             light.intensity = 1.15f;
             light.shadows = LightShadows.Soft;
             light.shadowStrength = 0.75f;
-            lightGo.transform.rotation = Quaternion.Euler(52f, -32f, 0f);
+            // Azimuth rotated away from the camera's viewing azimuth (camera
+            // looks from -Z toward +Z, see BuildCamera) so shadows fall
+            // visibly to the side instead of straight back under the
+            // character silhouette (ORDER R / 3D-ness audit: light was
+            // ~aligned with the camera).
+            lightGo.transform.rotation = Quaternion.Euler(50f, -68f, 0f);
+
+            // Dim cool rim/back light: no shadows, just enough to separate
+            // toon-shaded character silhouettes from the ground plane.
+            var rimGo = new GameObject("Rim Light");
+            var rim = rimGo.AddComponent<Light>();
+            rim.type = LightType.Directional;
+            rim.color = new Color(0.72f, 0.8f, 0.95f);
+            rim.intensity = 0.25f;
+            rim.shadows = LightShadows.None;
+            rimGo.transform.rotation = Quaternion.Euler(38f, 155f, 0f);
 
             var skybox = AssetDatabase.LoadAssetAtPath<Material>("Assets/ModularRPGHeroesPBR/Material/Skybox_Mat.mat");
             if (skybox != null) RenderSettings.skybox = skybox;
@@ -400,8 +541,10 @@ namespace BrawlArena.EditorAutomation
             RenderSettings.ambientGroundColor = new Color(0.25f, 0.23f, 0.21f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogDensity = 0.006f;
-            RenderSettings.fogColor = new Color(0.64f, 0.72f, 0.82f);
+            // Slightly heavier, slightly deeper-toned fog for a visible depth
+            // falloff: distant cliffs read a step hazier than midfield.
+            RenderSettings.fogDensity = 0.011f;
+            RenderSettings.fogColor = new Color(0.58f, 0.66f, 0.78f);
 
             // Global post-processing volume with a saved profile asset.
             Directory.CreateDirectory("Assets/Settings");
@@ -508,20 +651,12 @@ namespace BrawlArena.EditorAutomation
                 displayName = name,
                 role = role,
                 description = description,
-                invectorHumanPrefab = string.Equals(id, "fire", StringComparison.Ordinal)
-                    ? Load(InvectorMigrationPilotBuilder.ProductionHumanPrefabPath)
-                    : string.Equals(id, "frost", StringComparison.Ordinal)
-                        ? Load(InvectorRimeMigrationBuilder.ProductionHumanPrefabPath)
-                        : string.Equals(id, "storm", StringComparison.Ordinal)
-                            ? Load(InvectorTempestMigrationBuilder.ProductionHumanPrefabPath)
-                            : null,
-                invectorAIPrefab = string.Equals(id, "fire", StringComparison.Ordinal)
-                    ? Load(InvectorMigrationPilotBuilder.ProductionAIPrefabPath)
-                    : string.Equals(id, "frost", StringComparison.Ordinal)
-                        ? Load(InvectorRimeMigrationBuilder.ProductionAIPrefabPath)
-                        : string.Equals(id, "storm", StringComparison.Ordinal)
-                            ? Load(InvectorTempestMigrationBuilder.ProductionAIPrefabPath)
-                            : null,
+                invectorHumanPrefab = string.Equals(id, "frost", StringComparison.Ordinal)
+                    ? Load(InvectorRimeMigrationBuilder.ProductionHumanPrefabPath)
+                    : null,
+                invectorAIPrefab = string.Equals(id, "frost", StringComparison.Ordinal)
+                    ? Load(InvectorRimeMigrationBuilder.ProductionAIPrefabPath)
+                    : null,
                 maxHealth = hp,
                 damage = damage,
                 attackRange = range,
@@ -588,6 +723,8 @@ namespace BrawlArena.EditorAutomation
                 moveLock = 0.42f,
                 moveSpeed = 5.15f,
                 autoAimRange = 12.5f,
+                wardStepDistance = 3.2f,
+                wardStepCost = 24f,
                 projectilePrefab = Load(Weapons + "Arrow01.prefab"),
                 projectileSpeed = 24f,
                 projectileReadability = ProjectileReadabilityProfile.ForRoster(
@@ -610,6 +747,53 @@ namespace BrawlArena.EditorAutomation
             };
         }
 
+        static BrawlerDefinition WarriorDef()
+        {
+            return new BrawlerDefinition
+            {
+                id = "bastion",
+                displayName = "Bastion",
+                role = "Vanguard",
+                description = "A shielded vanguard who wins ground up close — dive the archers, hold the zone, and answer ganks with a wall of steel.",
+                invectorHumanPrefab = Load(
+                    InvectorBastionMigrationBuilder.ProductionHumanPrefabPath),
+                invectorAIPrefab = Load(
+                    InvectorBastionMigrationBuilder.ProductionAIPrefabPath),
+                maxHealth = 150f,
+                damage = 26f,
+                attackRange = 2.8f,
+                attackRadius = 1.2f,
+                cooldown = 0.85f,
+                basicAttackReloadInterval = MobileCombatRules.BasicAttackReloadInterval,
+                hitDelay = 0.42f,
+                moveLock = 0.42f,
+                moveSpeed = 5.35f,
+                autoAimRange = 4.2f,
+                wardStepDistance = 2.3f,
+                wardStepCost = 14f,
+                meleeArcDegrees = 110f,
+                projectilePrefab = null,
+                projectileReadability = ProjectileReadabilityProfile.ForRoster(
+                    "bastion", SpellSchool.None),
+                swingVfx = LoadMagic("Slash/EarthSlash"),
+                impactVfx = LoadMagic("Slash Hit/EarthSlashHit"),
+                koVfx = LoadMagic("Nova/NovaEarth"),
+                spawnVfx = LoadMagic("Aura/AuraCast/AuraCastEarth"),
+                attackSfx = LoadAudioClip(
+                    "Assets/Invector-3rdPersonController/Melee Combat/Audio/slash_A.wav"),
+                hitSfx = LoadAudioClip(
+                    "Assets/Invector-3rdPersonController/Melee Combat/Audio/Hit 1.wav"),
+                superName = "AEGIS SHOCKWAVE",
+                superStyle = BrawlerSuperStyle.Burst,
+                superDamageMultiplier = 1.3f,
+                superRange = 4.2f,
+                superKnockback = 9f,
+                superVfx = LoadMagic("Cleave/EarthCleave"),
+                superImpactVfx = LoadMagic("Missiles & Explosions/Earth/EarthExplosionMega"),
+                specialty = SpellSpecialty.ForSchool(SpellSchool.None),
+            };
+        }
+
         static GameObject LoadKripto(string category, string prefabName)
         {
             if (string.IsNullOrEmpty(prefabName)) return null;
@@ -624,15 +808,22 @@ namespace BrawlArena.EditorAutomation
             return clip;
         }
 
+        static AudioClip LoadAudioClip(string path)
+        {
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+            if (clip == null) Report.AppendLine("MISSING ASSET: " + path);
+            return clip;
+        }
+
         public static BrawlerDefinition[] BuildRoster()
         {
             // The generated wizard assets are source art for the Invector
             // variants; production roster entries never reference them.
             Report.AppendLine(WizardAssetBuilder.EnsureAssets());
-            Report.AppendLine(InvectorMigrationPilotBuilder.BuildPilotAssets());
+            Report.AppendLine(WarriorAssetBuilder.EnsureAssets());
             Report.AppendLine(InvectorRimeMigrationBuilder.BuildRimePilotAssetsSafely());
-            Report.AppendLine(InvectorTempestMigrationBuilder.BuildTempestPilotAssetsSafely());
             Report.AppendLine(InvectorThornMigrationBuilder.BuildThornPilotAssetsSafely());
+            Report.AppendLine(InvectorBastionMigrationBuilder.BuildBastionPilotAssetsSafely());
             return BuildRosterFromExistingAssets();
         }
 
@@ -640,22 +831,13 @@ namespace BrawlArena.EditorAutomation
         {
             var roster = new[]
             {
-                WizardDef("fire", "Cinder", "Pyromancer",
-                    "A volatile artillery mage whose hits ignite enemies and leave burning ground behind.",
-                    SpellSchool.Fire, "Fire", 96f, 27f, 9.2f, 1.16f, 0.43f, 4.9f, 11.5f, 17f,
-                    "INFERNO", 1.92f, 2.65f, 7f,
-                    "Effect13_Hand", "Effect13_Collision", "Rain/RainFire"),
                 WizardDef("frost", "Rime", "Cryomancer",
                     "A control specialist who layers chill, slows advances, and locks down crowded lanes.",
                     SpellSchool.Frost, "Frost", 112f, 23f, 8.7f, 1.08f, 0.42f, 4.75f, 10.5f, 16f,
                     "ABSOLUTE ZERO", 1.58f, 2.8f, 4.5f,
                     "Effect16_Hand", "Effect16_Explosion", "Pillar Blast/FrostPillarBlast"),
-                WizardDef("storm", "Tempest", "Stormcaller",
-                    "A lightning-fast skirmisher whose charged bolts arc through clustered enemies.",
-                    SpellSchool.Storm, "Storm", 88f, 26f, 9.5f, 0.82f, 0.32f, 5.55f, 12f, 21f,
-                    "EYE OF THE STORM", 1.62f, 2.3f, 5f,
-                    "Effect10_Hand", "Effect10_Collision", "Rain/RainStorm"),
                 ArcherDef(),
+                WarriorDef(),
             };
             foreach (var definition in roster) definition.EnsureSuperConfiguration();
             return roster;
@@ -793,16 +975,18 @@ namespace BrawlArena.EditorAutomation
             var camGo = new GameObject("Main Camera");
             camGo.tag = "MainCamera";
             var cam = camGo.AddComponent<Camera>();
-            cam.fieldOfView = 52f;
+            // Widened for perspective convergence = depth (ORDER R rig pass).
+            cam.fieldOfView = 54f;
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = 200f;
             camGo.AddComponent<AudioListener>();
             var extra = camGo.AddComponent<UniversalAdditionalCameraData>();
             extra.renderPostProcessing = true;
             extra.antialiasing = AntialiasingMode.FastApproximateAntialiasing;
-            var follow = camGo.AddComponent<BrawlCamera>();
-            // Lower third-person angle (~41 degrees) for a more 3D read.
-            follow.offset = new Vector3(0f, 7.2f, -8.2f);
+            camGo.AddComponent<BrawlCamera>();
+            // BrawlCamera owns the follow rig (offset -> pitch/distance) via
+            // its own field default; do not override it here, or the two
+            // sources of truth silently drift apart again (ORDER R).
             // Authored vista framing for the character-select orbit.
             camGo.transform.position = new Vector3(30f, 17f, -38f);
             camGo.transform.LookAt(new Vector3(0f, 1.5f, 0f));

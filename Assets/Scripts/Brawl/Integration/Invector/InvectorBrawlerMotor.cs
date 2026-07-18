@@ -15,7 +15,6 @@ namespace BrawlArena
     {
         const float MinimumMoveSpeed = 0.1f;
         const float ExternalDisplacementSkin = 0.06f;
-        const float FacingTurnSpeed = 14f;
 
         [SerializeField, HideInInspector]
         BrawlInvectorThirdPersonController configuredController;
@@ -542,15 +541,21 @@ namespace BrawlArena
             appliedDisplacementCount++;
         }
 
+        /// <summary>
+        /// Non-immediate facing is bounded at the shared combat turn rate
+        /// instead of an exponential Slerp, so a committed swing reads as a
+        /// real weighted turn rather than a snap. Immediate remains a true
+        /// instant snap for spawn/teleport and Ward Step.
+        /// </summary>
         void ApplyFacing(bool immediate)
         {
             Quaternion target = Quaternion.LookRotation(
                 pendingFacingDirection, Vector3.up);
             Quaternion rotation = immediate
                 ? target
-                : Quaternion.Slerp(
+                : Quaternion.RotateTowards(
                     configuredBody.rotation, target,
-                    FacingTurnSpeed * Time.fixedDeltaTime);
+                    MobileCombatRules.CombatTurnRateDegreesPerSecond * Time.fixedDeltaTime);
             configuredBody.rotation = rotation;
             transform.rotation = rotation;
         }

@@ -33,6 +33,14 @@ namespace BrawlArena
         public const float RespawnDelay = 6f;
         public const float SpawnProtectionDuration = 1.75f;
 
+        /// <summary>Score gap (points) that flags a team as trailing/leading for comeback levers.</summary>
+        public const int ComebackScoreDeficit = 15;
+        public const float TrailingRespawnDelay = 4f;
+        public const float TrailingKnockoutXpMultiplier = 1.25f;
+        public const float LeadingExperienceBoxMultiplier = 0.75f;
+        /// <summary>Points a valid KO awards to the scoring team during Control Zone regulation.</summary>
+        public const int RegulationKnockoutPoints = 2;
+
         public static int ApplyScore(int current, int points, int limit = ScoreLimit)
         {
             return Mathf.Clamp(current + Mathf.Max(0, points), 0, Mathf.Max(1, limit));
@@ -57,15 +65,47 @@ namespace BrawlArena
                 regulationRadius + elapsed * expansionPerSecond);
         }
 
+        /// <summary>
+        /// Majority-based control: whichever team has more occupants holds the
+        /// zone outright (even against a lone defender), a tied non-zero count
+        /// contests it, and an empty zone is neutral.
+        /// </summary>
         public static ControlZoneState ResolveState(int blueOccupants, int redOccupants)
         {
             blueOccupants = Mathf.Max(0, blueOccupants);
             redOccupants = Mathf.Max(0, redOccupants);
-            if (blueOccupants > 0 && redOccupants > 0)
-                return ControlZoneState.Contested;
-            if (blueOccupants > 0) return ControlZoneState.BlueControlled;
-            if (redOccupants > 0) return ControlZoneState.RedControlled;
-            return ControlZoneState.Empty;
+            if (blueOccupants == 0 && redOccupants == 0) return ControlZoneState.Empty;
+            if (blueOccupants > redOccupants) return ControlZoneState.BlueControlled;
+            if (redOccupants > blueOccupants) return ControlZoneState.RedControlled;
+            return ControlZoneState.Contested;
+        }
+
+        /// <summary>Score gap comeback lever: true once the trailing team falls behind by the threshold.</summary>
+        public static bool IsTrailing(int teamScore, int opponentScore)
+        {
+            return opponentScore - teamScore >= ComebackScoreDeficit;
+        }
+
+        /// <summary>Score gap comeback lever: true once the leading team is ahead by the threshold.</summary>
+        public static bool IsLeading(int teamScore, int opponentScore)
+        {
+            return teamScore - opponentScore >= ComebackScoreDeficit;
+        }
+
+        /// <summary>Trailing victims respawn faster so a losing team can keep contesting.</summary>
+        public static float RespawnDelaySeconds(int victimScore, int enemyScore)
+        {
+            return IsTrailing(victimScore, enemyScore) ? TrailingRespawnDelay : RespawnDelay;
+        }
+
+        public static int ApplyTrailingKnockoutXpMultiplier(int baseXp, bool trailing)
+        {
+            return trailing ? Mathf.RoundToInt(baseXp * TrailingKnockoutXpMultiplier) : baseXp;
+        }
+
+        public static int ApplyLeadingExperienceBoxMultiplier(int baseXp, bool leading)
+        {
+            return leading ? Mathf.RoundToInt(baseXp * LeadingExperienceBoxMultiplier) : baseXp;
         }
 
         public static bool TryGetController(ControlZoneState state, out TeamId team)
@@ -213,6 +253,18 @@ namespace BrawlArena
         public bool IsOvertime { get; private set; }
         public bool ActiveMode => MatchManager.Instance != null &&
                                   MatchManager.Instance.mode == GameMode.ControlZone;
+
+        /// <summary>
+        /// HUD-facing controller contract. TeamId has no neutral member, so a
+        /// contested/empty zone is signalled by <see cref="HasControllingTeam"/>
+        /// being false rather than by a sentinel team value.
+        /// </summary>
+        public bool HasControllingTeam { get; private set; }
+        public TeamId ControllingTeam { get; private set; }
+        public bool IsContested => State == ControlZoneState.Contested;
+        public Vector3 ZoneCenter => transform.position;
+        /// <summary>Alias of <see cref="CurrentRadius"/> for HUD consumers.</summary>
+        public float ZoneRadius => CurrentRadius;
 
         public event Action<ControlZoneState> StateChanged;
 
@@ -363,6 +415,8 @@ namespace BrawlArena
 
         void SetState(ControlZoneState value)
         {
+            HasControllingTeam = ControlZoneRules.TryGetController(value, out TeamId controller);
+            if (HasControllingTeam) ControllingTeam = controller;
             if (State == value) return;
             State = value;
             StateChanged?.Invoke(value);

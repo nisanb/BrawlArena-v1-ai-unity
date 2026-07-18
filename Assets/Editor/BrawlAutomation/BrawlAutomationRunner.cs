@@ -536,6 +536,24 @@ namespace BrawlArena.EditorAutomation
                 {
                     var clips = anim.GetCurrentAnimatorClipInfo(0);
                     clip = clips.Length > 0 ? clips[0].clip.name : "(none)";
+                    // Attack swings and lifecycle states play on overlay
+                    // layers; sampling only layer 0 misreports a mid-swing
+                    // brawler as Idle/Walk. Report the most-weighted overlay
+                    // clip too so recorded evidence reflects what is visible.
+                    for (int layer = 1; layer < anim.layerCount; layer++)
+                    {
+                        if (anim.GetLayerWeight(layer) < 0.5f && layer != 0) continue;
+                        var overlay = anim.GetCurrentAnimatorClipInfo(layer);
+                        if (overlay.Length == 0) continue;
+                        string overlayClip = overlay[0].clip.name;
+                        if (!string.IsNullOrEmpty(overlayClip) &&
+                            overlayClip != clip &&
+                            !overlayClip.StartsWith("Idle", StringComparison.Ordinal))
+                        {
+                            clip = clip + "+" + overlayClip;
+                            break;
+                        }
+                    }
                 }
                 Vector3 p = b.transform.position;
                 sb.AppendLine(

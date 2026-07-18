@@ -197,6 +197,9 @@ namespace BrawlArena.EditorAutomation
             public void PlayHitReaction() { }
             public void PlayDeath() { }
             public void PlayRespawn() { }
+            public float GetAttackImpactDelay(bool strongAttack, float fallbackSeconds) =>
+                fallbackSeconds;
+            public void PauseAnimation(float seconds) { }
 
             public void PlayVictory()
             {

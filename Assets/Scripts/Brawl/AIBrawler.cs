@@ -12,6 +12,14 @@ namespace BrawlArena
         Experience,
     }
 
+    /// <summary>Strategy-triangle archetype derived from a brawler's own stats.</summary>
+    public enum AIRole
+    {
+        Warrior,
+        Mage,
+        Archer,
+    }
+
     /// <summary>
     /// Backend-independent brawler brain used for both AI teammates and enemies.
     /// Melee units chase with a small flank offset; ranged units hold a firing
@@ -41,6 +49,7 @@ namespace BrawlArena
 
         bool Ranged => self.projectilePrefab != null;
         public AIBrawlerObjective CurrentObjective { get; private set; }
+        public AIRole Role { get; private set; }
 
         public static AIBrawlerObjective ResolveModeObjective(GameMode mode,
             bool retreating)
@@ -49,6 +58,27 @@ namespace BrawlArena
             if (mode == GameMode.ControlZone) return AIBrawlerObjective.ControlZone;
             if (mode == GameMode.GemGrab) return AIBrawlerObjective.GemGrab;
             return AIBrawlerObjective.Combat;
+        }
+
+        /// <summary>
+        /// Melee (no projectile) is always Warrior. Ranged units split by
+        /// range: long-band sniping is Archer, shorter-band casting is Mage.
+        /// </summary>
+        public static AIRole ResolveRole(bool hasProjectile, float attackRange)
+        {
+            if (!hasProjectile) return AIRole.Warrior;
+            return attackRange >= 8f ? AIRole.Archer : AIRole.Mage;
+        }
+
+        /// <summary>
+        /// Gem Grab lead-protection destination: holds a fraction of the way
+        /// home instead of retreating all the way, so the carrier stays close
+        /// enough for a fight to still reach them.
+        /// </summary>
+        public static Vector3 GemCarrierHoldPosition(Vector3 currentPosition,
+            Vector3 homePosition, float towardHomeFraction)
+        {
+            return Vector3.Lerp(currentPosition, homePosition, Mathf.Clamp01(towardHomeFraction));
         }
 
         public IBrawlerNavigation Navigation
@@ -77,6 +107,7 @@ namespace BrawlArena
             InitializeNavigation();
             if (preferredRange <= 0f)
                 preferredRange = Ranged ? 7.5f : self.attackRange * 0.8f;
+            Role = ResolveRole(Ranged, self.attackRange);
             nextThink = Time.time + Random.Range(0f, thinkInterval);
         }
 
@@ -247,10 +278,7 @@ namespace BrawlArena
             }
             else if (Ranged)
             {
-                float dist = PlanarDistance(myPos, tPos);
-                if (dist < preferredRange * 0.6f) dest = myPos + away * 4f;
-                else if (dist > preferredRange * 1.15f) dest = tPos + away * preferredRange;
-                else dest = myPos + Vector3.Cross(Vector3.up, away) * (strafeSign * 2.5f);
+                dest = RoleBandDestination(myPos, tPos, away, PlanarDistance(myPos, tPos));
             }
             else
             {
@@ -324,7 +352,21 @@ namespace BrawlArena
                 : self.attackRange + 3f;
 
             if (inside && enemyDistance <= immediateCombatRange)
-                destination = zone.ClampInside(target.transform.position, 0.8f);
+            {
+                // Warriors drive straight into melee; Archers/Mages keep
+                // their combat band even while holding the objective.
+                Vector3 engageDestination = target.transform.position;
+                if (Role != AIRole.Warrior)
+                {
+                    Vector3 myPosNow = transform.position;
+                    Vector3 awayNow = myPosNow - target.transform.position;
+                    awayNow.y = 0f;
+                    awayNow = awayNow.sqrMagnitude > 0.01f ? awayNow.normalized : -transform.forward;
+                    engageDestination = RoleBandDestination(myPosNow, target.transform.position,
+                        awayNow, enemyDistance);
+                }
+                destination = zone.ClampInside(engageDestination, 0.8f);
+            }
             else if (inside &&
                      ((self.team == TeamId.Blue &&
                        zone.State == ControlZoneState.BlueControlled) ||
@@ -343,7 +385,8 @@ namespace BrawlArena
         /// Gem Grab priorities. True when this think tick already chose a
         /// destination: collect nearby loose gems unless an enemy is breathing
         /// down our neck, and once our team's countdown is running, carriers
-        /// fall back toward their own spawn line to protect the lead.
+        /// hold a defensible midfield position (not a full retreat home) to
+        /// protect the lead without stalling the match out of reach.
         /// </summary>
         bool ThinkGems()
         {
@@ -351,14 +394,18 @@ namespace BrawlArena
             if (mgr == null || !mgr.ActiveMode) return false;
 
             // Protect the lead: countdown running for us and we hold gems.
+            // Holding midfield (rather than sprinting all the way home) keeps
+            // the carrier reachable so the countdown can still be contested
+            // instead of stalling the match in an unreachable corner.
             if (mgr.CountdownTeam == self.team && CarriedGems() > 0)
             {
                 Vector3 home = ArenaLayout.TeamHomePosition(self.team, transform.position.x);
+                Vector3 hold = GemCarrierHoldPosition(transform.position, home, 0.4f);
                 if (navigation.TrySamplePosition(
-                        home, 4f, out Vector3 sampledHome))
+                        hold, 4f, out Vector3 sampledHold))
                 {
                     CurrentObjective = AIBrawlerObjective.GemGrab;
-                    navigation.SetDestination(sampledHome);
+                    navigation.SetDestination(sampledHold);
                     return true;
                 }
             }
@@ -417,17 +464,27 @@ namespace BrawlArena
             if (MatchManager.Instance == null) return null;
             BrawlerController best = null;
             float bestScore = float.MinValue;
+            bool zoneActive = ControlZoneManager.Instance != null &&
+                               ControlZoneManager.Instance.ActiveMode;
             foreach (var b in MatchManager.Instance.GetBrawlers())
             {
                 if (b == null || b == self || b.team == self.team || b.IsDead) continue;
                 float d = PlanarDistance(transform.position, b.transform.position);
                 float score = -d;
-                score += (1f - b.Health.Current / Mathf.Max(1f, b.Health.Max)) * 3f;
-                if (ControlZoneManager.Instance != null &&
-                    ControlZoneManager.Instance.ActiveMode &&
-                    ControlZoneManager.Instance.Contains(b.transform.position))
-                    score += 4f;
+                // Archers finish low-health targets fastest since they can
+                // safely poke from range.
+                score += (1f - b.Health.Current / Mathf.Max(1f, b.Health.Max)) *
+                         (Role == AIRole.Archer ? 5f : 3f);
+                // Warriors care about the zone twice as much as anyone else:
+                // holding it is their whole job.
+                if (zoneActive && ControlZoneManager.Instance.Contains(b.transform.position))
+                    score += Role == AIRole.Warrior ? 8f : 4f;
                 if (b.IsPlayer) score += 0.5f;
+
+                AIRole targetRole = ResolveRole(b.projectilePrefab != null, b.attackRange);
+                if (Role == AIRole.Archer && targetRole == AIRole.Mage) score += 2f;
+                if (Role == AIRole.Mage && targetRole == AIRole.Warrior) score += 2f;
+
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -443,6 +500,33 @@ namespace BrawlArena
             dir.y = 0f;
             if (dir.sqrMagnitude < 0.01f) return;
             self.Motor?.Face(dir, false);
+        }
+
+        /// <summary>
+        /// Range-keeping steer for Ranged roles: Archers hold [attackRange*0.6,
+        /// attackRange] and back off sharply once an enemy closes under 4.5m;
+        /// Mages hold the flatter [5, attackRange] band. Only called for
+        /// Archer/Mage — Warriors always close straight to melee range.
+        /// </summary>
+        Vector3 RoleBandDestination(Vector3 myPos, Vector3 targetPos, Vector3 away,
+            float enemyDistance)
+        {
+            if (Role == AIRole.Archer)
+            {
+                float bandMin = self.attackRange * 0.6f;
+                float bandMax = self.attackRange;
+                if (enemyDistance < 4.5f) return myPos + away * 3f;
+                if (enemyDistance < bandMin) return myPos + away * 2.5f;
+                if (enemyDistance > bandMax) return targetPos + away * self.attackRange;
+                return myPos + Vector3.Cross(Vector3.up, away) * (strafeSign * 2.5f);
+            }
+
+            // Mage.
+            const float mageBandMin = 5f;
+            float mageBandMax = self.attackRange;
+            if (enemyDistance < mageBandMin) return myPos + away * 2.5f;
+            if (enemyDistance > mageBandMax) return targetPos + away * self.attackRange;
+            return myPos + Vector3.Cross(Vector3.up, away) * (strafeSign * 2.5f);
         }
 
         static float PlanarDistance(Vector3 a, Vector3 b)

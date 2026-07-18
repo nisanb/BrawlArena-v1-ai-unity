@@ -201,6 +201,10 @@ namespace BrawlArena.EditorAutomation
                 brawler, "AttackRoutine", null, Vector3.forward);
             Assert.IsTrue(attack.MoveNext());
             Assert.IsInstanceOf<WaitForSeconds>(attack.Current);
+            // The routine continues into its authored post-impact recovery window
+            // (attackMoveLock - hitDelay) before releasing attackRoutine ownership.
+            Assert.IsTrue(attack.MoveNext());
+            Assert.IsInstanceOf<WaitForSeconds>(attack.Current);
             Assert.IsFalse(attack.MoveNext());
             Assert.IsNull(GetPrivateField<Coroutine>(brawler, "attackRoutine"));
             Assert.AreEqual(2, brawler.WeaponPresentationFailureCount,
@@ -234,7 +238,7 @@ namespace BrawlArena.EditorAutomation
                 "IEnumerator AttackRoutine(", "IEnumerator SuperRoutine(");
             AssertOrdered(attack,
                 "TryPresent(AnimationPresentationOperation.PlayBasicAttack)",
-                "yield return new WaitForSeconds(attackHitDelay)",
+                "yield return new WaitForSeconds(hitDelay)",
                 "if (projectilePrefab != null) FireProjectile(target, worldDirection)");
             string projectile = Extract(facade,
                 "void FireProjectile(", "void FireSuperProjectile(");

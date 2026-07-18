@@ -240,9 +240,16 @@ namespace BrawlArena
             if (attacker != null) scoringTeam = attacker.team;
             if (scoringTeam == victim.team) return;
 
-            // KOs matter through death/respawn pressure but never score the
-            // primary objective mode.
-            if (mode == GameMode.ControlZone) return;
+            // KOs matter through death/respawn pressure and, during Control
+            // Zone regulation only, also award a fixed bonus toward the
+            // objective score. AddControlZoneScore already no-ops outside
+            // MatchState.Playing, so Overtime KOs correctly score nothing —
+            // the zone tick decides overtime instead.
+            if (mode == GameMode.ControlZone)
+            {
+                AddControlZoneScore(scoringTeam, ControlZoneRules.RegulationKnockoutPoints);
+                return;
+            }
 
             if (scoringTeam == TeamId.Blue) BlueScore++;
             else RedScore++;
@@ -282,7 +289,13 @@ namespace BrawlArena
 
         public float RespawnDelayFor(BrawlerController brawler)
         {
-            if (mode == GameMode.ControlZone) return ControlZoneRules.RespawnDelay;
+            if (mode == GameMode.ControlZone)
+            {
+                if (brawler == null) return ControlZoneRules.RespawnDelay;
+                int victimScore = brawler.team == TeamId.Blue ? BlueScore : RedScore;
+                int enemyScore = brawler.team == TeamId.Blue ? RedScore : BlueScore;
+                return ControlZoneRules.RespawnDelaySeconds(victimScore, enemyScore);
+            }
             float multiplier = brawler != null
                 ? Mathf.Max(0.2f, brawler.respawnDelayMultiplier)
                 : 1f;

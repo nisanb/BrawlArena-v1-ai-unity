@@ -1,5 +1,7 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using NUnit.Framework;
 using Unity.AI.Navigation;
 using UnityEditor;
@@ -15,12 +17,17 @@ namespace BrawlArena.EditorAutomation.Tests
         const string OriginalScenePathKey = "BrawlArena.ControlZone.OriginalScenePath";
         const string OriginalSceneDirtyKey = "BrawlArena.ControlZone.OriginalSceneDirty";
 
+        readonly List<GameObject> created = new List<GameObject>();
+
         [TearDown]
         public void TearDown()
         {
             MatchSetup.Mode = GameMode.ControlZone;
             MatchSetup.CharacterIndex = -1;
             MatchSetup.FromMenu = false;
+            for (int i = created.Count - 1; i >= 0; i--)
+                if (created[i] != null) Object.DestroyImmediate(created[i]);
+            created.Clear();
         }
 
         [Test]
@@ -132,8 +139,203 @@ namespace BrawlArena.EditorAutomation.Tests
             StringAssert.Contains("SpawnProtectionRemaining", hud);
             string flow = ReadProjectSource("Assets/Scripts/Brawl/GameFlow.cs");
             StringAssert.Contains("ArenaLayout.ActiveTeamSize(MatchSetup.Mode)", flow);
-            StringAssert.Contains("BuildRotatedTeamDefinitionIndices", flow);
+            StringAssert.Contains("BuildRoleBalancedLineup", flow);
             StringAssert.DoesNotContain("new System.Random", flow);
+        }
+
+        [Test]
+        public void ComebackRespawnAndExperienceHelpersScaleWithScoreGap()
+        {
+            Assert.That(ControlZoneRules.IsTrailing(10, 25), Is.True);
+            Assert.That(ControlZoneRules.IsTrailing(11, 25), Is.False);
+            Assert.That(ControlZoneRules.IsLeading(25, 10), Is.True);
+            Assert.That(ControlZoneRules.IsLeading(24, 10), Is.False);
+
+            Assert.That(ControlZoneRules.RespawnDelaySeconds(10, 25),
+                Is.EqualTo(ControlZoneRules.TrailingRespawnDelay));
+            Assert.That(ControlZoneRules.RespawnDelaySeconds(11, 25),
+                Is.EqualTo(ControlZoneRules.RespawnDelay));
+            Assert.That(ControlZoneRules.RespawnDelaySeconds(20, 20),
+                Is.EqualTo(ControlZoneRules.RespawnDelay));
+
+            Assert.That(ControlZoneRules.ApplyTrailingKnockoutXpMultiplier(40, true),
+                Is.EqualTo(50));
+            Assert.That(ControlZoneRules.ApplyTrailingKnockoutXpMultiplier(40, false),
+                Is.EqualTo(40));
+            Assert.That(ControlZoneRules.ApplyLeadingExperienceBoxMultiplier(25, true),
+                Is.EqualTo(19));
+            Assert.That(ControlZoneRules.ApplyLeadingExperienceBoxMultiplier(25, false),
+                Is.EqualTo(25));
+        }
+
+        [Test]
+        public void RoleBalancedLineupIsDeterministicAndCoversEveryRoleSlot()
+        {
+            var roster = new[]
+            {
+                new BrawlerDefinition { id = "frost" },
+                new BrawlerDefinition { id = "thorn" },
+                new BrawlerDefinition { id = "bastion" },
+            };
+
+            CollectionAssert.AreEqual(new[] { 0, 1, 2 },
+                MatchLineupPlanner.BuildRoleBalancedLineup(roster, 0, 3));
+            CollectionAssert.AreEqual(new[] { 1, 2, 0 },
+                MatchLineupPlanner.BuildRoleBalancedLineup(roster, 1, 3));
+            CollectionAssert.AreEqual(new[] { 2, 0, 1 },
+                MatchLineupPlanner.BuildRoleBalancedLineup(roster, 2, 3));
+            CollectionAssert.AreEqual(new[] { 0, 1, 2, 0, 1 },
+                MatchLineupPlanner.BuildRoleBalancedLineup(roster, 0, 5),
+                "Team sizes larger than the roster must wrap around, not repeat the pin.");
+            CollectionAssert.AreEqual(
+                MatchLineupPlanner.BuildRoleBalancedLineup(roster, 1, 3),
+                MatchLineupPlanner.BuildRoleBalancedLineup(roster, 1, 3),
+                "Identical inputs must never depend on a hidden random seed.");
+        }
+
+        [Test]
+        public void OpponentLineupBreaksTheMirrorButRespectsTheDuplicateCap()
+        {
+            var roster = new[]
+            {
+                new BrawlerDefinition { id = "frost" },
+                new BrawlerDefinition { id = "thorn" },
+                new BrawlerDefinition { id = "bastion" },
+            };
+            int[] ally = MatchLineupPlanner.BuildRoleBalancedLineup(roster, 0, 3);
+            CollectionAssert.AreEqual(new[] { 0, 1, 2 }, ally);
+
+            CollectionAssert.AreEqual(
+                MatchLineupPlanner.BuildOpponentLineup(roster, ally, 3, 7),
+                MatchLineupPlanner.BuildOpponentLineup(roster, ally, 3, 7),
+                "A fixed seed must always reproduce the identical opponent comp.");
+
+            for (int seed = 0; seed <= 20; seed++)
+            {
+                int[] opponent = MatchLineupPlanner.BuildOpponentLineup(roster, ally, 3, seed);
+                Assert.That(opponent.Length, Is.EqualTo(3));
+
+                bool mirrorsAlly = opponent[0] == ally[0] && opponent[1] == ally[1] &&
+                    opponent[2] == ally[2];
+                Assert.That(mirrorsAlly, Is.False,
+                    $"seed {seed} must not produce a pure mirror of the ally lineup.");
+
+                foreach (int defIndex in opponent)
+                    Assert.That(defIndex, Is.InRange(0, roster.Length - 1));
+
+                var counts = new Dictionary<int, int>();
+                foreach (int defIndex in opponent)
+                    counts[defIndex] = counts.TryGetValue(defIndex, out int c) ? c + 1 : 1;
+                foreach (int count in counts.Values)
+                    Assert.That(count, Is.LessThanOrEqualTo(2),
+                        $"seed {seed} must never field more than two copies of one hero.");
+            }
+        }
+
+        [Test]
+        public void AiRoleResolvesFromProjectilePresenceAndRangeThreshold()
+        {
+            Assert.That(AIBrawler.ResolveRole(false, 2.8f), Is.EqualTo(AIRole.Warrior));
+            Assert.That(AIBrawler.ResolveRole(false, 20f), Is.EqualTo(AIRole.Warrior));
+            Assert.That(AIBrawler.ResolveRole(true, 7.9f), Is.EqualTo(AIRole.Mage));
+            Assert.That(AIBrawler.ResolveRole(true, 8f), Is.EqualTo(AIRole.Archer));
+            Assert.That(AIBrawler.ResolveRole(true, 10.5f), Is.EqualTo(AIRole.Archer));
+        }
+
+        [Test]
+        public void GemCarrierHoldPositionStopsShortOfHomeInsteadOfRetreatingFully()
+        {
+            Vector3 current = new Vector3(10f, 0f, 0f);
+            Vector3 home = new Vector3(0f, 0f, 0f);
+
+            Vector3 hold = AIBrawler.GemCarrierHoldPosition(current, home, 0.4f);
+
+            Assert.That(hold, Is.EqualTo(new Vector3(6f, 0f, 0f)));
+            Assert.That(Vector3.Distance(hold, home), Is.GreaterThan(0.01f),
+                "A leading carrier must hold midfield, not sprint all the way home.");
+            Assert.That(AIBrawler.GemCarrierHoldPosition(current, home, 2f),
+                Is.EqualTo(home), "The fraction must clamp to [0,1].");
+        }
+
+        [Test]
+        public void ControlZoneKnockoutsScoreTheFixedBonusDuringRegulation()
+        {
+            MatchManager manager = CreateManager();
+            BrawlerController attacker = CreateHero("KoAttacker", TeamId.Blue);
+            BrawlerController victim = CreateHero("KoVictim", TeamId.Red);
+            manager.Register(attacker);
+            manager.Register(victim);
+            BeginPlaying(manager);
+
+            manager.ReportKO(victim, attacker.gameObject);
+            Assert.That(manager.BlueScore, Is.EqualTo(ControlZoneRules.RegulationKnockoutPoints));
+            Assert.That(manager.RedScore, Is.Zero);
+
+            manager.ReportKO(victim, attacker.gameObject);
+            Assert.That(manager.BlueScore,
+                Is.EqualTo(ControlZoneRules.RegulationKnockoutPoints * 2),
+                "Every valid regulation KO must award the fixed zone bonus.");
+        }
+
+        [Test]
+        public void ControlZoneKnockoutsScoreNothingOnceOvertimeBegins()
+        {
+            MatchManager manager = CreateManager();
+            BrawlerController attacker = CreateHero("OvertimeKoAttacker", TeamId.Blue);
+            BrawlerController victim = CreateHero("OvertimeKoVictim", TeamId.Red);
+            manager.Register(attacker);
+            manager.Register(victim);
+            BeginPlaying(manager);
+
+            // Force the regulation timer to expire with tied scores so the
+            // match enters Overtime through the public API only.
+            manager.AdvanceActiveMatch(manager.matchDuration + 1f);
+            Assert.That(manager.State, Is.EqualTo(MatchState.Overtime));
+
+            manager.ReportKO(victim, attacker.gameObject);
+            Assert.That(manager.BlueScore, Is.Zero);
+            Assert.That(manager.RedScore, Is.Zero,
+                "Overtime KOs must not score; the zone tick decides overtime instead.");
+        }
+
+        MatchManager CreateManager()
+        {
+            var go = new GameObject("ControlZoneMatchLoopTestManager");
+            created.Add(go);
+            MatchManager manager = go.AddComponent<MatchManager>();
+            if (MatchManager.Instance != manager) InvokePrivate(manager, "Awake");
+            // Awake() re-derives matchDuration from ConfigureMode, so the
+            // short test duration must be applied after it, not before.
+            manager.autoStart = false;
+            manager.introDuration = 0f;
+            manager.matchDuration = 1f;
+            return manager;
+        }
+
+        BrawlerController CreateHero(string name, TeamId team)
+        {
+            var go = new GameObject(name);
+            created.Add(go);
+            go.AddComponent<Health>().SetMax(100f);
+            go.AddComponent<InvectorCutoverTestMotor>();
+            go.AddComponent<InvectorCutoverTestAnimationDriver>();
+            BrawlerController brawler = go.AddComponent<BrawlerController>();
+            if (brawler.Health == null) InvokePrivate(brawler, "Awake");
+            brawler.team = team;
+            return brawler;
+        }
+
+        static void BeginPlaying(MatchManager manager)
+        {
+            manager.BeginMatch();
+            InvokePrivate(manager, "Update");
+            Assert.That(manager.State, Is.EqualTo(MatchState.Playing));
+        }
+
+        static void InvokePrivate(object target, string method)
+        {
+            target.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.Invoke(target, null);
         }
 
         [UnityTest]
@@ -190,16 +392,16 @@ namespace BrawlArena.EditorAutomation.Tests
             matchRoot.SetActive(true);
 
             GameObject humanPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                InvectorMigrationPilotBuilder.ProductionHumanPrefabPath);
+                InvectorRimeMigrationBuilder.ProductionHumanPrefabPath);
             GameObject aiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                InvectorMigrationPilotBuilder.ProductionAIPrefabPath);
+                InvectorRimeMigrationBuilder.ProductionAIPrefabPath);
             Assert.That(humanPrefab, Is.Not.Null);
             Assert.That(aiPrefab, Is.Not.Null);
             var definition = new BrawlerDefinition
             {
-                id = "fire",
-                displayName = "Cinder",
-                role = "Pyromancer",
+                id = "frost",
+                displayName = "Rime",
+                role = "Cryomancer",
                 invectorHumanPrefab = humanPrefab,
                 invectorAIPrefab = aiPrefab,
                 maxHealth = 100f,
@@ -211,7 +413,7 @@ namespace BrawlArena.EditorAutomation.Tests
                 cooldown = 0.08f,
                 hitDelay = 0.02f,
                 moveLock = 0.05f,
-                specialty = SpellSpecialty.ForSchool(SpellSchool.Fire),
+                specialty = SpellSpecialty.ForSchool(SpellSchool.Frost),
             };
 
             BrawlerController human = GameFlow.Spawn(definition, TeamId.Blue,
@@ -240,9 +442,9 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(humanGate.IsRuntimeActive, Is.True, humanGate.FailureMessage);
             Assert.That(aiGate.IsRuntimeActive, Is.True, aiGate.FailureMessage);
             Assert.That(human.GetComponent<InvectorBrawlerPrefabIdentity>()
-                .Matches("fire", InvectorBrawlerPrefabRole.Human), Is.True);
+                .Matches("frost", InvectorBrawlerPrefabRole.Human), Is.True);
             Assert.That(ai.GetComponent<InvectorBrawlerPrefabIdentity>()
-                .Matches("fire", InvectorBrawlerPrefabRole.AI), Is.True);
+                .Matches("frost", InvectorBrawlerPrefabRole.AI), Is.True);
             Assert.That(human.Motor, Is.SameAs(humanMotor));
             Assert.That(ai.Motor, Is.SameAs(aiMotor));
             Assert.That(human.GetComponents<CharacterController>(), Is.Empty);
@@ -346,8 +548,9 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(human.IsDead || human.IsRespawning, Is.False);
             Assert.That(respawnElapsed, Is.InRange(5.8f, 6.8f));
             Assert.That(manager.BlueScore, Is.EqualTo(blueBeforeKo));
-            Assert.That(manager.RedScore, Is.EqualTo(redBeforeKo),
-                "Control Zone KOs must not alter objective score.");
+            Assert.That(manager.RedScore,
+                Is.EqualTo(redBeforeKo + ControlZoneRules.RegulationKnockoutPoints),
+                "Regulation Control Zone KOs must award the fixed zone bonus to the scoring team.");
             Assert.That(human.MatchSpawnSlot, Is.Zero);
             Assert.That(Vector3.Distance(human.transform.position, blueSpawns[0].position),
                 Is.GreaterThan(1.75f));

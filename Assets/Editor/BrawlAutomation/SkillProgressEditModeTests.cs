@@ -46,10 +46,13 @@ namespace BrawlArena.EditorAutomation
         [Test]
         public void SkillBookAppliesLearnedBonuses()
         {
-            Seed("aria", 0,
-                new CharacterSkillProgress { id = "arcane_edge", level = 2 },
-                new CharacterSkillProgress { id = "blade_tempo", level = 1 },
-                new CharacterSkillProgress { id = "duelist_footwork", level = 3 });
+            // "aria" no longer exists in the retuned roster; Thorn is the
+            // surviving hero whose tree (CharacterSkillBook.Thorn) exercises
+            // the same Damage / AutoAim / MoveSpeed effect spread.
+            Seed("thorn", 0,
+                new CharacterSkillProgress { id = "earthen_draw", level = 2 },
+                new CharacterSkillProgress { id = "longshot", level = 1 },
+                new CharacterSkillProgress { id = "ranger_pace", level = 3 });
 
             var go = new GameObject("SkillProgressTest");
             try
@@ -59,15 +62,16 @@ namespace BrawlArena.EditorAutomation
                 go.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
                 var ctrl = go.AddComponent<BrawlerController>();
                 ctrl.attackDamage = 20f;
-                ctrl.attackCooldown = 1f;
-                ctrl.attackHitDelay = 0.5f;
                 ctrl.moveSpeed = 5f;
+                ctrl.autoAimRange = 0f;
 
-                CharacterSkillBook.ApplyProgression(ctrl, new BrawlerDefinition { id = "aria" });
+                CharacterSkillBook.ApplyProgression(ctrl, new BrawlerDefinition { id = "thorn" });
 
+                // earthen_draw level 2: +12% damage -> round(20 * 1.12) = 22.
                 Assert.AreEqual(22f, ctrl.attackDamage);
-                Assert.That(ctrl.attackCooldown, Is.EqualTo(0.94f).Within(0.0001f));
-                Assert.That(ctrl.attackHitDelay, Is.EqualTo(0.4865f).Within(0.0001f));
+                // longshot level 1: +0.8 auto-aim.
+                Assert.That(ctrl.autoAimRange, Is.EqualTo(0.8f).Within(0.0001f));
+                // ranger_pace level 3: +12% move speed -> 5 * 1.12 = 5.6.
                 Assert.That(ctrl.moveSpeed, Is.EqualTo(5.6f).Within(0.0001f));
             }
             finally

@@ -56,7 +56,7 @@ namespace BrawlArena
             var rt = (RectTransform)root.transform;
             rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
             rt.pivot = new Vector2(0f, 1f);
-            rt.sizeDelta = new Vector2(470f, 50f);
+            rt.sizeDelta = new Vector2(420f, 44f);
 
             var theme = UiTheme.Instance;
             var background = root.AddComponent<Image>();
@@ -105,7 +105,7 @@ namespace BrawlArena
             var text = go.AddComponent<TextMeshProUGUI>();
             text.font = theme != null && theme.bodyFont != null ? theme.bodyFont : TMP_Settings.defaultFontAsset;
             text.text = content;
-            text.fontSize = 23f;
+            text.fontSize = 21f;
             text.color = color;
             text.alignment = alignment;
             text.enableWordWrapping = false;
@@ -123,7 +123,7 @@ namespace BrawlArena
             for (int i = 0; i < entries.Count; i++)
             {
                 var rt = (RectTransform)entries[i].root.transform;
-                rt.anchoredPosition = new Vector2(0f, -(entries.Count - 1 - i) * 58f);
+                rt.anchoredPosition = new Vector2(0f, -(entries.Count - 1 - i) * 50f);
             }
         }
 

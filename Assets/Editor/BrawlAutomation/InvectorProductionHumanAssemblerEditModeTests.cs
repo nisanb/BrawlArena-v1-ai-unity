@@ -30,7 +30,7 @@ namespace BrawlArena.EditorAutomation.Tests
             GameObject prefab = RequireProductionPrefab();
 
             Assert.DoesNotThrow(() =>
-                InvectorMigrationPilotBuilder.ValidateProductionHumanPrefab(prefab));
+                InvectorRimeMigrationBuilder.ValidateHumanPrefab(prefab));
             Assert.That(prefab.activeSelf, Is.False);
             Assert.That(prefab.layer, Is.EqualTo(InvectorMigrationPilotBuilder.InvectorPlayerLayer));
             Assert.That(prefab.GetComponents<Health>(), Has.Length.EqualTo(1));
@@ -71,10 +71,10 @@ namespace BrawlArena.EditorAutomation.Tests
             GameObject source = PrefabUtility.GetCorrespondingObjectFromSource(prefab);
             Assert.That(source, Is.Not.Null);
             Assert.That(AssetDatabase.GetAssetPath(source),
-                Is.EqualTo(InvectorMigrationPilotBuilder.PrefabPath));
+                Is.EqualTo(InvectorRimeMigrationBuilder.PilotPrefabPath));
             Assert.That(AssetDatabase.AssetPathToGUID(
-                InvectorMigrationPilotBuilder.ProductionHumanPrefabPath),
-                Is.EqualTo("6aaadd902b169c74098d8c2bfa77ea0a").IgnoreCase);
+                InvectorRimeMigrationBuilder.ProductionHumanPrefabPath),
+                Is.EqualTo("8210e5a32e5408841a88fa4e647fa5c1").IgnoreCase);
         }
 
         [Test]
@@ -84,8 +84,8 @@ namespace BrawlArena.EditorAutomation.Tests
             GameObject prefab = RequireProductionPrefab();
             var definition = new BrawlerDefinition
             {
-                id = "fire",
-                displayName = "Cinder",
+                id = "frost",
+                displayName = "Rime",
                 invectorHumanPrefab = prefab,
             };
             int before = Object.FindObjectsByType<BrawlerController>(
@@ -94,11 +94,11 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.Throws<NotSupportedException>(() =>
                 BrawlerCharacterAssembly.Assemble(definition, TeamId.Blue, Vector3.zero,
                     false, 1f, BrawlerAssemblyContext.ProductionHumanInvector));
-            definition.id = "frost";
+            definition.id = "thorn";
             Assert.Throws<InvalidOperationException>(() =>
                 BrawlerCharacterAssembly.Assemble(definition, TeamId.Blue, Vector3.zero,
                     true, 1f, BrawlerAssemblyContext.ProductionHumanInvector));
-            definition.id = "fire";
+            definition.id = "frost";
             definition.invectorHumanPrefab = null;
             Assert.Throws<InvalidOperationException>(() =>
                 BrawlerCharacterAssembly.Assemble(definition, TeamId.Blue, Vector3.zero,
@@ -111,28 +111,25 @@ namespace BrawlArena.EditorAutomation.Tests
 
         [Test]
         [Category("InvectorProductionHumanCinder")]
-        public void GeneratedRosterAssignsExactCinderRimeTempestThornInvectorVariants()
+        public void GeneratedRosterAssignsExactRimeThornAndBastionInvectorVariants()
         {
+            // Full three-hero roster: frost, thorn, bastion each carry their
+            // own builder-owned Invector human/AI variant.
             BrawlerDefinition[] roster = ArenaSceneBuilder.BuildRosterFromExistingAssets();
             Assert.That(roster, Is.Not.Empty);
-            BrawlerDefinition cinder = roster.Single(value => value.id == "fire");
-            Assert.That(cinder.invectorHumanPrefab, Is.SameAs(RequireProductionPrefab()));
             BrawlerDefinition rime = roster.Single(value => value.id == "frost");
-            Assert.That(rime.invectorHumanPrefab, Is.SameAs(
-                AssetDatabase.LoadAssetAtPath<GameObject>(
-                    InvectorRimeMigrationBuilder.ProductionHumanPrefabPath)));
-            BrawlerDefinition tempest = roster.Single(value => value.id == "storm");
-            Assert.That(tempest.invectorHumanPrefab, Is.SameAs(
-                AssetDatabase.LoadAssetAtPath<GameObject>(
-                    InvectorTempestMigrationBuilder.ProductionHumanPrefabPath)));
+            Assert.That(rime.invectorHumanPrefab, Is.SameAs(RequireProductionPrefab()));
             BrawlerDefinition thorn = roster.Single(value => value.id == "thorn");
             Assert.That(thorn.invectorHumanPrefab, Is.SameAs(
                 AssetDatabase.LoadAssetAtPath<GameObject>(
                     InvectorThornMigrationBuilder.ProductionHumanPrefabPath)));
-            Assert.That(roster.Where(value => value.id != "fire" &&
-                                               value.id != "frost" &&
-                                               value.id != "storm" &&
-                                               value.id != "thorn")
+            BrawlerDefinition bastion = roster.Single(value => value.id == "bastion");
+            Assert.That(bastion.invectorHumanPrefab, Is.SameAs(
+                AssetDatabase.LoadAssetAtPath<GameObject>(
+                    InvectorBastionMigrationBuilder.ProductionHumanPrefabPath)));
+            Assert.That(roster.Where(value => value.id != "frost" &&
+                                               value.id != "thorn" &&
+                                               value.id != "bastion")
                 .All(value => value.invectorHumanPrefab == null), Is.True);
 
             Assert.That(roster.All(value => value.invectorHumanPrefab != null &&
@@ -161,9 +158,9 @@ namespace BrawlArena.EditorAutomation.Tests
         static GameObject RequireProductionPrefab()
         {
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                InvectorMigrationPilotBuilder.ProductionHumanPrefabPath);
+                InvectorRimeMigrationBuilder.ProductionHumanPrefabPath);
             Assert.That(prefab, Is.Not.Null,
-                "Run InvectorMigrationPilotBuilder.BuildPilotAssets first.");
+                "Run InvectorRimeMigrationBuilder.BuildRimePilotAssetsSafely first.");
             return prefab;
         }
     }
