@@ -119,3 +119,6 @@ fastlane/report.xml
 fastlane/README.md
 *.ipa
 *.dSYM.zip
+
+# CI helper file (LFS cache key)
+.lfs-assets-id

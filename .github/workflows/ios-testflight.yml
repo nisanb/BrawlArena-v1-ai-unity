@@ -55,6 +55,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           targetPlatform: iOS
+          versioning: None
 
       - name: Tar Xcode project (preserve file permissions)
         run: sudo tar -C build -czf ios-project.tgz iOS
