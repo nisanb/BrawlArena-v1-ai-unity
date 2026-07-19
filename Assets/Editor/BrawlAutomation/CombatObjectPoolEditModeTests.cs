@@ -80,8 +80,8 @@ namespace BrawlArena.EditorAutomation
         {
             GameObject ownerObject = new GameObject("RangedVfxPolicyOwner");
             testObjects.Add(ownerObject);
-            ownerObject.AddComponent<Tests.InvectorCutoverTestMotor>();
-            ownerObject.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
+            ownerObject.AddComponent<Tests.BrawlFacadeTestMotor>();
+            ownerObject.AddComponent<Tests.BrawlFacadeTestAnimationDriver>();
             BrawlerController owner = ownerObject.AddComponent<BrawlerController>();
 
             GameObject basicProjectilePrefab = CreatePrefab("BasicProjectilePrefab");

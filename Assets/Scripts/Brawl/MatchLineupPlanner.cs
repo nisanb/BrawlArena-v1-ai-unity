@@ -66,12 +66,15 @@ namespace BrawlArena
         /// Deterministic opponent lineup that breaks the perfect ally mirror a
         /// small roster would otherwise produce every match. Starts from a
         /// copy of <paramref name="allyLineup"/> (so team size and validity
-        /// match the ally comp) and, when the roster offers a second hero,
-        /// swaps exactly one slot to a different roster entry so the comp
-        /// reads differently (e.g. a 3-1-1 mirror becomes a 2-1 comp). The
-        /// swap never pushes any hero above two copies when an alternative
-        /// allows it. Seeded PRNG only — this runs once per match setup, not
-        /// inside any per-frame Workflow script.
+        /// match the ally comp). When the roster fields exactly one hero per
+        /// role, the opponent keeps the ally's full role spread — composition
+        /// is fixed and match-to-match variety lives in the seeded slot ORDER
+        /// only, never in a hero double that would drop a role. Rosters with
+        /// duplicated roles keep the legacy single-slot swap that reads the
+        /// comp differently (e.g. a 3-1-1 mirror becomes a 2-1 comp) without
+        /// pushing any hero above two copies when an alternative allows it.
+        /// Seeded PRNG only — this runs once per match setup, not inside any
+        /// per-frame Workflow script.
         /// </summary>
         public static int[] BuildOpponentLineup(BrawlerDefinition[] roster, int[] allyLineup,
             int teamSize, int seed)
@@ -90,6 +93,10 @@ namespace BrawlArena
             if (roster.Length < 2) return result;
 
             var random = new System.Random(seed);
+            if (HasOneHeroPerRole(roster) &&
+                TryReorderKeepingComposition(result, allyLineup, random))
+                return result;
+
             var slotOrder = new List<int>(teamSize);
             for (int i = 0; i < teamSize; i++) slotOrder.Add(i);
             Shuffle(slotOrder, random);
@@ -104,6 +111,61 @@ namespace BrawlArena
             // differs from the mirror, ignoring the cap.
             TrySwapDifferentRole(result, roster.Length, slotOrder, random, respectCap: false);
             return result;
+        }
+
+        /// <summary>
+        /// One hero per role means the ally comp already carries the full role
+        /// spread, so the opponent must preserve that composition. Role falls
+        /// back to id (then index) so id-only rosters, as in EditMode tests,
+        /// still count each unique hero as its own role.
+        /// </summary>
+        static bool HasOneHeroPerRole(BrawlerDefinition[] roster)
+        {
+            var seen = new HashSet<string>();
+            for (int i = 0; i < roster.Length; i++)
+            {
+                BrawlerDefinition definition = roster[i];
+                string key = definition != null && !string.IsNullOrEmpty(definition.role)
+                    ? definition.role
+                    : definition != null && !string.IsNullOrEmpty(definition.id)
+                        ? definition.id
+                        : i.ToString();
+                if (!seen.Add(key)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Shuffles the slots of <paramref name="result"/> without changing
+        /// which heroes appear, so the comp keeps every role the ally comp
+        /// carries. Returns false only for degenerate comps (every slot the
+        /// same hero) where reordering can never break the ally mirror.
+        /// </summary>
+        static bool TryReorderKeepingComposition(int[] result, int[] allyLineup,
+            System.Random random)
+        {
+            var order = new List<int>(result.Length);
+            for (int i = 0; i < result.Length; i++) order.Add(result[i]);
+            Shuffle(order, random);
+            for (int i = 0; i < result.Length; i++) result[i] = order[i];
+            if (MirrorsAlly(result, allyLineup)) RotateLeft(result);
+            return !MirrorsAlly(result, allyLineup);
+        }
+
+        static bool MirrorsAlly(int[] result, int[] allyLineup)
+        {
+            for (int i = 0; i < result.Length; i++)
+                if (result[i] != allyLineup[i % allyLineup.Length]) return false;
+            return true;
+        }
+
+        static void RotateLeft(int[] values)
+        {
+            if (values.Length < 2) return;
+            int first = values[0];
+            for (int i = 0; i < values.Length - 1; i++)
+                values[i] = values[i + 1];
+            values[values.Length - 1] = first;
         }
 
         static bool TrySwapDifferentRole(int[] result, int rosterCount, List<int> slotOrder,

@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using DamageNumbersPro;
 using UnityEngine;
@@ -27,19 +26,37 @@ namespace BrawlArena
         // caps how large the prefab's own number-based scale curve is allowed
         // to grow, so no single popup dominates the screen.
         const float MaxPopupScale = 1.5f;
-        // Hits on the same victim inside this window are "simultaneous" for
-        // fan/stagger purposes; anything slower reads as a fresh, isolated hit.
-        const float PopupStaggerWindow = 0.14f;
-        const float PopupStaggerDelayStep = 0.045f;
+        // Hits on the same victim inside this window accumulate into the one
+        // already-visible popup (Brawl Stars style) instead of spawning a
+        // sibling, so "23"+"23" can never render as one garbled "2323".
+        const float MergeWindow = 0.6f;
+        // How long after its last hit a popup still counts as "occupying" its
+        // spot for stagger purposes. Must be >= MergeWindow, and short enough
+        // that a popup which has visibly risen away no longer pushes others.
+        const float OccupiedWindow = 1f;
+        // Popups for DIFFERENT victims closer together than this stack upward
+        // and fan sideways instead of landing on top of each other (or on a
+        // nameplate).
+        const float StaggerRadius = 1.2f;
+        const float StaggerRise = 0.55f;
+        const float StaggerFan = 0.45f;
+
+        // One live merge target per victim. Entries are recycled through
+        // entryPool so a busy teamfight never allocates per hit.
+        sealed class ActivePopup
+        {
+            public BrawlerController victim;
+            public DamageNumber popup;
+            public float total;
+            public float lastHitAt;
+        }
 
         readonly List<(Health health, System.Action<float, GameObject> handler)> hooks =
             new List<(Health, System.Action<float, GameObject>)>();
         readonly List<(Health health, System.Action<float> handler)> healHooks =
             new List<(Health, System.Action<float>)>();
-        readonly Dictionary<BrawlerController, float> lastPopupAt =
-            new Dictionary<BrawlerController, float>();
-        readonly Dictionary<BrawlerController, int> popupFanSlot =
-            new Dictionary<BrawlerController, int>();
+        readonly List<ActivePopup> activePopups = new List<ActivePopup>();
+        readonly Stack<ActivePopup> entryPool = new Stack<ActivePopup>();
         bool managerHooked;
 
         void Start()
@@ -110,42 +127,93 @@ namespace BrawlArena
             var prefab = victim.team == TeamId.Blue ? allyHurtPrefab : enemyHitPrefab;
             if (prefab == null) return;
 
-            int fan = NextPopupFanSlot(victim);
-            // The first hit in a burst keeps the old light jitter; every hit
-            // that lands on the same victim inside the stagger window fans
-            // further out and lands a beat later, so "24"+"24" can never
-            // render as one garbled "2424".
-            float horizontalOffset = fan == 0
-                ? Random.Range(-0.25f, 0.25f)
-                : (fan % 2 == 1 ? 1f : -1f) * (0.55f + 0.4f * ((fan - 1) / 2));
-            float delay = fan * PopupStaggerDelayStep;
-            StartCoroutine(SpawnDamagePopupDelayed(prefab, victim, amount, horizontalOffset, delay));
-        }
-
-        int NextPopupFanSlot(BrawlerController victim)
-        {
             float now = Time.time;
-            bool withinWindow = lastPopupAt.TryGetValue(victim, out float last) &&
-                                now - last < PopupStaggerWindow;
-            int slot = withinWindow
-                ? (popupFanSlot.TryGetValue(victim, out int previous) ? previous + 1 : 1)
-                : 0;
-            popupFanSlot[victim] = slot;
-            lastPopupAt[victim] = now;
-            return slot;
+            PruneActivePopups(now);
+
+            float rounded = Mathf.Max(1f, Mathf.Round(amount));
+            var entry = FindEntryFor(victim);
+
+            // MERGE: a follow-up hit inside the window feeds the popup that is
+            // already on screen. FadeIn() both refreshes the lifetime and
+            // replays the preset's scale-in, which reads as the number
+            // "popping" each time it grows.
+            if (entry != null && now - entry.lastHitAt <= MergeWindow &&
+                entry.popup != null && entry.popup.gameObject.activeInHierarchy)
+            {
+                entry.total += rounded;
+                entry.lastHitAt = now;
+                entry.popup.number = entry.total;
+                entry.popup.UpdateText();
+                entry.popup.FadeIn();
+                return;
+            }
+
+            // STAGGER: a fresh popup landing next to other victims' live
+            // numbers takes a deterministic slot — each occupied neighbour
+            // pushes it one step up and fans it to alternating sides — so
+            // simultaneous multi-target hits never overlap each other or a
+            // nameplate. An uncrowded popup keeps the old light jitter.
+            int slot = CountNearbyOccupied(victim);
+            Vector3 offset = slot == 0
+                ? new Vector3(Random.Range(-0.25f, 0.25f), 0f, 0f)
+                : new Vector3(
+                    (slot % 2 == 1 ? 1f : -1f) * (StaggerFan * ((slot + 1) / 2)),
+                    StaggerRise * slot, 0f);
+            Vector3 pos = victim.transform.position + Vector3.up * 2.1f + offset;
+            // Following the victim's transform keeps the number glued to a
+            // moving target for its whole lifetime.
+            var spawned = prefab.Spawn(pos, rounded, victim.transform);
+
+            if (entry == null)
+            {
+                entry = entryPool.Count > 0 ? entryPool.Pop() : new ActivePopup();
+                activePopups.Add(entry);
+            }
+            entry.victim = victim;
+            entry.popup = spawned;
+            entry.total = rounded;
+            entry.lastHitAt = now;
         }
 
-        IEnumerator SpawnDamagePopupDelayed(DamageNumberMesh prefab, BrawlerController victim,
-            float amount, float horizontalOffset, float delay)
+        ActivePopup FindEntryFor(BrawlerController victim)
         {
-            if (delay > 0f) yield return new WaitForSeconds(delay);
-            if (victim == null) yield break;
+            for (int i = 0; i < activePopups.Count; i++)
+                if (activePopups[i].victim == victim) return activePopups[i];
+            return null;
+        }
 
-            // Following the victim's transform keeps the number glued to a
-            // moving target even after the staggered delay.
-            Vector3 pos = victim.transform.position + Vector3.up * 2.1f +
-                          new Vector3(horizontalOffset, 0f, 0f);
-            prefab.Spawn(pos, Mathf.Round(amount), victim.transform);
+        int CountNearbyOccupied(BrawlerController victim)
+        {
+            int count = 0;
+            Vector3 at = victim.transform.position;
+            for (int i = 0; i < activePopups.Count; i++)
+            {
+                var other = activePopups[i];
+                if (other.victim == victim || other.victim == null) continue;
+                if (other.popup == null || !other.popup.gameObject.activeInHierarchy) continue;
+                if (Vector3.Distance(other.victim.transform.position, at) < StaggerRadius)
+                    count++;
+            }
+            return count;
+        }
+
+        void PruneActivePopups(float now)
+        {
+            // Popups are pooled by DNP: past the occupied window the instance
+            // may be recycled for an unrelated spawn, so the entry must be
+            // dropped before anything could merge into the wrong number.
+            for (int i = activePopups.Count - 1; i >= 0; i--)
+            {
+                var entry = activePopups[i];
+                bool dead = entry.victim == null || entry.popup == null ||
+                            !entry.popup.gameObject.activeInHierarchy ||
+                            now - entry.lastHitAt > OccupiedWindow;
+                if (!dead) continue;
+                entry.victim = null;
+                entry.popup = null;
+                activePopups.RemoveAt(i);
+                entryPool.Push(entry);
+            }
         }
 
         void OnHealed(BrawlerController target, float amount)

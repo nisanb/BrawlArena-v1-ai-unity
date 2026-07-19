@@ -43,7 +43,9 @@ namespace BrawlArena
         // the single source of truth for the rig — the scene builder must
         // not override it.
         public Vector3 offset = new Vector3(0f, 8.8f, -9.6f);
-        public float smoothTime = 0.12f;
+        // 0.09 pairs with the snappier top-down motor: instant accel/stop
+        // needs a tighter follow or the camera reads behind the character.
+        public float smoothTime = 0.09f;
         public float vistaOrbitSpeed = 4f;
 
         [Header("Movement Lead")]
@@ -91,8 +93,16 @@ namespace BrawlArena
         float noAutoTurnUntil;
         float shakeAmplitude;
         float shakeUntil;
+        float fovKickAmplitude;
+        float fovKickUntil;
+        float fovKickDuration;
+        Vector3 punchOffset;
+        Camera attachedCamera;
+        float baseFieldOfView;
         float obstructionDistance;
         float obstructionVelocity;
+
+        const float PunchDecayPerSecond = 9f;
         readonly Dictionary<Renderer, bool> hiddenOccluders = new Dictionary<Renderer, bool>();
 
         static readonly RaycastHit[] ObstructionHits = new RaycastHit[64];
@@ -100,6 +110,8 @@ namespace BrawlArena
         void Awake()
         {
             instance = this;
+            attachedCamera = GetComponent<Camera>();
+            if (attachedCamera != null) baseFieldOfView = attachedCamera.fieldOfView;
             // Only the action style forces its rig; TopDownBrawl scenes keep
             // whatever tuning they were built with.
             if (style == BrawlCameraStyle.ActionThirdPerson) ConfigureStyle();
@@ -120,7 +132,7 @@ namespace BrawlArena
 
         void ConfigureStyle()
         {
-            var attachedCamera = GetComponent<Camera>();
+            if (attachedCamera == null) attachedCamera = GetComponent<Camera>();
             if (style == BrawlCameraStyle.ActionThirdPerson)
             {
                 offset = new Vector3(0f, 2.2f, -8.5f); // pitch ~14.5 deg, distance ~8.8
@@ -147,6 +159,7 @@ namespace BrawlArena
                     attachedCamera.farClipPlane = 200f;
                 }
             }
+            if (attachedCamera != null) baseFieldOfView = attachedCamera.fieldOfView;
             DeriveRigFromOffset();
         }
 
@@ -347,6 +360,40 @@ namespace BrawlArena
                 shakeAmplitude = 0f;
                 shakeUntil = 0f;
             }
+
+            ApplyImpactFeel();
+        }
+
+        /// <summary>
+        /// Souls-impact camera feel: a decaying positional punch along the
+        /// hit direction plus a short FOV kick for Supers/KOs. Both are
+        /// presentation-only, gated by Reduced Motion, and self-restoring so
+        /// no other system ever needs to clean them up.
+        /// </summary>
+        void ApplyImpactFeel()
+        {
+            if (punchOffset.sqrMagnitude > 0.000001f)
+            {
+                transform.position += punchOffset;
+                punchOffset *= Mathf.Exp(-PunchDecayPerSecond * Time.deltaTime);
+                if (punchOffset.sqrMagnitude < 0.000004f) punchOffset = Vector3.zero;
+            }
+
+            if (attachedCamera == null) return;
+            float remaining = fovKickUntil - Time.time;
+            if (remaining > 0f && fovKickDuration > 0.0001f &&
+                !AccessibilitySettings.ReducedMotionEnabled)
+            {
+                float falloff = Mathf.Clamp01(remaining / fovKickDuration);
+                attachedCamera.fieldOfView = baseFieldOfView +
+                    fovKickAmplitude * falloff;
+            }
+            else if (fovKickAmplitude != 0f)
+            {
+                attachedCamera.fieldOfView = baseFieldOfView;
+                fovKickAmplitude = 0f;
+                fovKickUntil = 0f;
+            }
         }
 
         /// <summary>
@@ -392,6 +439,32 @@ namespace BrawlArena
             if (instance == null || AccessibilitySettings.ReducedMotionEnabled) return;
             instance.shakeAmplitude = Mathf.Max(instance.shakeAmplitude, amplitude);
             instance.shakeUntil = Time.time + duration;
+        }
+
+        /// <summary>
+        /// Short outward FOV kick (e.g. Super release, nearby KO). Positive
+        /// degrees widen the frame then decay linearly over the duration.
+        /// </summary>
+        public static void Kick(float degrees, float duration)
+        {
+            if (instance == null || AccessibilitySettings.ReducedMotionEnabled) return;
+            if (duration <= 0f) return;
+            instance.fovKickAmplitude = Mathf.Max(instance.fovKickAmplitude, degrees);
+            instance.fovKickDuration = duration;
+            instance.fovKickUntil = Time.time + duration;
+        }
+
+        /// <summary>
+        /// Directional positional punch along a world-space hit direction —
+        /// the frame visibly takes the hit with the local player.
+        /// </summary>
+        public static void Punch(Vector3 worldDirection, float amplitude)
+        {
+            if (instance == null || AccessibilitySettings.ReducedMotionEnabled) return;
+            worldDirection.y = 0f;
+            if (worldDirection.sqrMagnitude <= 0.0001f || amplitude <= 0f) return;
+            instance.punchOffset = Vector3.ClampMagnitude(
+                instance.punchOffset + worldDirection.normalized * amplitude, 0.9f);
         }
     }
 }

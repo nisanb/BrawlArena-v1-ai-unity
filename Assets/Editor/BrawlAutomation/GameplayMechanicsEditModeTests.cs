@@ -65,15 +65,15 @@ namespace BrawlArena.EditorAutomation
             var go = new GameObject("BaseEnergyTest");
             try
             {
-                go.AddComponent<Tests.InvectorCutoverTestMotor>();
-                go.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
+                go.AddComponent<Tests.BrawlFacadeTestMotor>();
+                go.AddComponent<Tests.BrawlFacadeTestAnimationDriver>();
                 var brawler = go.AddComponent<BrawlerController>();
                 typeof(BrawlerController).GetMethod("Awake",
                     BindingFlags.Instance | BindingFlags.NonPublic).Invoke(brawler, null);
 
                 Assert.AreEqual(60f, brawler.maxStamina);
                 Assert.AreEqual(60f, brawler.WardFlow);
-                Assert.AreEqual(20f, brawler.wardStepCost);
+                Assert.AreEqual(MobileCombatRules.WardStepCost, brawler.wardStepCost);
             }
             finally
             {

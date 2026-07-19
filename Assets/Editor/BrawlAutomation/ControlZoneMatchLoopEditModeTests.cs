@@ -158,6 +158,19 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(ControlZoneRules.RespawnDelaySeconds(20, 20),
                 Is.EqualTo(ControlZoneRules.RespawnDelay));
 
+            Assert.That(ControlZoneRules.LeadingRegulationKnockoutPoints, Is.EqualTo(1));
+            Assert.That(ControlZoneRules.RegulationKnockoutPointsFor(10, 25),
+                Is.EqualTo(ControlZoneRules.RegulationKnockoutPoints),
+                "A trailing team keeps the full KO bonus.");
+            Assert.That(ControlZoneRules.RegulationKnockoutPointsFor(20, 20),
+                Is.EqualTo(ControlZoneRules.RegulationKnockoutPoints));
+            Assert.That(ControlZoneRules.RegulationKnockoutPointsFor(24, 10),
+                Is.EqualTo(ControlZoneRules.RegulationKnockoutPoints),
+                "A lead below the comeback gap must not reduce the KO bonus.");
+            Assert.That(ControlZoneRules.RegulationKnockoutPointsFor(25, 10),
+                Is.EqualTo(ControlZoneRules.LeadingRegulationKnockoutPoints),
+                "A team at the comeback gap earns only the reduced KO bonus.");
+
             Assert.That(ControlZoneRules.ApplyTrailingKnockoutXpMultiplier(40, true),
                 Is.EqualTo(50));
             Assert.That(ControlZoneRules.ApplyTrailingKnockoutXpMultiplier(40, false),
@@ -194,13 +207,13 @@ namespace BrawlArena.EditorAutomation.Tests
         }
 
         [Test]
-        public void OpponentLineupBreaksTheMirrorButRespectsTheDuplicateCap()
+        public void OpponentLineupKeepsTheFullRoleSpreadAndVariesOnlyTheOrder()
         {
             var roster = new[]
             {
-                new BrawlerDefinition { id = "frost" },
-                new BrawlerDefinition { id = "thorn" },
-                new BrawlerDefinition { id = "bastion" },
+                new BrawlerDefinition { id = "frost", role = "Mage" },
+                new BrawlerDefinition { id = "thorn", role = "Archer" },
+                new BrawlerDefinition { id = "bastion", role = "Vanguard" },
             };
             int[] ally = MatchLineupPlanner.BuildRoleBalancedLineup(roster, 0, 3);
             CollectionAssert.AreEqual(new[] { 0, 1, 2 }, ally);
@@ -220,6 +233,10 @@ namespace BrawlArena.EditorAutomation.Tests
                 Assert.That(mirrorsAlly, Is.False,
                     $"seed {seed} must not produce a pure mirror of the ally lineup.");
 
+                CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, opponent,
+                    $"seed {seed}: a one-hero-per-role roster must field every role " +
+                    "exactly once — variety lives in slot order, never in composition.");
+
                 foreach (int defIndex in opponent)
                     Assert.That(defIndex, Is.InRange(0, roster.Length - 1));
 
@@ -229,6 +246,19 @@ namespace BrawlArena.EditorAutomation.Tests
                 foreach (int count in counts.Values)
                     Assert.That(count, Is.LessThanOrEqualTo(2),
                         $"seed {seed} must never field more than two copies of one hero.");
+            }
+
+            // Oversized teams wrap the roster: every role stays covered and the
+            // two-copy cap still holds because composition mirrors the ally comp.
+            int[] allyFive = MatchLineupPlanner.BuildRoleBalancedLineup(roster, 0, 5);
+            for (int seed = 0; seed <= 5; seed++)
+            {
+                int[] opponentFive = MatchLineupPlanner.BuildOpponentLineup(
+                    roster, allyFive, 5, seed);
+                Assert.That(opponentFive.Length, Is.EqualTo(5));
+                foreach (int defIndex in new[] { 0, 1, 2 })
+                    CollectionAssert.Contains(opponentFive, defIndex,
+                        $"seed {seed}: wrapped teams must still cover every role.");
             }
         }
 
@@ -258,7 +288,7 @@ namespace BrawlArena.EditorAutomation.Tests
         }
 
         [Test]
-        public void ControlZoneKnockoutsScoreTheFixedBonusDuringRegulation()
+        public void ControlZoneKnockoutsScoreTheFullBonusUntilTheLeaderHitsTheComebackGap()
         {
             MatchManager manager = CreateManager();
             BrawlerController attacker = CreateHero("KoAttacker", TeamId.Blue);
@@ -274,7 +304,24 @@ namespace BrawlArena.EditorAutomation.Tests
             manager.ReportKO(victim, attacker.gameObject);
             Assert.That(manager.BlueScore,
                 Is.EqualTo(ControlZoneRules.RegulationKnockoutPoints * 2),
-                "Every valid regulation KO must award the fixed zone bonus.");
+                "Below the comeback gap every valid regulation KO awards the full zone bonus.");
+
+            // Push Blue exactly to the comeback gap: the leading team's KOs now
+            // award only the reduced anti-snowball bonus while the lead holds.
+            manager.AddControlZoneScore(TeamId.Blue,
+                ControlZoneRules.ComebackScoreDeficit - manager.BlueScore);
+            Assert.That(manager.BlueScore, Is.EqualTo(ControlZoneRules.ComebackScoreDeficit));
+
+            manager.ReportKO(victim, attacker.gameObject);
+            Assert.That(manager.BlueScore,
+                Is.EqualTo(ControlZoneRules.ComebackScoreDeficit +
+                           ControlZoneRules.LeadingRegulationKnockoutPoints),
+                "A team leading by the comeback gap earns only the reduced KO bonus.");
+
+            manager.ReportKO(attacker, victim.gameObject);
+            Assert.That(manager.RedScore,
+                Is.EqualTo(ControlZoneRules.RegulationKnockoutPoints),
+                "The trailing team keeps the full KO bonus while behind.");
         }
 
         [Test]
@@ -317,8 +364,8 @@ namespace BrawlArena.EditorAutomation.Tests
             var go = new GameObject(name);
             created.Add(go);
             go.AddComponent<Health>().SetMax(100f);
-            go.AddComponent<InvectorCutoverTestMotor>();
-            go.AddComponent<InvectorCutoverTestAnimationDriver>();
+            go.AddComponent<BrawlFacadeTestMotor>();
+            go.AddComponent<BrawlFacadeTestAnimationDriver>();
             BrawlerController brawler = go.AddComponent<BrawlerController>();
             if (brawler.Health == null) InvokePrivate(brawler, "Awake");
             brawler.team = team;
@@ -391,10 +438,8 @@ namespace BrawlArena.EditorAutomation.Tests
             ControlZoneManager zone = matchRoot.AddComponent<ControlZoneManager>();
             matchRoot.SetActive(true);
 
-            GameObject humanPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                InvectorRimeMigrationBuilder.ProductionHumanPrefabPath);
-            GameObject aiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                InvectorRimeMigrationBuilder.ProductionAIPrefabPath);
+            GameObject humanPrefab = HeavyHeroBuilder.LoadHumanPrefab("frost");
+            GameObject aiPrefab = HeavyHeroBuilder.LoadAIPrefab("frost");
             Assert.That(humanPrefab, Is.Not.Null);
             Assert.That(aiPrefab, Is.Not.Null);
             var definition = new BrawlerDefinition
@@ -402,8 +447,8 @@ namespace BrawlArena.EditorAutomation.Tests
                 id = "frost",
                 displayName = "Rime",
                 role = "Cryomancer",
-                invectorHumanPrefab = humanPrefab,
-                invectorAIPrefab = aiPrefab,
+                humanBodyPrefab = humanPrefab,
+                aiBodyPrefab = aiPrefab,
                 maxHealth = 100f,
                 damage = 20f,
                 moveSpeed = 4.9f,
@@ -416,11 +461,12 @@ namespace BrawlArena.EditorAutomation.Tests
                 specialty = SpellSpecialty.ForSchool(SpellSchool.Frost),
             };
 
+            // Default context resolves by prefab identity — the same path the
+            // live GameFlow spawn uses for the TopDown roster.
             BrawlerController human = GameFlow.Spawn(definition, TeamId.Blue,
-                Vector3.zero, true, 1f, BrawlerAssemblyContext.ProductionHumanInvector);
+                Vector3.zero, true, 1f);
             BrawlerController ai = GameFlow.Spawn(definition, TeamId.Red,
-                new Vector3(0f, 0f, 20f), false, 1f,
-                BrawlerAssemblyContext.ProductionAIInvector);
+                new Vector3(0f, 0f, 20f), false, 1f);
             human.ConfigureMatchSpawnSlot(0);
             ai.ConfigureMatchSpawnSlot(0);
             human.GetComponent<PlayerBrawlerInput>().enabled = false;
@@ -432,25 +478,28 @@ namespace BrawlArena.EditorAutomation.Tests
                 yield return null;
             yield return new WaitForFixedUpdate();
 
-            InvectorHumanRuntimeGate humanGate = human.GetComponent<InvectorHumanRuntimeGate>();
-            InvectorAIRuntimeGate aiGate = ai.GetComponent<InvectorAIRuntimeGate>();
-            InvectorBrawlerMotor humanMotor = human.GetComponent<InvectorBrawlerMotor>();
-            InvectorBrawlerMotor aiMotor = ai.GetComponent<InvectorBrawlerMotor>();
+            HeavyBrawlerMotor humanMotor = human.GetComponent<HeavyBrawlerMotor>();
+            HeavyBrawlerMotor aiMotor = ai.GetComponent<HeavyBrawlerMotor>();
+            HeavyBrawlerIdentity humanIdentity =
+                human.GetComponent<HeavyBrawlerIdentity>();
+            HeavyBrawlerIdentity aiIdentity = ai.GetComponent<HeavyBrawlerIdentity>();
             Assert.That(manager.State, Is.EqualTo(MatchState.Playing));
             Assert.That(manager.mode, Is.EqualTo(GameMode.ControlZone));
             Assert.That(manager.ActiveTeamSize, Is.EqualTo(3));
-            Assert.That(humanGate.IsRuntimeActive, Is.True, humanGate.FailureMessage);
-            Assert.That(aiGate.IsRuntimeActive, Is.True, aiGate.FailureMessage);
-            Assert.That(human.GetComponent<InvectorBrawlerPrefabIdentity>()
-                .Matches("frost", InvectorBrawlerPrefabRole.Human), Is.True);
-            Assert.That(ai.GetComponent<InvectorBrawlerPrefabIdentity>()
-                .Matches("frost", InvectorBrawlerPrefabRole.AI), Is.True);
+            Assert.That(humanIdentity, Is.Not.Null);
+            Assert.That(aiIdentity, Is.Not.Null);
+            Assert.That(humanIdentity.heroId, Is.EqualTo("frost"));
+            Assert.That(humanIdentity.isHumanVariant, Is.True);
+            Assert.That(aiIdentity.heroId, Is.EqualTo("frost"));
+            Assert.That(aiIdentity.isHumanVariant, Is.False);
+            Assert.That(humanMotor, Is.Not.Null);
+            Assert.That(aiMotor, Is.Not.Null);
             Assert.That(human.Motor, Is.SameAs(humanMotor));
             Assert.That(ai.Motor, Is.SameAs(aiMotor));
+            Assert.That(human.GetComponent<HeavyAnimationDriver>(), Is.Not.Null);
+            Assert.That(ai.GetComponent<HeavyAnimationDriver>(), Is.Not.Null);
             Assert.That(human.GetComponents<CharacterController>(), Is.Empty);
             Assert.That(ai.GetComponents<CharacterController>(), Is.Empty);
-            Assert.That(human.GetComponent<InvectorShooterMeleeInputAdapter>().InputUpdateCount,
-                Is.Zero);
 
             int presentationChildren = zone.transform.childCount;
             zone.BeginOvertime();
@@ -466,9 +515,9 @@ namespace BrawlArena.EditorAutomation.Tests
             humanMotor.Teleport(Vector3.zero);
             aiMotor.Teleport(new Vector3(0f, 0f, 20f));
             // Establish the post-teleport grounded baseline before proving
-            // that spawn protection rejects gameplay knockback. The vendor
-            // motor may apply a millimetre-scale grounding correction on its
-            // first scheduled physics step; that is not combat displacement.
+            // that spawn protection rejects gameplay knockback. Gravity may
+            // apply a millimetre-scale settling correction on the first fixed
+            // step; that is not combat displacement.
             yield return new WaitForFixedUpdate();
             human.BeginSpawnProtection(ControlZoneRules.SpawnProtectionDuration);
             float protectedHealth = human.Health.Current;
@@ -540,12 +589,21 @@ namespace BrawlArena.EditorAutomation.Tests
             float deathStartedAt = Time.time;
             human.Health.TakeDamage(human.Health.Current + 10f, ai.gameObject);
             Assert.That(human.IsDead && human.IsRespawning, Is.True);
+            // Corpse mode: the dead body parks kinematic with its capsule off
+            // so it can neither be shoved nor block the living.
+            Assert.That(humanMotor.IsCorpseMode, Is.True);
+            Assert.That(human.GetComponent<Rigidbody>().isKinematic, Is.True);
+            Assert.That(human.GetComponent<CapsuleCollider>().enabled, Is.False);
             float respawnDeadline = Time.realtimeSinceStartup + 8f;
             while (human.IsRespawning && Time.realtimeSinceStartup < respawnDeadline)
                 yield return null;
             float respawnElapsed = Time.time - deathStartedAt;
 
             Assert.That(human.IsDead || human.IsRespawning, Is.False);
+            Assert.That(humanMotor.IsCorpseMode, Is.False,
+                "Respawn must restore the dynamic physics posture.");
+            Assert.That(human.GetComponent<Rigidbody>().isKinematic, Is.False);
+            Assert.That(human.GetComponent<CapsuleCollider>().enabled, Is.True);
             Assert.That(respawnElapsed, Is.InRange(5.8f, 6.8f));
             Assert.That(manager.BlueScore, Is.EqualTo(blueBeforeKo));
             Assert.That(manager.RedScore,
@@ -578,9 +636,11 @@ namespace BrawlArena.EditorAutomation.Tests
             Assert.That(human.WeaponPresentationFailureCount, Is.Zero);
             Assert.That(ai.AnimationPresentationFailureCount, Is.Zero);
             Assert.That(ai.WeaponPresentationFailureCount, Is.Zero);
+            Assert.That(human.GetComponent<HeavyAnimationDriver>().LifecycleFailureCount,
+                Is.Zero);
+            Assert.That(ai.GetComponent<HeavyAnimationDriver>().LifecycleFailureCount,
+                Is.Zero);
 
-            humanGate.Deactivate();
-            aiGate.Deactivate();
             yield return new ExitPlayMode();
 
             string expectedPath = SessionState.GetString(OriginalScenePathKey, string.Empty);

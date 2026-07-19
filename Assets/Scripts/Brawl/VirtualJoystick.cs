@@ -13,6 +13,8 @@ namespace BrawlArena
         public RectTransform knobRect;
         [Tooltip("Knob travel radius in reference-resolution pixels.")]
         public float radius = 110f;
+        [Tooltip("Inner dead zone as a fraction of the travel radius; resting-thumb micro-drift below this reads as zero input.")]
+        [Range(0f, 0.5f)] public float innerDeadZone = 0.08f;
 
         public Vector2 Value { get; private set; }
 
@@ -51,7 +53,8 @@ namespace BrawlArena
                 return;
             Vector2 clamped = Vector2.ClampMagnitude(local - baseRect.anchoredPosition, radius);
             knobRect.anchoredPosition = clamped;
-            Value = clamped / radius;
+            Vector2 normalized = clamped / radius;
+            Value = normalized.magnitude < innerDeadZone ? Vector2.zero : normalized;
         }
 
         public void OnPointerUp(PointerEventData e)

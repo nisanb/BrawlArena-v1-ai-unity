@@ -4,7 +4,7 @@ using UnityEngine.Rendering;
 namespace BrawlArena
 {
     /// <summary>
-    /// Presentation-only procedural motion layered on top of the Invector
+    /// Presentation-only procedural motion layered on top of the heavy
     /// Animator: run bob, acceleration/turn lean, idle breathing, a Ward Step
     /// burst, Super windup, hit flinch, and a soft contact blob shadow.
     ///
@@ -12,7 +12,7 @@ namespace BrawlArena
     /// the frame, and only ever nudges the additive local offset of one
     /// "visual root" transform. That transform is resolved once at Configure
     /// time by walking up from the Humanoid Hips bone until its parent is the
-    /// brawler root -- on this project's Invector rigs the Animator itself
+    /// brawler root -- on this project's heavy rigs the Animator itself
     /// (like BrawlerController, the CharacterController, and every collider)
     /// lives on that same root GameObject, so the visual root is a sibling
     /// bone-hierarchy anchor, never the gameplay transform. The gameplay

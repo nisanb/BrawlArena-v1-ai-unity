@@ -121,7 +121,7 @@ namespace BrawlArena.EditorAutomation
         public static string BuildArenaScene()
         {
             Report.Clear();
-            // Variant builders create and close additive proof scenes. Run
+            // Asset builders may import/reimport and save prefab assets. Run
             // them before replacing the active scene so they never encounter
             // the new, unsaved Arena scene as their preservation target.
             BrawlerDefinition[] roster = BuildRoster();
@@ -901,11 +901,11 @@ namespace BrawlArena.EditorAutomation
                 displayName = name,
                 role = role,
                 description = description,
-                invectorHumanPrefab = string.Equals(id, "frost", StringComparison.Ordinal)
-                    ? Load(InvectorRimeMigrationBuilder.ProductionHumanPrefabPath)
+                humanBodyPrefab = string.Equals(id, "frost", StringComparison.Ordinal)
+                    ? Load(HeavyHeroBuilder.PrefabPath("frost", true))
                     : null,
-                invectorAIPrefab = string.Equals(id, "frost", StringComparison.Ordinal)
-                    ? Load(InvectorRimeMigrationBuilder.ProductionAIPrefabPath)
+                aiBodyPrefab = string.Equals(id, "frost", StringComparison.Ordinal)
+                    ? Load(HeavyHeroBuilder.PrefabPath("frost", false))
                     : null,
                 maxHealth = hp,
                 damage = damage,
@@ -914,7 +914,9 @@ namespace BrawlArena.EditorAutomation
                 cooldown = cooldown,
                 basicAttackReloadInterval = MobileCombatRules.BasicAttackReloadInterval,
                 hitDelay = hitDelay,
-                moveLock = Mathf.Min(0.42f, hitDelay + 0.04f),
+                // Souls cadence: the cast is a commitment — movement stays
+                // rooted through the windup and most of the recovery.
+                moveLock = 0.5f,
                 moveSpeed = speed,
                 autoAimRange = aim,
                 projectilePrefab = LoadMagic($"Missiles & Explosions/{element}/{element}MissileNormal"),
@@ -922,7 +924,10 @@ namespace BrawlArena.EditorAutomation
                 projectileReadability = ProjectileReadabilityProfile.ForRoster(id, school),
                 swingVfx = LoadMagic($"Muzzleflash/Normal/{element}MuzzleNormal"),
                 impactVfx = LoadMagic($"Missiles & Explosions/{element}/{element}ExplosionSmall"),
-                koVfx = LoadMagic($"Nova/Nova{element}"),
+                // Deliberately NOT the hero's element: every KO uses the same
+                // red nova so death always reads as death, never as a heal or
+                // buff tinting nearby characters.
+                koVfx = LoadMagic("Nova/NovaFire"),
                 spawnVfx = LoadMagic($"Aura/AuraCast/AuraCast{element}"),
                 castVfx = LoadMagic($"Charge/{element}Charge"),
                 secondaryCastVfx = LoadKripto("HandEffects", kriptoHand),
@@ -959,28 +964,27 @@ namespace BrawlArena.EditorAutomation
                 displayName = "Thorn",
                 role = "Archer",
                 description = "A patient sharpshooter who controls long lanes with fast arrows and punishes grouped enemies with an explosive shot.",
-                invectorHumanPrefab = Load(
-                    InvectorThornMigrationBuilder.ProductionHumanPrefabPath),
-                invectorAIPrefab = Load(
-                    InvectorThornMigrationBuilder.ProductionAIPrefabPath),
+                humanBodyPrefab = Load(HeavyHeroBuilder.PrefabPath("thorn", true)),
+                aiBodyPrefab = Load(HeavyHeroBuilder.PrefabPath("thorn", false)),
                 maxHealth = 96f,
-                damage = 30f,
+                damage = 34f,
                 attackRange = 10.5f,
                 attackRadius = 0.8f,
-                cooldown = 1.1f,
+                cooldown = 0.6f,
                 basicAttackReloadInterval = MobileCombatRules.BasicAttackReloadInterval,
-                hitDelay = 0.48f,
-                moveLock = 0.42f,
-                moveSpeed = 5.15f,
+                hitDelay = 0.28f,
+                moveLock = 0.45f,
+                moveSpeed = 4.9f,
                 autoAimRange = 12.5f,
-                wardStepDistance = 3.2f,
-                wardStepCost = 24f,
-                projectilePrefab = Load(Weapons + "Arrow01.prefab"),
-                projectileSpeed = 24f,
+                wardStepDistance = 3.4f,
+                wardStepCost = 25f,
+                projectilePrefab = HeavyHeroBuilder.LoadAlignedProjectile("Arrow01"),
+                projectileSpeed = 30f,
                 projectileReadability = ProjectileReadabilityProfile.ForRoster(
                     "thorn", SpellSchool.None),
                 impactVfx = LoadMagic("Slash Hit/EarthSlashHit"),
-                koVfx = LoadMagic("Nova/NovaEarth"),
+                // Shared red death nova across the roster — see WizardDef.
+                koVfx = LoadMagic("Nova/NovaFire"),
                 spawnVfx = LoadMagic("Aura/AuraCast/AuraCastEarth"),
                 attackSfx = LoadMagicSound("Cast/magic_cast_generic"),
                 superName = "EXPLOSIVE ARROW",
@@ -990,7 +994,7 @@ namespace BrawlArena.EditorAutomation
                 superKnockback = 6.5f,
                 superProjectileSpeed = 29f,
                 superProjectileBlastRadius = 2.6f,
-                superProjectilePrefab = Load(Weapons + "Arrow02.prefab"),
+                superProjectilePrefab = HeavyHeroBuilder.LoadAlignedProjectile("Arrow02"),
                 superImpactVfx = LoadMagic("Missiles & Explosions/Earth/EarthExplosionMega"),
                 superVfx = LoadMagic("Muzzleflash/Big/EarthMuzzleBig"),
                 specialty = SpellSpecialty.ForSchool(SpellSchool.None),
@@ -1005,34 +1009,31 @@ namespace BrawlArena.EditorAutomation
                 displayName = "Bastion",
                 role = "Vanguard",
                 description = "A shielded vanguard who wins ground up close — dive the archers, hold the zone, and answer ganks with a wall of steel.",
-                invectorHumanPrefab = Load(
-                    InvectorBastionMigrationBuilder.ProductionHumanPrefabPath),
-                invectorAIPrefab = Load(
-                    InvectorBastionMigrationBuilder.ProductionAIPrefabPath),
+                humanBodyPrefab = Load(HeavyHeroBuilder.PrefabPath("bastion", true)),
+                aiBodyPrefab = Load(HeavyHeroBuilder.PrefabPath("bastion", false)),
                 maxHealth = 150f,
-                damage = 26f,
-                attackRange = 2.8f,
+                damage = 32f,
+                attackRange = 3f,
                 attackRadius = 1.2f,
-                cooldown = 0.85f,
+                cooldown = 0.65f,
                 basicAttackReloadInterval = MobileCombatRules.BasicAttackReloadInterval,
-                hitDelay = 0.42f,
-                moveLock = 0.42f,
-                moveSpeed = 5.35f,
+                hitDelay = 0.34f,
+                moveLock = 0.55f,
+                moveSpeed = 4.7f,
                 autoAimRange = 4.2f,
-                wardStepDistance = 2.3f,
-                wardStepCost = 14f,
+                wardStepDistance = 3f,
+                wardStepCost = 22f,
                 meleeArcDegrees = 110f,
                 projectilePrefab = null,
                 projectileReadability = ProjectileReadabilityProfile.ForRoster(
                     "bastion", SpellSchool.None),
                 swingVfx = LoadMagic("Slash/EarthSlash"),
                 impactVfx = LoadMagic("Slash Hit/EarthSlashHit"),
-                koVfx = LoadMagic("Nova/NovaEarth"),
+                // Shared red death nova across the roster — see WizardDef.
+                koVfx = LoadMagic("Nova/NovaFire"),
                 spawnVfx = LoadMagic("Aura/AuraCast/AuraCastEarth"),
-                attackSfx = LoadAudioClip(
-                    "Assets/Invector-3rdPersonController/Melee Combat/Audio/slash_A.wav"),
-                hitSfx = LoadAudioClip(
-                    "Assets/Invector-3rdPersonController/Melee Combat/Audio/Hit 1.wav"),
+                attackSfx = LoadAudioClip(BrawlAudioFolder + "/slash_A.wav"),
+                hitSfx = LoadAudioClip(BrawlAudioFolder + "/Hit 1.wav"),
                 superName = "AEGIS SHOCKWAVE",
                 superStyle = BrawlerSuperStyle.Burst,
                 superDamageMultiplier = 1.3f,
@@ -1065,15 +1066,18 @@ namespace BrawlArena.EditorAutomation
             return clip;
         }
 
+        const string BrawlAudioFolder = "Assets/BrawlArena/Audio";
+
         public static BrawlerDefinition[] BuildRoster()
         {
-            // The generated wizard assets are source art for the Invector
-            // variants; production roster entries never reference them.
+            // The generated wizard/warrior assets are the source meshes the
+            // heavy hero prefab variants clone from, so they must be ensured
+            // first; production roster entries never reference them.
             Report.AppendLine(WizardAssetBuilder.EnsureAssets());
             Report.AppendLine(WarriorAssetBuilder.EnsureAssets());
-            Report.AppendLine(InvectorRimeMigrationBuilder.BuildRimePilotAssetsSafely());
-            Report.AppendLine(InvectorThornMigrationBuilder.BuildThornPilotAssetsSafely());
-            Report.AppendLine(InvectorBastionMigrationBuilder.BuildBastionPilotAssetsSafely());
+            HeavyHeroBuilder.EnsureAssets();
+            Report.AppendLine(
+                "Heavy hero assets ensured (mask, 3 controllers, 6 prefabs).");
             return BuildRosterFromExistingAssets();
         }
 
@@ -1083,7 +1087,7 @@ namespace BrawlArena.EditorAutomation
             {
                 WizardDef("frost", "Rime", "Cryomancer",
                     "A control specialist who layers chill, slows advances, and locks down crowded lanes.",
-                    SpellSchool.Frost, "Frost", 112f, 23f, 8.7f, 1.08f, 0.42f, 4.75f, 10.5f, 16f,
+                    SpellSchool.Frost, "Frost", 112f, 30f, 8.7f, 0.55f, 0.3f, 4.6f, 10.5f, 24f,
                     "ABSOLUTE ZERO", 1.58f, 2.8f, 4.5f,
                     "Effect16_Hand", "Effect16_Explosion", "Pillar Blast/FrostPillarBlast"),
                 ArcherDef(),
@@ -1096,7 +1100,7 @@ namespace BrawlArena.EditorAutomation
         /// <summary>
         /// Refreshes only the Task 2 roster payload in the two generated scenes.
         /// This preserves scene topology, object file ids, post-processing, and
-        /// all Invector builder outputs when combat data alone changes.
+        /// all generated builder outputs when combat data alone changes.
         /// </summary>
         public static string RefreshCombatCadenceReadabilityData()
         {

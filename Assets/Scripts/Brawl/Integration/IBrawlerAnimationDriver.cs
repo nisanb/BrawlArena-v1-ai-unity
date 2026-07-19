@@ -1,8 +1,10 @@
+using UnityEngine;
+
 namespace BrawlArena
 {
     /// <summary>
     /// Owns every runtime Animator write for one brawler body. Gameplay sends
-    /// semantic requests without exposing Invector graph state names to combat
+    /// semantic requests without exposing animator graph state names to combat
     /// or lifecycle code.
     /// </summary>
     public interface IBrawlerAnimationDriver
@@ -14,6 +16,13 @@ namespace BrawlArena
         void PlayDeath();
         void PlayRespawn();
         void PlayVictory();
+
+        /// <summary>
+        /// Ward-step/dash flourish: a base-layer Dash one-shot toward the
+        /// given world direction. Default no-op so existing implementations
+        /// compile untouched.
+        /// </summary>
+        void PlayDash(Vector3 worldDir) {}
 
         /// <summary>
         /// Animation-derived hit timing for the currently equipped weapon clip.

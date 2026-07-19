@@ -119,9 +119,9 @@ namespace BrawlArena.EditorAutomation
         {
             var go = new GameObject(name);
             Health health = go.AddComponent<Health>();
-            go.AddComponent<Tests.InvectorCutoverTestMotor>();
-            Tests.InvectorCutoverTestAnimationDriver animation =
-                go.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
+            go.AddComponent<Tests.BrawlFacadeTestMotor>();
+            Tests.BrawlFacadeTestAnimationDriver animation =
+                go.AddComponent<Tests.BrawlFacadeTestAnimationDriver>();
             controller = go.AddComponent<BrawlerController>();
             controller.SetAnimationDriver(animation);
             controller.team = team;

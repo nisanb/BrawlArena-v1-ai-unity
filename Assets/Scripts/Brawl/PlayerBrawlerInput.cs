@@ -23,8 +23,15 @@ namespace BrawlArena
         Vector3 latchedManualDirection;
         bool attackGestureActive;
         bool manualAimLatched;
+        Vector3 superGestureForward;
+        Vector3 superGestureRight;
+        Vector3 latchedSuperDirection;
+        bool superGestureActive;
+        bool superManualAimLatched;
         LineRenderer aimPreview;
         Material aimPreviewMaterial;
+        LineRenderer superAimPreview;
+        Material superAimPreviewMaterial;
 
         void Awake()
         {
@@ -138,19 +145,72 @@ namespace BrawlArena
 
         void UpdateSuper(BrawlHUD hud, Keyboard kb)
         {
-            if (hud != null && hud.ConsumeSuperReleased(out Vector2 superDrag))
+            if (hud != null)
             {
-                bool succeeded = TryMakeWorldAim(superDrag, out Vector3 direction)
-                    ? self.TrySuperDirection(direction)
-                    : self.TrySuperAuto();
-                if (!succeeded) hud.ShowSuperFailure();
+                if (hud.ConsumeSuperPressed())
+                    BeginSuperGesture();
+
+                if (hud.ConsumeSuperReleased(out Vector2 superDrag))
+                {
+                    // Latched-basis aim when the press was tracked; the fresh
+                    // camera basis keeps releases working after a gesture reset.
+                    Vector3 direction;
+                    bool manual = superGestureActive
+                        ? TryResolveSuperAim(superDrag, out direction)
+                        : TryMakeWorldAim(superDrag, out direction);
+                    bool succeeded = manual
+                        ? self.TrySuperDirection(direction)
+                        : self.TrySuperAuto();
+                    if (!succeeded) hud.ShowSuperFailure();
+                    ResetSuperGesture();
+                }
+                else if (superGestureActive && hud.SuperHeld &&
+                         hud.TryGetSuperAimDrag(out Vector2 liveDrag))
+                {
+                    if (TryResolveSuperAim(liveDrag, out Vector3 heldDirection))
+                        ShowSuperAimPreview(heldDirection);
+                    else
+                        HideSuperAimPreview();
+                }
             }
+
+            if (!self.CanAct && superGestureActive) ResetSuperGesture();
 
             if (kb != null && (kb.eKey.wasPressedThisFrame || kb.kKey.wasPressedThisFrame))
             {
                 bool succeeded = self.TrySuperAuto();
                 if (!succeeded && hud != null) hud.ShowSuperFailure();
             }
+        }
+
+        void BeginSuperGesture()
+        {
+            superGestureActive = self.CanAct;
+            superManualAimLatched = false;
+            latchedSuperDirection = Vector3.zero;
+            GetCurrentCameraBasis(out superGestureForward, out superGestureRight);
+            HideSuperAimPreview();
+        }
+
+        bool TryResolveSuperAim(Vector2 screenDrag, out Vector3 worldDirection)
+        {
+            if (TryMakeWorldAim(screenDrag, superGestureForward, superGestureRight,
+                    out Vector3 freshDirection))
+            {
+                superManualAimLatched = true;
+                latchedSuperDirection = freshDirection;
+            }
+
+            worldDirection = latchedSuperDirection;
+            return superManualAimLatched;
+        }
+
+        void ResetSuperGesture()
+        {
+            superGestureActive = false;
+            superManualAimLatched = false;
+            latchedSuperDirection = Vector3.zero;
+            HideSuperAimPreview();
         }
 
         bool TryMakeWorldAim(Vector2 screenDrag, out Vector3 worldDirection)
@@ -220,28 +280,43 @@ namespace BrawlArena
 
         void CreateAimPreview()
         {
-            var previewObject = new GameObject("AttackAimPreview", typeof(LineRenderer));
-            previewObject.transform.SetParent(transform, false);
-            aimPreview = previewObject.GetComponent<LineRenderer>();
-            aimPreview.useWorldSpace = true;
-            aimPreview.positionCount = 2;
-            aimPreview.startWidth = 0.12f;
-            aimPreview.endWidth = 0.035f;
-            aimPreview.numCapVertices = 4;
-            aimPreview.alignment = LineAlignment.View;
-            aimPreview.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            aimPreview.receiveShadows = false;
-            aimPreview.startColor = new Color(0.25f, 0.9f, 1f, 0.9f);
-            aimPreview.endColor = new Color(0.25f, 0.72f, 1f, 0.12f);
+            aimPreview = BuildPreviewLine("AttackAimPreview",
+                new Color(0.25f, 0.9f, 1f, 0.9f), new Color(0.25f, 0.72f, 1f, 0.12f),
+                out aimPreviewMaterial);
+            superAimPreview = BuildPreviewLine("SuperAimPreview",
+                new Color(0.78f, 0.42f, 1f, 0.9f), new Color(0.62f, 0.24f, 0.92f, 0.12f),
+                out superAimPreviewMaterial);
+            HideAimPreview();
+            HideSuperAimPreview();
+        }
 
+        LineRenderer BuildPreviewLine(string name, Color startColor, Color endColor,
+            out Material material)
+        {
+            var previewObject = new GameObject(name, typeof(LineRenderer));
+            previewObject.transform.SetParent(transform, false);
+            var line = previewObject.GetComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.startWidth = 0.12f;
+            line.endWidth = 0.035f;
+            line.numCapVertices = 4;
+            line.alignment = LineAlignment.View;
+            line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            line.receiveShadows = false;
+            line.startColor = startColor;
+            line.endColor = endColor;
+
+            material = null;
             Shader shader = Shader.Find("Sprites/Default");
             if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
             if (shader != null)
             {
-                aimPreviewMaterial = new Material(shader) { name = "AttackAimPreview_Runtime" };
-                aimPreview.material = aimPreviewMaterial;
+                material = new Material(shader) { name = name + "_Runtime" };
+                line.material = material;
             }
-            HideAimPreview();
+            line.enabled = false;
+            return line;
         }
 
         void ShowAimPreview(Vector3 direction)
@@ -267,6 +342,29 @@ namespace BrawlArena
             if (aimPreview != null) aimPreview.enabled = false;
         }
 
+        void ShowSuperAimPreview(Vector3 direction)
+        {
+            if (superAimPreview == null || !self.CanAct) return;
+            direction.y = 0f;
+            if (direction.sqrMagnitude <= 0.0001f)
+            {
+                HideSuperAimPreview();
+                return;
+            }
+
+            direction.Normalize();
+            Vector3 origin = self.AttackPreviewOrigin + Vector3.up * 0.04f;
+            float distance = self.SuperAimRange;
+            superAimPreview.SetPosition(0, origin);
+            superAimPreview.SetPosition(1, origin + direction * distance);
+            superAimPreview.enabled = distance > 0.01f;
+        }
+
+        void HideSuperAimPreview()
+        {
+            if (superAimPreview != null) superAimPreview.enabled = false;
+        }
+
         void ResetAttackGesture()
         {
             attackGestureActive = false;
@@ -278,21 +376,31 @@ namespace BrawlArena
         void OnDisable()
         {
             ResetAttackGesture();
+            ResetSuperGesture();
         }
 
         void OnApplicationFocus(bool hasFocus)
         {
-            if (!hasFocus) ResetAttackGesture();
+            if (!hasFocus)
+            {
+                ResetAttackGesture();
+                ResetSuperGesture();
+            }
         }
 
         void OnApplicationPause(bool paused)
         {
-            if (paused) ResetAttackGesture();
+            if (paused)
+            {
+                ResetAttackGesture();
+                ResetSuperGesture();
+            }
         }
 
         void OnDestroy()
         {
             if (aimPreviewMaterial != null) Destroy(aimPreviewMaterial);
+            if (superAimPreviewMaterial != null) Destroy(superAimPreviewMaterial);
         }
     }
 }

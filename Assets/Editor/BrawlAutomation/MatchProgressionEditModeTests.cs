@@ -233,8 +233,8 @@ namespace BrawlArena.EditorAutomation
             created.Add(go);
             Health health = go.AddComponent<Health>();
             health.SetMax(maxHealth);
-            go.AddComponent<Tests.InvectorCutoverTestMotor>();
-            go.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
+            go.AddComponent<Tests.BrawlFacadeTestMotor>();
+            go.AddComponent<Tests.BrawlFacadeTestAnimationDriver>();
             BrawlerController brawler = go.AddComponent<BrawlerController>();
             if (brawler.Health == null) InvokePrivate(brawler, "Awake");
             brawler.team = team;

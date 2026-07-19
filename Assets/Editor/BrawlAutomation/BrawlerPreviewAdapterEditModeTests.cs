@@ -5,161 +5,82 @@ using UnityEngine;
 
 namespace BrawlArena.EditorAutomation
 {
-    [ExecuteAlways]
-    [AddComponentMenu("")]
-    public sealed class BrawlerPreviewAwakeMutationProbe : MonoBehaviour
-    {
-        public static int MutationCount { get; private set; }
-
-        public static void ResetMutationCount()
-        {
-            MutationCount = 0;
-        }
-
-        void Awake()
-        {
-            MutationCount++;
-            AudioSource source = gameObject.AddComponent<AudioSource>();
-            source.playOnAwake = false;
-        }
-    }
-
     public class BrawlerPreviewAdapterEditModeTests
     {
-        static readonly (string id, string path)[] ProductionHumans =
-        {
-            ("frost", "Assets/Generated/InvectorMigration/Rime/Prefabs/RimeInvectorHuman.prefab"),
-            ("thorn", "Assets/Generated/InvectorMigration/Thorn/Prefabs/ThornInvectorHuman.prefab"),
-        };
+        static readonly string[] ProductionHumanIds = { "frost", "thorn", "bastion" };
 
         [Test]
-        public void ProductionHumansResolveAndShareExactLifecycleController()
+        public void ProductionHumansResolveActiveTopDownPrefabsWithMatchingIdentity()
         {
-            RuntimeAnimatorController sharedController = null;
-            foreach ((string id, string path) in ProductionHumans)
+            foreach (string id in ProductionHumanIds)
             {
-                BrawlerDefinition definition = LoadDefinition(id, path);
+                BrawlerDefinition definition = LoadDefinition(id);
 
                 GameObject resolved = BrawlerPreviewAdapter.ResolvePrefab(definition);
 
-                Assert.AreSame(definition.invectorHumanPrefab, resolved);
-                Assert.IsFalse(resolved.activeSelf);
-                var overrides = resolved.GetComponent<Animator>().runtimeAnimatorController
-                    as AnimatorOverrideController;
-                Assert.NotNull(overrides, id + " must use an AnimatorOverrideController");
-                if (sharedController == null)
-                    sharedController = overrides.runtimeAnimatorController;
-                else
-                    Assert.AreSame(sharedController, overrides.runtimeAnimatorController,
-                        id + " does not use the exact shared lifecycle controller asset");
+                Assert.AreSame(definition.humanBodyPrefab, resolved);
+                Assert.IsTrue(resolved.activeSelf,
+                    id + " TopDown prefabs ship active; no dormancy gates remain.");
+
+                HeavyBrawlerIdentity identity =
+                    resolved.GetComponent<HeavyBrawlerIdentity>();
+                Assert.NotNull(identity, id + " must carry HeavyBrawlerIdentity.");
+                Assert.AreEqual(id, identity.heroId);
+                Assert.IsTrue(identity.isHumanVariant, id);
+
+                Animator animator = resolved.GetComponent<Animator>();
+                Assert.NotNull(animator, id);
+                Assert.NotNull(animator.runtimeAnimatorController,
+                    id + " must reference its generated weapon-family controller.");
+                Assert.IsFalse(
+                    animator.runtimeAnimatorController is AnimatorOverrideController,
+                    id + " must use the generated controller directly, not a legacy override.");
             }
         }
 
         [Test]
-        public void OnlyThornOwnsTheBuilderAuthoredMenuPose()
+        public void PreparedPreviewShowsLocomotionAndVictoryWithoutFreeFallingPhysics()
         {
-            foreach ((string id, string path) in ProductionHumans)
-            {
-                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                Assert.NotNull(prefab, path);
-                InvectorBrawlerWeaponPresentation presenter =
-                    prefab.GetComponent<InvectorBrawlerWeaponPresentation>();
-                Assert.NotNull(presenter, id);
-                Assert.AreEqual(id == "thorn", presenter.HasAuthoredPreviewPose,
-                    id + " authored-preview posture changed");
-                Assert.AreEqual(id == "thorn", presenter.HideAuthoredArrowInPreview,
-                    id + " preview arrow posture changed");
-            }
-        }
-
-        [Test]
-        public void PreparedPreviewEnablesOnlyAnimatorAndProjectPresentationBoundary()
-        {
-            BrawlerDefinition definition = LoadDefinition(ProductionHumans[0].id,
-                ProductionHumans[0].path);
-            GameObject preview = Object.Instantiate(definition.invectorHumanPrefab);
+            BrawlerDefinition definition = LoadDefinition(ProductionHumanIds[0]);
+            GameObject preview = Object.Instantiate(definition.humanBodyPrefab);
             try
             {
-                Assert.IsFalse(preview.activeSelf);
-
                 BrawlerPreviewAdapter.Prepare(preview, definition);
-                BrawlerPreviewAdapter.ShowIdle(preview, definition, 0.3f);
-                BrawlerPreviewAdapter.ShowVictory(preview, definition);
 
                 Assert.IsTrue(preview.activeSelf);
                 Animator animator = preview.GetComponent<Animator>();
-                InvectorBrawlerWeaponPresentation presenter =
-                    preview.GetComponent<InvectorBrawlerWeaponPresentation>();
+                Assert.NotNull(animator);
                 Assert.IsTrue(animator.enabled);
                 Assert.IsFalse(animator.applyRootMotion);
-                Assert.NotNull(presenter);
-                Assert.IsTrue(presenter.enabled);
-                Assert.IsTrue(presenter.PreviewEnabled);
-                Assert.IsFalse(presenter.RuntimeEnabled);
-                foreach (Behaviour behaviour in preview.GetComponentsInChildren<Behaviour>(true))
-                    Assert.AreEqual(
-                        behaviour == animator || behaviour == presenter,
-                        behaviour.enabled,
-                        behaviour.GetType().FullName);
-                foreach (Collider collider in preview.GetComponentsInChildren<Collider>(true))
-                    Assert.IsFalse(collider.enabled, collider.GetType().FullName);
+
+                // The menu preview floats over UI with no ground beneath it:
+                // its body must never be left free to fall under gravity.
                 foreach (Rigidbody body in preview.GetComponentsInChildren<Rigidbody>(true))
-                {
-                    Assert.IsTrue(body.isKinematic);
-                    Assert.IsFalse(body.useGravity);
-                    Assert.IsFalse(body.detectCollisions);
-                    Assert.AreEqual(RigidbodyConstraints.FreezeAll, body.constraints);
-                }
+                    Assert.IsTrue(body.isKinematic || !body.useGravity,
+                        "A prepared preview body must not free-fall.");
+
+                // A preview never owns live gameplay input.
+                PlayerBrawlerInput input = preview.GetComponent<PlayerBrawlerInput>();
+                if (input != null) Assert.IsFalse(input.enabled);
+
+                BrawlerPreviewAdapter.ShowIdle(preview, definition, 0.3f);
+                animator.Update(0f);
+                Assert.IsTrue(
+                    animator.GetCurrentAnimatorStateInfo(0).IsName("Locomotion"),
+                    "ShowIdle must land the base layer in Locomotion.");
+
+                BrawlerPreviewAdapter.ShowVictory(preview, definition);
+                animator.Update(0.2f);
+                AnimatorStateInfo current = animator.GetCurrentAnimatorStateInfo(0);
+                bool presentingVictory = current.IsName("Victory") ||
+                    current.IsName("VictoryMaintain") ||
+                    (animator.IsInTransition(0) &&
+                     animator.GetNextAnimatorStateInfo(0).IsName("Victory"));
+                Assert.IsTrue(presentingVictory,
+                    "ShowVictory must drive the base layer into the Victory chain.");
             }
             finally
             {
-                Object.DestroyImmediate(preview);
-            }
-        }
-
-        [Test]
-        public void PrepareRequarantinesComponentsAddedByDisabledAwake()
-        {
-            BrawlerDefinition definition = LoadDefinition(ProductionHumans[0].id,
-                ProductionHumans[0].path);
-            GameObject preview = Object.Instantiate(definition.invectorHumanPrefab);
-            try
-            {
-                BrawlerPreviewAwakeMutationProbe.ResetMutationCount();
-                var probe = preview.AddComponent<BrawlerPreviewAwakeMutationProbe>();
-                Assert.IsFalse(preview.activeSelf);
-                Assert.Zero(BrawlerPreviewAwakeMutationProbe.MutationCount,
-                    "Awake ran before the dormant preview activation boundary.");
-                Assert.IsEmpty(preview.GetComponentsInChildren<AudioSource>(true));
-
-                BrawlerPreviewAdapter.Prepare(preview, definition);
-
-                Assert.GreaterOrEqual(BrawlerPreviewAwakeMutationProbe.MutationCount, 1,
-                    "The regression probe did not mutate the component graph during activation.");
-                Assert.IsFalse(probe.enabled);
-                AudioSource[] activationSources = preview.GetComponentsInChildren<AudioSource>(true);
-                Assert.IsNotEmpty(activationSources,
-                    "The Awake mutation did not add its default-enabled AudioSource.");
-                foreach (AudioSource source in activationSources)
-                    Assert.IsFalse(source.enabled,
-                        "An activation-time AudioSource escaped the second quarantine pass.");
-
-                Animator animator = preview.GetComponent<Animator>();
-                InvectorBrawlerWeaponPresentation presenter =
-                    preview.GetComponent<InvectorBrawlerWeaponPresentation>();
-                Assert.IsTrue(animator.enabled);
-                Assert.NotNull(presenter);
-                Assert.IsTrue(presenter.PreviewEnabled);
-                Assert.IsFalse(presenter.RuntimeEnabled);
-                foreach (Behaviour behaviour in preview.GetComponentsInChildren<Behaviour>(true))
-                    Assert.AreEqual(
-                        behaviour == animator || behaviour == presenter,
-                        behaviour.enabled,
-                        behaviour.GetType().FullName);
-            }
-            finally
-            {
-                BrawlerPreviewAwakeMutationProbe.ResetMutationCount();
                 Object.DestroyImmediate(preview);
             }
         }
@@ -170,7 +91,11 @@ namespace BrawlArena.EditorAutomation
             Assert.Throws<System.InvalidOperationException>(() =>
                 BrawlerPreviewAdapter.ResolvePrefab(new BrawlerDefinition { id = "frost" }));
 
-            BrawlerDefinition mismatched = LoadDefinition("thorn", ProductionHumans[0].path);
+            BrawlerDefinition mismatched = new BrawlerDefinition
+            {
+                id = "thorn",
+                humanBodyPrefab = LoadDefinition("frost").humanBodyPrefab,
+            };
             Assert.Throws<System.InvalidOperationException>(() =>
                 BrawlerPreviewAdapter.ResolvePrefab(mismatched));
         }
@@ -194,14 +119,16 @@ namespace BrawlArena.EditorAutomation
             StringAssert.DoesNotContain("animator.Play(", portraits);
         }
 
-        static BrawlerDefinition LoadDefinition(string id, string path)
+        static BrawlerDefinition LoadDefinition(string id)
         {
-            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            Assert.NotNull(prefab, path);
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                HeavyHeroBuilder.PrefabPath(id, true));
+            Assert.NotNull(prefab, "Missing TopDown human prefab for '" + id +
+                "'. Run HeavyHeroBuilder.EnsureAssets first.");
             return new BrawlerDefinition
             {
                 id = id,
-                invectorHumanPrefab = prefab,
+                humanBodyPrefab = prefab,
             };
         }
     }

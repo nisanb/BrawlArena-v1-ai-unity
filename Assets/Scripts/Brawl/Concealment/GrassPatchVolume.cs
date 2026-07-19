@@ -5,7 +5,7 @@ namespace BrawlArena
 {
     /// <summary>
     /// Planar-circle concealment zone authored by the scene builder under a
-    /// tall-grass cluster. Deliberately not a physics trigger: Invector rigs
+    /// tall-grass cluster. Deliberately not a physics trigger: character rigs
     /// carry many colliders, and a point-in-circle test over a handful of
     /// patches per brawler per frame is cheaper and deterministic.
     /// </summary>

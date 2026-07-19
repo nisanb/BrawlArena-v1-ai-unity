@@ -64,6 +64,7 @@ namespace BrawlArena
         public VirtualJoystick Joystick { get; private set; }
         public bool AttackHeld => attackButton != null && attackButton.Held;
         public float AttackHeldDuration => attackButton != null ? attackButton.HeldDuration : 0f;
+        public bool SuperHeld => superButton != null && superButton.Held;
         public RectTransform RightCastSurface { get; private set; }
 
         AttackButtonWidget attackButton;
@@ -261,6 +262,14 @@ namespace BrawlArena
         public bool ConsumeAttackReleased(out Vector2 screenDrag)
         {
             if (attackButton != null) return attackButton.ConsumeReleased(out screenDrag);
+            screenDrag = Vector2.zero;
+            return false;
+        }
+
+        /// <summary>Current Super drag in screen pixels, from press origin to pointer.</summary>
+        public bool TryGetSuperAimDrag(out Vector2 screenDrag)
+        {
+            if (superButton != null) return superButton.TryGetDrag(out screenDrag);
             screenDrag = Vector2.zero;
             return false;
         }
@@ -2615,6 +2624,16 @@ namespace BrawlArena
         Vector2 pointerPosition;
         Vector2 releasedDrag;
         float pressedAt;
+        // A press arriving while the previous completion is still unconsumed
+        // (one-frame polling window) is queued here instead of dropped, so a
+        // very fast second tap is never lost.
+        bool queuedPressPending;
+        int queuedPointerId = NoPointer;
+        PointerEventData.InputButton queuedPointerButton = PointerEventData.InputButton.Left;
+        Vector2 queuedPressPosition;
+        Vector2 queuedPointerPosition;
+        float queuedPressedAt;
+        bool queuedReleased;
         Transform pressVisual;
         Vector3 restScale;
         BrawlCamera cameraController;
@@ -2670,7 +2689,46 @@ namespace BrawlArena
             pressPosition = Vector2.zero;
             pointerPosition = Vector2.zero;
             releasedDrag = Vector2.zero;
+            ClearQueuedPress();
             SetVisualPressed(false);
+        }
+
+        void ClearQueuedPress()
+        {
+            queuedPressPending = false;
+            queuedPointerId = NoPointer;
+            queuedPointerButton = PointerEventData.InputButton.Left;
+            queuedPressPosition = Vector2.zero;
+            queuedPointerPosition = Vector2.zero;
+            queuedPressedAt = 0f;
+            queuedReleased = false;
+        }
+
+        /// <summary>
+        /// Moves a queued press into the live gesture slot once the blocking
+        /// completion has been consumed. If the queued finger already lifted,
+        /// its completed tap becomes the next consumable release.
+        /// </summary>
+        void PromoteQueuedPress()
+        {
+            if (!queuedPressPending || released || cancelled) return;
+            pressed = true;
+            pressPosition = queuedPressPosition;
+            pointerPosition = queuedPointerPosition;
+            pressedAt = queuedPressedAt;
+            if (queuedReleased)
+            {
+                releasedDrag = queuedPointerPosition - queuedPressPosition;
+                released = true;
+                SetVisualPressed(false);
+            }
+            else
+            {
+                activePointerId = queuedPointerId;
+                activePointerButton = queuedPointerButton;
+                SetVisualPressed(true);
+            }
+            ClearQueuedPress();
         }
 
         /// <summary>Uses a visual child/sibling for press feedback without enlarging its raycast area.</summary>
@@ -2696,6 +2754,7 @@ namespace BrawlArena
             pressed = false;
             pressPosition = Vector2.zero;
             pointerPosition = Vector2.zero;
+            ClearQueuedPress();
             SetVisualPressed(false);
             if (notify && hadAttack) cancelled = true;
         }
@@ -2729,6 +2788,7 @@ namespace BrawlArena
         {
             bool value = cancelled;
             cancelled = false;
+            if (value) PromoteQueuedPress();
             return value;
         }
 
@@ -2746,6 +2806,7 @@ namespace BrawlArena
             bool value = released;
             released = false;
             releasedDrag = Vector2.zero;
+            if (value) PromoteQueuedPress();
             return value;
         }
 
@@ -2782,8 +2843,21 @@ namespace BrawlArena
             else if (Held) return;
 
             // Preserve an unconsumed completion rather than allowing a second
-            // very-fast tap to erase the first spell gesture.
-            if (released || cancelled) return;
+            // very-fast tap to erase the first spell gesture: queue the new
+            // press and promote it once the completion is consumed.
+            if (released || cancelled)
+            {
+                if (queuedPressPending) return;
+                queuedPressPending = true;
+                queuedPointerId = eventData.pointerId;
+                queuedPointerButton = eventData.button;
+                queuedPressPosition = eventData.position;
+                queuedPointerPosition = eventData.position;
+                queuedPressedAt = Time.unscaledTime;
+                queuedReleased = false;
+                SetVisualPressed(true);
+                return;
+            }
             activePointerId = eventData.pointerId;
             activePointerButton = eventData.button;
             pressPosition = eventData.position;
@@ -2804,7 +2878,15 @@ namespace BrawlArena
 
             if (eventData.pointerId == activePointerId &&
                 eventData.button == activePointerButton)
+            {
                 pointerPosition = eventData.position;
+                return;
+            }
+
+            if (queuedPressPending && !queuedReleased &&
+                eventData.pointerId == queuedPointerId &&
+                eventData.button == queuedPointerButton)
+                queuedPointerPosition = eventData.position;
         }
 
         public void OnPointerUp(PointerEventData eventData)
@@ -2813,6 +2895,18 @@ namespace BrawlArena
             {
                 orbitPointerId = NoPointer;
                 orbitPointerButton = PointerEventData.InputButton.Left;
+                return;
+            }
+
+            if (queuedPressPending && !queuedReleased &&
+                eventData.pointerId == queuedPointerId &&
+                eventData.button == queuedPointerButton)
+            {
+                // The queued finger lifted before promotion: remember the
+                // finished tap so it still fires after the current completion.
+                queuedPointerPosition = eventData.position;
+                queuedReleased = true;
+                SetVisualPressed(false);
                 return;
             }
 

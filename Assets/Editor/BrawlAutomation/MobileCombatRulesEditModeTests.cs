@@ -17,19 +17,18 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
-        public void ThreeWardStepsSpendAllFlowAndFourthStepFails()
+        public void TwoRollsSpendMostFlowAndThirdRollFails()
         {
             float flow = MobileCombatRules.ArcaneFlowCapacity;
 
             Assert.IsTrue(MobileCombatRules.TrySpendWardFlow(ref flow));
-            Assert.That(flow, Is.EqualTo(40f).Within(Tolerance));
+            Assert.That(flow, Is.EqualTo(35f).Within(Tolerance));
             Assert.IsTrue(MobileCombatRules.TrySpendWardFlow(ref flow));
-            Assert.That(flow, Is.EqualTo(20f).Within(Tolerance));
-            Assert.IsTrue(MobileCombatRules.TrySpendWardFlow(ref flow));
-            Assert.That(flow, Is.EqualTo(0f).Within(Tolerance));
+            Assert.That(flow, Is.EqualTo(10f).Within(Tolerance));
 
-            Assert.IsFalse(MobileCombatRules.TrySpendWardFlow(ref flow));
-            Assert.That(flow, Is.EqualTo(0f).Within(Tolerance));
+            Assert.IsFalse(MobileCombatRules.TrySpendWardFlow(ref flow),
+                "Souls stamina: a third back-to-back roll must not be free.");
+            Assert.That(flow, Is.EqualTo(10f).Within(Tolerance));
         }
 
         [Test]
@@ -68,18 +67,23 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
-        public void WardStepDurationIsTwoHundredTwentyMilliseconds()
+        public void DodgeRollLastsLongEnoughToReadAsARoll()
         {
-            Assert.That(MobileCombatRules.WardStepDuration, Is.EqualTo(0.22f).Within(Tolerance));
+            Assert.That(MobileCombatRules.WardStepDuration, Is.EqualTo(0.42f).Within(Tolerance));
+            Assert.That(MobileCombatRules.RollInvulnerabilitySeconds,
+                Is.EqualTo(0.3f).Within(Tolerance));
+            Assert.Less(MobileCombatRules.RollInvulnerabilitySeconds,
+                MobileCombatRules.WardStepDuration,
+                "The i-frame window must end before the roll recovery does.");
         }
 
         [Test]
         public void KnockbackDurationClampsBetweenMinimumAndMaximum()
         {
-            Assert.That(MobileCombatRules.KnockbackDuration(0f), Is.EqualTo(0.16f).Within(Tolerance));
+            Assert.That(MobileCombatRules.KnockbackDuration(0f), Is.EqualTo(0.2f).Within(Tolerance));
             Assert.That(MobileCombatRules.KnockbackDuration(1f),
-                Is.EqualTo(0.22f).Within(Tolerance));
-            Assert.That(MobileCombatRules.KnockbackDuration(100f), Is.EqualTo(0.5f).Within(Tolerance));
+                Is.EqualTo(0.275f).Within(Tolerance));
+            Assert.That(MobileCombatRules.KnockbackDuration(100f), Is.EqualTo(0.6f).Within(Tolerance));
         }
 
         [Test]
@@ -124,17 +128,40 @@ namespace BrawlArena.EditorAutomation
             Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(0f, 0.35f),
                 Is.EqualTo(0.35f).Within(Tolerance), "A missing/zero clip must use the fallback seed.");
 
-            // 0.2s clip * 0.42 = 0.084, clamped up to the 0.15s floor.
-            Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(0.2f, 0.35f),
+            // 0.1s clip * 0.45 = 0.045, clamped up to the 0.14s floor.
+            Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(0.1f, 0.35f),
                 Is.EqualTo(MobileCombatRules.AttackImpactDelayMinSeconds).Within(Tolerance));
 
-            // 3s clip * 0.42 = 1.26, clamped down to the 0.9s ceiling.
+            // 3s clip * 0.45 = 1.35, clamped down to the 1.1s ceiling.
             Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(3f, 0.35f),
                 Is.EqualTo(MobileCombatRules.AttackImpactDelayMaxSeconds).Within(Tolerance));
 
             // A mid-range clip lands on the plain scaled value.
             Assert.That(MobileCombatRules.ResolveAnimationImpactDelay(1f, 0.35f),
-                Is.EqualTo(0.42f).Within(Tolerance));
+                Is.EqualTo(0.45f).Within(Tolerance));
+        }
+
+        [Test]
+        public void HeavyRetuneKeepsSoulsGradeCommitmentConstants()
+        {
+            // The souls contract: a swing is a decision. Windups root most
+            // movement, recovery keeps partial commitment, hit timing reads
+            // as a telegraph, and committed facing turns are deliberate.
+            Assert.That(MobileCombatRules.BasicAttackReloadInterval,
+                Is.EqualTo(1.6f).Within(Tolerance));
+            Assert.That(MobileCombatRules.MeleeWindupMovementMultiplier,
+                Is.EqualTo(0.3f).Within(Tolerance));
+            Assert.That(MobileCombatRules.RangedWindupMovementMultiplier,
+                Is.EqualTo(0.45f).Within(Tolerance));
+            Assert.That(MobileCombatRules.RecoveryMovementMultiplier,
+                Is.EqualTo(0.55f).Within(Tolerance));
+            Assert.That(MobileCombatRules.AttackImpactDelayMinSeconds,
+                Is.EqualTo(0.14f).Within(Tolerance));
+            Assert.That(MobileCombatRules.CombatTurnRateDegreesPerSecond,
+                Is.EqualTo(540f).Within(Tolerance));
+            Assert.Greater(MobileCombatRules.HitStopHeavyVictim,
+                MobileCombatRules.HitStopLightVictim,
+                "A Super connecting must always freeze harder than a basic.");
         }
 
         [Test]

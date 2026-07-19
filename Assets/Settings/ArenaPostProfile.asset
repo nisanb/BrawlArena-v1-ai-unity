@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!114 &-7669570951747892481
+--- !u!114 &-4478058896898419194
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -40,7 +40,7 @@ MonoBehaviour:
   maxNits:
     m_OverrideState: 1
     m_Value: 1000
---- !u!114 &-4773518972931123393
+--- !u!114 &-827477594179686211
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -81,11 +81,11 @@ MonoBehaviour:
   m_Name: ArenaPostProfile
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.VolumeProfile
   components:
-  - {fileID: 7086000761391218999}
-  - {fileID: -4773518972931123393}
-  - {fileID: 8527268653198749242}
-  - {fileID: -7669570951747892481}
---- !u!114 &7086000761391218999
+  - {fileID: 2413730178989889552}
+  - {fileID: -827477594179686211}
+  - {fileID: 3931069437176004592}
+  - {fileID: -4478058896898419194}
+--- !u!114 &2413730178989889552
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -135,7 +135,7 @@ MonoBehaviour:
   dirtIntensity:
     m_OverrideState: 1
     m_Value: 0
---- !u!114 &8527268653198749242
+--- !u!114 &3931069437176004592
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}

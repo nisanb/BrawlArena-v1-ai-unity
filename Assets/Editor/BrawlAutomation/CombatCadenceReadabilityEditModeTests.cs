@@ -38,13 +38,15 @@ namespace BrawlArena.EditorAutomation.Tests
             // deliberately costs low/medium-damage attackers extra hits.
             Assert.That(roster.Length, Is.EqualTo(3));
 
+            // Souls retune: slower committed swings hit harder, so every
+            // matrix cell tightened while staying inside the canonical bands.
             float[] health = { 112f, 96f, 150f };
-            float[] damage = { 23f, 30f, 26f };
+            float[] damage = { 30f, 34f, 32f };
             int[,] expected =
             {
-                { 5, 5, 7 },
                 { 4, 4, 5 },
-                { 5, 4, 6 },
+                { 4, 3, 5 },
+                { 4, 3, 5 },
             };
 
             for (int attacker = 0; attacker < roster.Length; attacker++)

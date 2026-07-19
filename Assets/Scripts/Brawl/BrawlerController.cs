@@ -12,8 +12,8 @@ namespace BrawlArena
     }
 
     /// <summary>
-    /// Gameplay facade for one Invector-backed brawler body. Human input or AI
-    /// tactics provide intent; one required Invector motor, animation driver,
+    /// Gameplay facade for one heavy-backed brawler body. Human input or AI
+    /// tactics provide intent; one required heavy motor, animation driver,
     /// and optional weapon presenter own physical/visual execution.
     /// </summary>
     [RequireComponent(typeof(Health))]
@@ -272,6 +272,8 @@ namespace BrawlArena
         Coroutine superRoutine;
         Coroutine knockbackRoutine;
         Coroutine invulnerabilityRoutine;
+        bool rollProtectionActive;
+        float rollProtectionUntil;
         float spawnProtectionEndsAt;
         LineRenderer spawnProtectionRing;
         MaterialPropertyBlock spawnProtectionBlock;
@@ -391,7 +393,7 @@ namespace BrawlArena
 
         /// <summary>
         /// Installs the sole physical motor before Start locks actor ownership.
-        /// Production assembly supplies the one same-root Invector motor before
+        /// Production assembly supplies the one same-root heavy motor before
         /// Start; no runtime fallback is created.
         /// </summary>
         public void SetMotor(IBrawlerMotor selectedMotor)
@@ -438,7 +440,7 @@ namespace BrawlArena
             }
             if (motor == null)
                 throw new System.InvalidOperationException(
-                    "An Invector-backed brawler requires one configured IBrawlerMotor before Start.");
+                    "An heavy-backed brawler requires one configured IBrawlerMotor before Start.");
         }
 
         void RestoreMotorReference()
@@ -449,7 +451,7 @@ namespace BrawlArena
 
         /// <summary>
         /// Installs the sole Animator writer before Start configures the actor.
-        /// Invector assembly uses this hook; no fallback Animator writer exists.
+        /// Production assembly uses this hook; no fallback Animator writer exists.
         /// </summary>
         public void SetAnimationDriver(IBrawlerAnimationDriver driver)
         {
@@ -487,7 +489,7 @@ namespace BrawlArena
             }
             if (animationDriver == null)
                 throw new System.InvalidOperationException(
-                    "An Invector-backed brawler requires one configured animation driver before Start.");
+                    "An heavy-backed brawler requires one configured animation driver before Start.");
             animationDriverLocked = true;
         }
 
@@ -619,6 +621,29 @@ namespace BrawlArena
         }
 
         /// <summary>
+        /// Ward Step flourish: a dash one-shot on drivers that support it.
+        /// Best-effort presentation like every other animation request.
+        /// </summary>
+        void TryPresentDash(Vector3 worldDirection)
+        {
+            IBrawlerAnimationDriver driver = AnimationDriver;
+            if (driver == null) return;
+
+            try
+            {
+                driver.PlayDash(worldDirection);
+            }
+            catch (System.Exception exception)
+            {
+                AnimationPresentationFailureCount++;
+                LastAnimationPresentationFailure = exception;
+                LastAnimationPresentationFailureOperation = "PlayDash";
+                LastAnimationPresentationFailureType = exception.GetType().FullName;
+                LastAnimationPresentationFailureMessage = exception.Message;
+            }
+        }
+
+        /// <summary>
         /// Weapon art and IK are best-effort presentation. Failures are retained
         /// for inspection and never escape into targeting, projectile timing,
         /// damage, visibility, or respawn authority.
@@ -697,9 +722,10 @@ namespace BrawlArena
         }
 
         /// <summary>
-        /// Commits a short, collision-aware step in one direction. Validation
-        /// happens before Flow is spent, so tapping into an immediate wall is
-        /// friendly rather than punitive.
+        /// Commits a collision-aware dodge roll in one direction with a short
+        /// souls-grade i-frame window at its start. Validation happens before
+        /// Flow is spent, so tapping into an immediate wall is friendly
+        /// rather than punitive.
         /// </summary>
         public bool TryWardStep(Vector3 worldDirection)
         {
@@ -728,7 +754,27 @@ namespace BrawlArena
             FaceInstant(transform.position + worldDirection);
             Motor.BeginExternalDisplacement();
             wardOwnsExternalDisplacement = true;
+            TryPresentDash(worldDirection);
+            // The i-frame window: a well-timed roll beats the hit. Ownership
+            // is timestamp-based so a StopAllCoroutines sweep can never
+            // strand the body invulnerable, and an active spawn protection
+            // (the only other Invulnerable owner) is never overridden.
+            if (Health != null && !Health.Invulnerable)
+            {
+                Health.Invulnerable = true;
+                rollProtectionActive = true;
+                rollProtectionUntil = Time.time +
+                    MobileCombatRules.RollInvulnerabilitySeconds;
+            }
             return true;
+        }
+
+        void UpdateRollProtection()
+        {
+            if (!rollProtectionActive || Time.time < rollProtectionUntil) return;
+            rollProtectionActive = false;
+            if (Health != null && invulnerabilityRoutine == null)
+                Health.Invulnerable = false;
         }
 
         float ResolveWardStepDistance(Vector3 direction)
@@ -787,6 +833,7 @@ namespace BrawlArena
         {
             if (!initialized) return;
             UpdateSpellStatuses();
+            UpdateRollProtection();
             UpdateWardFlow();
             UpdateBasicAttackCharges();
             UpdateHealthRegen();
@@ -1000,7 +1047,7 @@ namespace BrawlArena
 
         /// <summary>
         /// Routes measured locomotion speed to the selected animation backend.
-        /// The Invector driver translates normalized facade motion semantically.
+        /// The animation driver translates normalized facade motion semantically.
         /// </summary>
         void UpdateAnimator()
         {
@@ -1392,7 +1439,7 @@ namespace BrawlArena
             nextAttackTime = Time.time + attackCooldown;
             attackLockUntil = Time.time + attackMoveLock;
             AttacksUsed++;
-            FaceCombat(transform.position + worldDirection);
+            HoldCombatAim(worldDirection);
             PresentWeaponAim(worldDirection);
             attackRoutine = StartCoroutine(AttackRoutine(target, worldDirection));
             BalanceTelemetryRuntime.RecordAttack(this);
@@ -1446,14 +1493,24 @@ namespace BrawlArena
             superInProgress = true;
             nextAttackTime = Mathf.Max(nextAttackTime, Time.time + 0.3f);
             attackLockUntil = Mathf.Max(attackLockUntil, Time.time + 0.28f);
-            FaceCombat(transform.position + worldDirection);
+            HoldCombatAim(worldDirection);
             PresentWeaponAim(worldDirection);
             superRoutine = StartCoroutine(SuperRoutine(target, worldDirection));
             BalanceTelemetryRuntime.RecordSuper(this);
             if (concealment != null) concealment.RevealFor(ConcealmentRules.AttackRevealSeconds);
-            if (IsPlayer) CombatFeedback.ReportLocalSuper();
+            if (IsPlayer)
+            {
+                CombatFeedback.ReportLocalSuper();
+                // The frame widens with the release so a Super physically
+                // reads bigger from behind the local player's shoulder.
+                BrawlCamera.Kick(MobileCombatRules.SuperFovKickDegrees,
+                    MobileCombatRules.SuperFovKickSeconds);
+            }
             return true;
         }
+
+        /// <summary>Seconds a committed attack/Super keeps aim facing winning over movement facing.</summary>
+        const float CombatAimHoldSeconds = 0.30f;
 
         void FaceInstant(Vector3 worldPoint)
         {
@@ -1463,15 +1520,16 @@ namespace BrawlArena
         }
 
         /// <summary>
-        /// Attack/Super presentation turns at the bounded combat turn rate
-        /// instead of snapping. Ward Step and spawn/teleport facing remain
-        /// instant via FaceInstant.
+        /// Committed attack/Super facing: snap to the shot direction now and
+        /// keep it winning over movement facing for a short hold window, so the
+        /// body visibly turns and fires even while running. Ward Step and
+        /// spawn/teleport facing remain instant via FaceInstant.
         /// </summary>
-        void FaceCombat(Vector3 worldPoint)
+        void HoldCombatAim(Vector3 worldDirection)
         {
-            Vector3 dir = worldPoint - transform.position;
-            dir.y = 0f;
-            Motor?.Face(dir, false);
+            worldDirection.y = 0f;
+            if (worldDirection.sqrMagnitude <= 0.0001f) return;
+            Motor?.HoldAimFacing(worldDirection.normalized, CombatAimHoldSeconds);
         }
 
         IEnumerator AttackRoutine(BrawlerController target, Vector3 worldDirection)
@@ -1495,7 +1553,7 @@ namespace BrawlArena
                     worldDirection = MobileCombatRules.LimitAimCorrection(
                         worldDirection, trackedDirection);
                 }
-                FaceCombat(transform.position + worldDirection);
+                HoldCombatAim(worldDirection);
 
                 if (projectilePrefab != null) FireProjectile(target, worldDirection);
                 else MeleeStrike(worldDirection);
@@ -1515,7 +1573,7 @@ namespace BrawlArena
         }
 
         /// <summary>
-        /// Prefers the Invector clip's authored timing but never lets it exceed
+        /// Prefers the animation clip's authored timing but never lets it exceed
         /// the current attackHitDelay seed, so CharacterSkill's AttackSpeed
         /// progression (which scales attackHitDelay directly) still speeds up
         /// hit timing for heroes with a resolvable animation override.
@@ -1593,7 +1651,7 @@ namespace BrawlArena
                     if (trackedDirection.sqrMagnitude > 0.0001f)
                         worldDirection = trackedDirection.normalized;
                 }
-                FaceCombat(transform.position + worldDirection);
+                HoldCombatAim(worldDirection);
 
                 switch (superStyle)
                 {
@@ -1725,7 +1783,10 @@ namespace BrawlArena
             if (applied > 0f)
             {
                 RequestHitStop(MobileCombatRules.HitStopLightAttacker);
-                best.RequestHitStop(MobileCombatRules.HitStopLightVictim);
+                // A lethal blow hands the body to death presentation at once;
+                // hit-stop on a fresh corpse would freeze the death transition.
+                if (!best.IsDead)
+                    best.RequestHitStop(MobileCombatRules.HitStopLightVictim);
                 if (specialty.knockback > 0f)
                     best.ApplyKnockback(best.transform.position - transform.position,
                         specialty.knockback);
@@ -1758,7 +1819,9 @@ namespace BrawlArena
                 if (applied > 0f && manager.IsCombatActive)
                 {
                     RequestHitStop(MobileCombatRules.HitStopHeavyAttacker);
-                    other.RequestHitStop(MobileCombatRules.HitStopHeavyVictim);
+                    // Lethal victims skip hit-stop: death presentation owns them.
+                    if (!other.IsDead)
+                        other.RequestHitStop(MobileCombatRules.HitStopHeavyVictim);
                     other.ApplyKnockback(other.transform.position - transform.position,
                         Mathf.Max(superKnockback, specialty.knockback));
                     ApplySpellSpecialtyHit(other, applied, other.CombatAimPoint,
@@ -1917,7 +1980,18 @@ namespace BrawlArena
             }
             AddSuperCharge(amount * superChargeFromDamageTaken);
             CombatFeedback.TryPlaySfx(audioSource, hitSfx);
-            if (IsPlayer && !IsDead) CombatFeedback.ReportLocalReceivedHit();
+            if (IsPlayer && !IsDead)
+            {
+                CombatFeedback.ReportLocalReceivedHit();
+                // The camera takes the hit with the local player: a small
+                // decaying punch away from the attacker.
+                if (attacker != null)
+                {
+                    BrawlCamera.Punch(
+                        transform.position - attacker.transform.position,
+                        MobileCombatRules.HitPunchAmplitude);
+                }
+            }
             // Un-gated from IsPlayer: any hit near what the camera is
             // following should read on screen, not just the local player's own.
             CombatFeedback.ReportProximityShake(transform.position,
@@ -1935,6 +2009,7 @@ namespace BrawlArena
         void OnDied(GameObject attacker)
         {
             ClearSpawnProtection();
+            rollProtectionActive = false;
             StopAllCoroutines();
             EndKnockbackDisplacement();
             CancelWardStep();
@@ -1965,6 +2040,9 @@ namespace BrawlArena
             CombatFeedback.ReportProximityShake(transform.position,
                 NearbyKnockoutShakeAmplitude, NearbyKnockoutShakeDuration);
             Motor?.Stop(true);
+            // Corpse mode: kinematic + collider off so the body can neither be
+            // shoved around nor block the living while the death pose plays.
+            Motor?.SetCorpseMode(true);
             if (MatchManager.Instance != null)
             {
                 MatchManager.Instance.ReportKO(this, attacker);
@@ -2049,12 +2127,19 @@ namespace BrawlArena
                 ? MatchManager.Instance.GetSpawnPoint(team, MatchSpawnSlot)
                 : transform.position;
             Teleport(spawn);
+            // Restore the dynamic physics posture before the body is alive
+            // again; Teleport deliberately never exits corpse mode itself.
+            Motor?.SetCorpseMode(false);
             ClearSpellStatuses();
             Health.Revive();
             maxStamina = MobileCombatRules.ArcaneFlowCapacity;
             Stamina = maxStamina;
             ResetBasicAttackCharges();
             staminaRegenAt = 0f;
+            // A fresh spawn owes nothing from its previous life: pre-death
+            // attack cooldown and move-lock never carry across a respawn.
+            nextAttackTime = 0f;
+            attackLockUntil = 0f;
             CancelWardStep();
             EndKnockbackDisplacement();
             superInProgress = false;

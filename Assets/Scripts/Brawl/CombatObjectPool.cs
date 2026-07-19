@@ -82,6 +82,10 @@ namespace BrawlArena
 
         readonly Dictionary<PoolKey, Bucket> buckets =
             new Dictionary<PoolKey, Bucket>();
+        // Instances created by Prewarm before their spawn kind is known. They
+        // are adopted into the real projectile/VFX bucket on first Acquire.
+        readonly Dictionary<int, List<CombatPooledObject>> prewarmedByPrefab =
+            new Dictionary<int, List<CombatPooledObject>>();
         MatchManager observedMatch;
         int generation;
         int sceneHandle;
@@ -149,6 +153,19 @@ namespace BrawlArena
             if (lease == null) lease = instanceObject.AddComponent<PooledVfxLease>();
             lease.Begin(Mathf.Max(0f, lifetime));
             return instanceObject;
+        }
+
+        /// <summary>
+        /// Eagerly instantiates up to count inactive, reusable clones of a
+        /// projectile or VFX prefab so the first mid-combat spawn never pays an
+        /// Instantiate hitch. Warm clones are consumed by whichever spawn path
+        /// first uses the prefab. Idempotent: instances already warm, pooled,
+        /// or leased for the prefab count toward the requested total.
+        /// </summary>
+        public static void Prewarm(GameObject prefab, int count)
+        {
+            if (prefab == null || count <= 0) return;
+            GetForActiveScene().PrewarmInstances(prefab, count);
         }
 
         /// <summary>
@@ -233,6 +250,41 @@ namespace BrawlArena
             return instance;
         }
 
+        void PrewarmInstances(GameObject prefab, int count)
+        {
+            if (shuttingDown) return;
+            ObserveCurrentMatch();
+
+            int prefabId = prefab.GetInstanceID();
+            if (!prewarmedByPrefab.TryGetValue(prefabId, out List<CombatPooledObject> stash))
+            {
+                stash = new List<CombatPooledObject>();
+                prewarmedByPrefab.Add(prefabId, stash);
+            }
+
+            int warm = stash.Count;
+            if (buckets.TryGetValue(new PoolKey(prefabId, PoolKind.Projectile),
+                    out Bucket projectiles))
+                warm += projectiles.Available.Count + projectiles.Leased.Count;
+            if (buckets.TryGetValue(new PoolKey(prefabId, PoolKind.Vfx), out Bucket effects))
+                warm += effects.Available.Count + effects.Leased.Count;
+
+            count = Mathf.Min(count, ProjectileCapacityPerPrefab);
+            for (; warm < count; warm++)
+            {
+                GameObject created = Instantiate(prefab, transform);
+                CombatPooledObject marker = created.GetComponent<CombatPooledObject>();
+                if (marker == null) marker = created.AddComponent<CombatPooledObject>();
+                // The spawn kind is unknown until first use; Acquire
+                // re-initializes the marker into its real bucket on adoption.
+                marker.Initialize(this, prefabId, (int)PoolKind.Vfx, false);
+                marker.PrepareForPool();
+                if (created.activeSelf) created.SetActive(false);
+                marker.RestoreWhileInactive(transform);
+                stash.Add(marker);
+            }
+        }
+
         GameObject Acquire(GameObject prefab, PoolKind kind, Vector3 position,
             Quaternion rotation)
         {
@@ -255,6 +307,26 @@ namespace BrawlArena
                 int last = bucket.Available.Count - 1;
                 marker = bucket.Available[last];
                 bucket.Available.RemoveAt(last);
+            }
+
+            if (marker == null &&
+                prewarmedByPrefab.TryGetValue(key.PrefabId,
+                    out List<CombatPooledObject> stash))
+            {
+                while (stash.Count > 0 && marker == null)
+                {
+                    int last = stash.Count - 1;
+                    marker = stash[last];
+                    stash.RemoveAt(last);
+                }
+                if (stash.Count == 0) prewarmedByPrefab.Remove(key.PrefabId);
+                if (marker != null)
+                {
+                    bool adoptedRetained = bucket.AllowsRetention &&
+                        bucket.RetainedCount < bucket.Capacity;
+                    marker.Initialize(this, key.PrefabId, (int)key.Kind, adoptedRetained);
+                    if (adoptedRetained) bucket.RetainedCount++;
+                }
             }
 
             if (marker == null)
@@ -322,6 +394,9 @@ namespace BrawlArena
         internal void HandleDestroyed(CombatPooledObject marker)
         {
             if (shuttingDown || marker == null) return;
+            if (prewarmedByPrefab.TryGetValue(marker.PrefabId,
+                    out List<CombatPooledObject> stash))
+                stash.Remove(marker);
             PoolKey key = new PoolKey(marker.PrefabId, (PoolKind)marker.Kind);
             if (!buckets.TryGetValue(key, out Bucket bucket)) return;
 
@@ -378,6 +453,9 @@ namespace BrawlArena
                 bucket.Available.Clear();
             }
             buckets.Clear();
+            foreach (List<CombatPooledObject> stash in prewarmedByPrefab.Values)
+                stash.Clear();
+            prewarmedByPrefab.Clear();
         }
 
         void ShutdownAndDestroy()

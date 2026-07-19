@@ -157,11 +157,8 @@ namespace BrawlArena.EditorAutomation
                 if (bluePrimary == null) return;
                 if (!MatchesRoster(bluePrimary, rosterId))
                 {
-                    InvectorBrawlerPrefabIdentity actualIdentity =
-                        bluePrimary.GetComponent<InvectorBrawlerPrefabIdentity>();
-                    string actualRoster = actualIdentity != null
-                        ? actualIdentity.RosterId
-                        : "<missing identity>";
+                    string actualRoster = ResolveRosterId(bluePrimary)
+                        ?? "<missing identity>";
                     FailProbe(
                         "The requested roster '" + rosterId +
                         "' was not pinned to Blue primary slot 0; actual roster is '" +
@@ -178,20 +175,13 @@ namespace BrawlArena.EditorAutomation
                 if (player == null) return;
                 SecureCandidate(player, brawlers);
 
-                InvectorBrawlerWeaponPresentation presenter =
-                    player.GetComponent<InvectorBrawlerWeaponPresentation>();
-                // Motion-review scenarios opt out of the strict wand/bow IK
-                // pose gate: melee presenters legitimately report suppression
-                // states the pose studies treat as not-ready.
+                // Heavy actors expose no IK proof surface; any installed
+                // IBrawlerWeaponPresentation counts as presentation-ready
+                // once the brawler can act.
                 bool presentationReady = relaxedPresentationGate
                     ? player.CanAct
-                    : player.CanAct && presenter != null &&
-                      presenter.RuntimeEnabled &&
-                      (presenter.LastSuppression ==
-                          InvectorWeaponPresentationSuppression.None ||
-                       presenter.LastSuppression ==
-                          InvectorWeaponPresentationSuppression.IgnoreSupportHandIKTag) &&
-                      string.IsNullOrEmpty(presenter.LastInvalidPoseStage);
+                    : player.CanAct &&
+                      player.GetComponent<IBrawlerWeaponPresentation>() != null;
                 if (!presentationReady)
                 {
                     readyCandidate = null;
@@ -323,9 +313,21 @@ namespace BrawlArena.EditorAutomation
         {
             if (actor == null || string.IsNullOrWhiteSpace(requestedRosterId))
                 return true;
-            InvectorBrawlerPrefabIdentity identity =
-                actor.GetComponent<InvectorBrawlerPrefabIdentity>();
-            return identity != null && identity.RosterId == requestedRosterId;
+            return ResolveRosterId(actor) == requestedRosterId;
+        }
+
+        /// <summary>
+        /// Roster lookup from the generated heavy prefab identity. Null when
+        /// no identity exists on the actor root.
+        /// </summary>
+        static string ResolveRosterId(BrawlerController actor)
+        {
+            if (actor == null) return null;
+            HeavyBrawlerIdentity identity =
+                actor.GetComponent<HeavyBrawlerIdentity>();
+            if (identity != null && !string.IsNullOrWhiteSpace(identity.heroId))
+                return identity.heroId;
+            return null;
         }
     }
 }

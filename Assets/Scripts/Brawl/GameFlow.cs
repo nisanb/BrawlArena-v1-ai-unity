@@ -137,11 +137,11 @@ namespace BrawlArena
         public string role;
         [TextArea] public string description;
         public Sprite portrait;
-        [Header("Invector character bodies")]
-        [Tooltip("Required inactive production-human Invector prefab for this exact roster id.")]
-        public GameObject invectorHumanPrefab;
-        [Tooltip("Required inactive production-AI Invector prefab for this exact roster id.")]
-        public GameObject invectorAIPrefab;
+        [Header("Character bodies")]
+        [Tooltip("Required inactive production-human heavy prefab for this exact roster id.")]
+        public GameObject humanBodyPrefab;
+        [Tooltip("Required inactive production-AI heavy prefab for this exact roster id.")]
+        public GameObject aiBodyPrefab;
         public float maxHealth = 100f;
         public float damage = 20f;
         public float attackRange = 2.2f;

@@ -156,7 +156,7 @@ namespace BrawlArena
 
             if (navigation == null)
                 throw new System.InvalidOperationException(
-                    "An Invector-backed AI brawler requires one configured navigation component before Start.");
+                    "An heavy-backed AI brawler requires one configured navigation component before Start.");
         }
 
         void DiscoverNavigationComponents()

@@ -297,22 +297,16 @@ namespace BrawlArena.EditorAutomation
         }
 
         [Test]
-        public void InvectorCutoverHasNoLegacyRecursiveHitboxLayerWriter()
+        public void AssemblyPathHasNoLegacyRecursiveHitboxLayerWriter()
         {
             string root = Directory.GetParent(Application.dataPath)?.FullName;
             string facade = File.ReadAllText(Path.Combine(
                 root, "Assets/Scripts/Brawl/BrawlerController.cs"));
-            string humanAssembler = File.ReadAllText(Path.Combine(root,
-                "Assets/Scripts/Brawl/Integration/Invector/" +
-                "InvectorHumanBrawlerCharacterAssembler.cs"));
-            string aiAssembler = File.ReadAllText(Path.Combine(root,
-                "Assets/Scripts/Brawl/Integration/Invector/" +
-                "InvectorAIBrawlerCharacterAssembler.cs"));
+            string assembly = File.ReadAllText(Path.Combine(root,
+                "Assets/Scripts/Brawl/Integration/BrawlerCharacterAssembly.cs"));
             StringAssert.DoesNotContain("CombatPhysics.SetLayerRecursively", facade);
             StringAssert.DoesNotContain(
-                "CombatPhysics.SetLayerRecursively", humanAssembler);
-            StringAssert.DoesNotContain(
-                "CombatPhysics.SetLayerRecursively", aiAssembler);
+                "CombatPhysics.SetLayerRecursively", assembly);
             string legacyDirectory = Path.Combine(root,
                 "Assets/Scripts/Brawl/Integration/Legacy");
             Assert.IsTrue(!Directory.Exists(legacyDirectory) ||
@@ -324,10 +318,10 @@ namespace BrawlArena.EditorAutomation
             GameObject root = CreateObject(name);
             Health health = root.AddComponent<Health>();
             health.SetMax(100f, true);
-            Tests.InvectorCutoverTestMotor motor =
-                root.AddComponent<Tests.InvectorCutoverTestMotor>();
-            Tests.InvectorCutoverTestAnimationDriver animation =
-                root.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
+            Tests.BrawlFacadeTestMotor motor =
+                root.AddComponent<Tests.BrawlFacadeTestMotor>();
+            Tests.BrawlFacadeTestAnimationDriver animation =
+                root.AddComponent<Tests.BrawlFacadeTestAnimationDriver>();
             BrawlerController brawler = root.AddComponent<BrawlerController>();
             brawler.SetMotor(motor);
             brawler.SetAnimationDriver(animation);

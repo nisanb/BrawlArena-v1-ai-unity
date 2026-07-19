@@ -526,9 +526,12 @@ namespace BrawlArena
             if (applied <= 0f || !MatchAllowsDamage()) return;
 
             bool isSuperHit = attackTier == ProjectileAttackTier.Super;
-            target.RequestHitStop(isSuperHit
-                ? MobileCombatRules.HitStopHeavyVictim
-                : MobileCombatRules.HitStopLightVictim);
+            // A lethal hit hands the body to death presentation immediately;
+            // hit-stop on a fresh corpse would freeze the death transition.
+            if (!target.IsDead)
+                target.RequestHitStop(isSuperHit
+                    ? MobileCombatRules.HitStopHeavyVictim
+                    : MobileCombatRules.HitStopLightVictim);
             if (owner != null)
                 owner.RequestHitStop(isSuperHit
                     ? MobileCombatRules.HitStopHeavyAttacker

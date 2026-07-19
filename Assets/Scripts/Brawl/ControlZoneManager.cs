@@ -40,6 +40,8 @@ namespace BrawlArena
         public const float LeadingExperienceBoxMultiplier = 0.75f;
         /// <summary>Points a valid KO awards to the scoring team during Control Zone regulation.</summary>
         public const int RegulationKnockoutPoints = 2;
+        /// <summary>Anti-snowball: reduced KO award while the scoring team already leads by the comeback gap.</summary>
+        public const int LeadingRegulationKnockoutPoints = 1;
 
         public static int ApplyScore(int current, int points, int limit = ScoreLimit)
         {
@@ -96,6 +98,18 @@ namespace BrawlArena
         public static float RespawnDelaySeconds(int victimScore, int enemyScore)
         {
             return IsTrailing(victimScore, enemyScore) ? TrailingRespawnDelay : RespawnDelay;
+        }
+
+        /// <summary>
+        /// Anti-snowball KO award: a team leading by the comeback gap earns the
+        /// reduced bonus while that lead holds; a trailing or tied team keeps
+        /// the full regulation bonus.
+        /// </summary>
+        public static int RegulationKnockoutPointsFor(int scoringTeamScore, int opponentScore)
+        {
+            return IsLeading(scoringTeamScore, opponentScore)
+                ? LeadingRegulationKnockoutPoints
+                : RegulationKnockoutPoints;
         }
 
         public static int ApplyTrailingKnockoutXpMultiplier(int baseXp, bool trailing)

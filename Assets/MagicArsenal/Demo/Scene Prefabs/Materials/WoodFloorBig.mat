@@ -13,13 +13,13 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - _EMISSION
+  - _ENVIRONMENTREFLECTIONS_OFF
   - _NORMALMAP
-  m_InvalidKeywords:
-  - _LIGHTMAPPING_REALTIME
-  m_LightmapFlags: 1
+  m_InvalidKeywords: []
+  m_LightmapFlags: 6
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
+  m_CustomRenderQueue: 2000
   stringTagMap:
     RenderType: Opaque
   disabledShaderPasses:
@@ -46,7 +46,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     - _DetailAlbedoMap:
         m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
+        m_Scale: {x: 20, y: 20}
         m_Offset: {x: 0, y: 0}
     - _DetailMask:
         m_Texture: {fileID: 0}
@@ -61,8 +61,8 @@ Material:
         m_Scale: {x: 20, y: 20}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
+        m_Texture: {fileID: 2800000, guid: ed747abf0181b1d43a62d9595fb33311, type: 3}
+        m_Scale: {x: 20, y: 20}
         m_Offset: {x: 0, y: 0}
     - _MetallicGlossMap:
         m_Texture: {fileID: 0}
@@ -109,10 +109,10 @@ Material:
     - _DstBlend: 0
     - _DstBlendAlpha: 0
     - _EmissionScaleUI: 0
-    - _EnvironmentReflections: 1
-    - _GlossMapScale: 1
+    - _EnvironmentReflections: 0
+    - _GlossMapScale: 0
     - _Glossiness: 0.59
-    - _GlossyReflections: 1
+    - _GlossyReflections: 0
     - _Lightmapping: 1
     - _Metallic: 0
     - _Mode: 0
@@ -140,7 +140,7 @@ Material:
     - _SpecColor: {r: 0.5294118, g: 0.5294118, b: 0.5294118, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
---- !u!114 &690131264317929900
+--- !u!114 &111329689073095013
 MonoBehaviour:
   m_ObjectHideFlags: 11
   m_CorrespondingSourceObject: {fileID: 0}
@@ -151,5 +151,5 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d0353a89b1f911e48b9e16bdc9f2e058, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Editor::UnityEditor.Rendering.Universal.AssetVersion
+  m_EditorClassIdentifier: 
   version: 10

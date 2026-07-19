@@ -116,8 +116,40 @@ namespace BrawlArena
             EnsureExperienceSystem().BeginMatch();
             for (int i = 0; i < brawlers.Count; i++)
                 brawlers[i]?.ResetForMatchLifecycle();
+            PrewarmCombatPools();
             BalanceTelemetryRuntime.BeginMatch(this);
             ScoreChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// Eagerly warms the lazy combat pools for everything the registered
+        /// roster can spawn, so the first attack, KO, or respawn of a match
+        /// never pays an Instantiate hitch mid-combat.
+        /// </summary>
+        void PrewarmCombatPools()
+        {
+            for (int i = 0; i < brawlers.Count; i++)
+            {
+                if (brawlers[i] == null) continue;
+                PrewarmCombatPoolsFor(brawlers[i]);
+            }
+        }
+
+        static void PrewarmCombatPoolsFor(BrawlerController brawler)
+        {
+            const int warmCountPerPrefab = 3;
+            CombatObjectPool.Prewarm(brawler.projectilePrefab, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.superProjectilePrefab, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.castVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.secondaryCastVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.swingVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.impactVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.secondaryImpactVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.superVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.secondarySuperVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.superImpactVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.koVfx, warmCountPerPrefab);
+            CombatObjectPool.Prewarm(brawler.spawnVfx, warmCountPerPrefab);
         }
 
         public void ConfigureMode(GameMode selectedMode)
@@ -219,6 +251,12 @@ namespace BrawlArena
             progression.Initialize(b);
 
             brawlers.Add(b);
+            // Brawlers register from Start, one frame after GameFlow calls
+            // BeginMatch in the same coroutine step — the roster-wide prewarm
+            // in BeginMatch ran against an empty list, so warm late joiners
+            // here (Prewarm is idempotent per prefab).
+            if (State != MatchState.Waiting)
+                PrewarmCombatPoolsFor(b);
             BalanceTelemetryRuntime.RegisterBrawler(this, b);
             BrawlerRegistered?.Invoke(b);
         }
@@ -241,13 +279,18 @@ namespace BrawlArena
             if (scoringTeam == victim.team) return;
 
             // KOs matter through death/respawn pressure and, during Control
-            // Zone regulation only, also award a fixed bonus toward the
-            // objective score. AddControlZoneScore already no-ops outside
-            // MatchState.Playing, so Overtime KOs correctly score nothing —
-            // the zone tick decides overtime instead.
+            // Zone regulation only, also award a bonus toward the objective
+            // score — reduced while the scoring team already leads by the
+            // comeback gap so a blowout cannot snowball off KOs alone.
+            // AddControlZoneScore already no-ops outside MatchState.Playing,
+            // so Overtime KOs correctly score nothing — the zone tick decides
+            // overtime instead.
             if (mode == GameMode.ControlZone)
             {
-                AddControlZoneScore(scoringTeam, ControlZoneRules.RegulationKnockoutPoints);
+                int scoringTeamScore = scoringTeam == TeamId.Blue ? BlueScore : RedScore;
+                int opponentScore = scoringTeam == TeamId.Blue ? RedScore : BlueScore;
+                AddControlZoneScore(scoringTeam,
+                    ControlZoneRules.RegulationKnockoutPointsFor(scoringTeamScore, opponentScore));
                 return;
             }
 
@@ -289,16 +332,19 @@ namespace BrawlArena
 
         public float RespawnDelayFor(BrawlerController brawler)
         {
+            float multiplier = brawler != null
+                ? Mathf.Max(0.2f, brawler.respawnDelayMultiplier)
+                : 1f;
             if (mode == GameMode.ControlZone)
             {
                 if (brawler == null) return ControlZoneRules.RespawnDelay;
                 int victimScore = brawler.team == TeamId.Blue ? BlueScore : RedScore;
                 int enemyScore = brawler.team == TeamId.Blue ? RedScore : BlueScore;
-                return ControlZoneRules.RespawnDelaySeconds(victimScore, enemyScore);
+                // The respawn-speed perk applies on top of the comeback-adjusted
+                // Control Zone delay, exactly as it does in the other modes.
+                return ControlZoneRules.RespawnDelaySeconds(victimScore, enemyScore) *
+                       multiplier;
             }
-            float multiplier = brawler != null
-                ? Mathf.Max(0.2f, brawler.respawnDelayMultiplier)
-                : 1f;
             return Mathf.Max(0f, respawnDelay) * multiplier;
         }
 

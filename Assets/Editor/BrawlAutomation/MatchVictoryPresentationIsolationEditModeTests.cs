@@ -108,8 +108,8 @@ namespace BrawlArena.EditorAutomation
         public void ConfiguredSemanticDriverEndsWithoutPresentationFault()
         {
             GameObject actor = CreateActor("SemanticWinner");
-            Tests.InvectorCutoverTestAnimationDriver driver =
-                actor.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
+            Tests.BrawlFacadeTestAnimationDriver driver =
+                actor.AddComponent<Tests.BrawlFacadeTestAnimationDriver>();
             BrawlerController brawler = CompleteBrawler(
                 actor, TeamId.Blue, driver);
             manager.Register(brawler);
@@ -148,7 +148,7 @@ namespace BrawlArena.EditorAutomation
             GameObject actor = new GameObject(name);
             created.Add(actor);
             actor.AddComponent<Health>().SetMax(100f);
-            actor.AddComponent<Tests.InvectorCutoverTestMotor>();
+            actor.AddComponent<Tests.BrawlFacadeTestMotor>();
             return actor;
         }
 

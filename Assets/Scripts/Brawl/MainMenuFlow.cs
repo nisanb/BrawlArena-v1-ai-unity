@@ -398,7 +398,7 @@ namespace BrawlArena
                 }
                 catch (System.Exception exception)
                 {
-                    Debug.LogError("[MainMenuFlow] Invector victory preview failed closed.\n" + exception);
+                    Debug.LogError("[MainMenuFlow] Victory preview failed closed.\n" + exception);
                 }
             }
             StartCoroutine(LaunchAfter(1.1f));
@@ -447,7 +447,7 @@ namespace BrawlArena
                 {
                     if (previewInstance != null) Destroy(previewInstance);
                     previewInstance = null;
-                    Debug.LogError("[MainMenuFlow] Invector character preview failed closed for '" +
+                    Debug.LogError("[MainMenuFlow] Character preview failed closed for '" +
                         def.id + "'.\n" + exception);
                 }
             }

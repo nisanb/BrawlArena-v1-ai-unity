@@ -169,7 +169,7 @@ namespace BrawlArena.EditorAutomation
                         if (!UnityEditor.SceneManagement.EditorSceneManager.SaveScene(
                                 active, backup, !untitled))
                             throw new InvalidOperationException(
-                                "Could not snapshot dirty scene before Invector regeneration: " +
+                                "Could not snapshot dirty scene before scene regeneration: " +
                                 active.path);
                         if (!untitled &&
                             !UnityEditor.SceneManagement.EditorSceneManager.SaveScene(active))
@@ -185,66 +185,11 @@ namespace BrawlArena.EditorAutomation
                                      "\n" + arenaReport + "\n" + menuReport;
                     break;
                 }
+                case "run_test_suite":
+                // Legacy alias kept so existing harness scripts and docs that
+                // issue run_invector_test keep working against the new runner.
                 case "run_invector_test":
-                    switch (cmd.arg)
-                    {
-                        case "phase3b":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunSafelyAgainstCurrentScene();
-                            break;
-                        case "phase3db-lifecycle":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunPhase3DBLifecycleSafely();
-                            break;
-                        case "phase3dc-weapon-ik":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunPhase3DCWeaponIKSafely();
-                            break;
-                        case "cutover":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunInvectorOnlyCutoverSafely();
-                            break;
-                        case "full-editmode":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunFullEditModeSafely();
-                            break;
-                        case "basic-attack-charges":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunBasicAttackChargesSafely();
-                            break;
-                        case "combat-cadence-readability":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunCombatCadenceReadabilitySafely();
-                            break;
-                        case "task2-combat-regression":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunTask2CombatRegressionSafely();
-                            break;
-                        case "control-zone-match-loop":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunControlZoneMatchLoopSafely();
-                            break;
-                        case "task3-match-regression":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunTask3MatchRegressionSafely();
-                            break;
-                        case "thorn-presentation":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunThornPresentationSafely();
-                            break;
-                        case "tempest-presentation":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunTempestPresentationSafely();
-                            break;
-                        case "ai-hardening":
-                            result.message = Tests.InvectorMigrationPhase3BTestResultRecorder
-                                .RunPhase3GAIHardeningSafely();
-                            break;
-                        default:
-                            result.ok = false;
-                            result.message = "unknown Invector test: " + cmd.arg;
-                            break;
-                    }
+                    result.message = BrawlTestSuiteRunner.Run(cmd.arg);
                     break;
                 case "open_scene":
                 {
@@ -259,9 +204,6 @@ namespace BrawlArena.EditorAutomation
                 case "enter_play":
                     EditorApplication.EnterPlaymode();
                     result.message = "entering play mode";
-                    break;
-                case "ik_calibration_bootstrap":
-                    result.message = BrawlIKCalibrationBootstrap.Begin(cmd.arg);
                     break;
                 case "play_test":
                     // Autopilot flag: GameFlow auto-picks a character and the
@@ -566,24 +508,36 @@ namespace BrawlArena.EditorAutomation
                 string clip = "?";
                 if (anim != null && anim.isActiveAndEnabled && anim.runtimeAnimatorController != null)
                 {
-                    var clips = anim.GetCurrentAnimatorClipInfo(0);
-                    clip = clips.Length > 0 ? clips[0].clip.name : "(none)";
-                    // Attack swings and lifecycle states play on overlay
-                    // layers; sampling only layer 0 misreports a mid-swing
-                    // brawler as Idle/Walk. Report the most-weighted overlay
-                    // clip too so recorded evidence reflects what is visible.
-                    for (int layer = 1; layer < anim.layerCount; layer++)
+                    var heavyDriver = b.GetComponent<HeavyAnimationDriver>();
+                    if (heavyDriver != null)
                     {
-                        if (anim.GetLayerWeight(layer) < 0.5f && layer != 0) continue;
-                        var overlay = anim.GetCurrentAnimatorClipInfo(layer);
-                        if (overlay.Length == 0) continue;
-                        string overlayClip = overlay[0].clip.name;
-                        if (!string.IsNullOrEmpty(overlayClip) &&
-                            overlayClip != clip &&
-                            !overlayClip.StartsWith("Idle", StringComparison.Ordinal))
+                        // TopDown actors: enumerate every animator layer and
+                        // report readable state names (Base plus overlays,
+                        // e.g. "Locomotion+AttackPrimary").
+                        clip = DescribeLayeredAnimatorStates(
+                            anim, heavyDriver.CurrentBaseStateName);
+                    }
+                    else
+                    {
+                        var clips = anim.GetCurrentAnimatorClipInfo(0);
+                        clip = clips.Length > 0 ? clips[0].clip.name : "(none)";
+                        // Attack swings and lifecycle states play on overlay
+                        // layers; sampling only layer 0 misreports a mid-swing
+                        // brawler as Idle/Walk. Report the most-weighted overlay
+                        // clip too so recorded evidence reflects what is visible.
+                        for (int layer = 1; layer < anim.layerCount; layer++)
                         {
-                            clip = clip + "+" + overlayClip;
-                            break;
+                            if (anim.GetLayerWeight(layer) < 0.5f && layer != 0) continue;
+                            var overlay = anim.GetCurrentAnimatorClipInfo(layer);
+                            if (overlay.Length == 0) continue;
+                            string overlayClip = overlay[0].clip.name;
+                            if (!string.IsNullOrEmpty(overlayClip) &&
+                                overlayClip != clip &&
+                                !overlayClip.StartsWith("Idle", StringComparison.Ordinal))
+                            {
+                                clip = clip + "+" + overlayClip;
+                                break;
+                            }
                         }
                     }
                 }
@@ -597,6 +551,49 @@ namespace BrawlArena.EditorAutomation
                     $"pos=({p.x:0.0},{p.z:0.0}) anim={clip} dead={b.IsDead}{grass}");
             }
             return sb.ToString();
+        }
+
+        // State names of the generated TopDown controllers (design contract:
+        // Base layer Locomotion/Die/Victory/VictoryMaintain/Dash/AttackSuper,
+        // UpperBody layer Empty/AttackPrimary/GetHit). Used to resolve
+        // readable names from layer state hashes in status dumps.
+        static readonly string[] HeavyStateNames =
+        {
+            "Locomotion", "Die", "Victory", "VictoryMaintain", "Dash",
+            "AttackSuper", "Empty", "AttackPrimary", "GetHit",
+        };
+
+        static string DescribeLayeredAnimatorStates(Animator anim, string baseStateName)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int layer = 0; layer < anim.layerCount; layer++)
+            {
+                if (layer > 0 && anim.GetLayerWeight(layer) < 0.5f) continue;
+                string state = layer == 0 && !string.IsNullOrEmpty(baseStateName)
+                    ? baseStateName
+                    : ResolveLayerStateName(anim, layer);
+                // The overlay default state is an empty pose; only report
+                // overlays that actually show something.
+                if (layer > 0 &&
+                    (string.IsNullOrEmpty(state) || state == "Empty")) continue;
+                if (string.IsNullOrEmpty(state)) state = "?";
+                if (sb.Length > 0) sb.Append('+');
+                sb.Append(state);
+            }
+            return sb.Length > 0 ? sb.ToString() : "?";
+        }
+
+        static string ResolveLayerStateName(Animator anim, int layer)
+        {
+            AnimatorStateInfo info = anim.GetCurrentAnimatorStateInfo(layer);
+            for (int i = 0; i < HeavyStateNames.Length; i++)
+            {
+                if (info.IsName(HeavyStateNames[i])) return HeavyStateNames[i];
+            }
+            var clips = anim.GetCurrentAnimatorClipInfo(layer);
+            return clips.Length > 0 && clips[0].clip != null
+                ? clips[0].clip.name
+                : string.Empty;
         }
 
         sealed class MenuReviewSession

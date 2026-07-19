@@ -102,8 +102,8 @@ namespace BrawlArena.EditorAutomation
             // heavy-hit-stop PauseAnimation calls both land within one continuation,
             // and the failure tally/last-op keep accruing from the basic attack above.
             AssertPresentationFailure(attacker, 5, "PauseAnimation");
-            Assert.GreaterOrEqual(attackerMotor.FaceCount, 2,
-                "Presentation containment must not suppress committed facing.");
+            Assert.GreaterOrEqual(attackerMotor.HoldAimFacingCount, 2,
+                "Presentation containment must not suppress committed aim facing.");
         }
 
         [Test]
@@ -400,6 +400,7 @@ namespace BrawlArena.EditorAutomation
             public float CollisionRadius => 0.5f;
             public bool IsGrounded => true;
             public int FaceCount { get; private set; }
+            public int HoldAimFacingCount { get; private set; }
             public int StopCount { get; private set; }
             public bool LastStopSuspended { get; private set; }
             public int TeleportCount { get; private set; }
@@ -408,6 +409,8 @@ namespace BrawlArena.EditorAutomation
             public void SetPlanarIntent(Vector3 worldDirection, float speed,
                 bool movementAllowed) { }
             public void Face(Vector3 worldDirection, bool immediate) => FaceCount++;
+            public void HoldAimFacing(Vector3 worldDir, float seconds) =>
+                HoldAimFacingCount++;
             public float ConstrainExternalDisplacement(Vector3 direction, float distance) =>
                 distance;
             public Vector3 ConstrainTeleportDestination(Vector3 position,

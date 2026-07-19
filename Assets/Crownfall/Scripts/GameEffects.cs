@@ -1,0 +1,204 @@
+using System.Collections;
+using UnityEngine;
+using DamageNumbersPro;
+
+namespace Crownfall
+{
+    /// Scene singleton catalog of VFX/SFX, wired by the forge. All spawn helpers
+    /// are defensive: a missing prefab never breaks combat.
+    public class GameEffects : MonoBehaviour
+    {
+        [System.Serializable]
+        public class ElementSet
+        {
+            public ElementId id;
+            public GameObject slashHit;
+            public GameObject missile;
+            public GameObject explosion;
+            public GameObject muzzle;
+            public GameObject nova;
+            public GameObject enchant;
+            public AudioClip castSound;
+            public AudioClip impactSound;
+        }
+
+        public ElementSet[] elements;
+        public GameObject respawnFlash;
+
+        public DamageNumber damageNumberPrefab;
+        public DamageNumber blockedNumberPrefab;
+
+        public AudioClip swingLight;
+        public AudioClip swingHeavy;
+        public AudioClip meleeImpact;
+        public AudioClip blockImpact;
+        public AudioClip rollWhoosh;
+        public AudioClip deathCry;
+        public AudioClip uiTick;
+        public AudioClip uiFight;
+        public AudioClip uiVictory;
+        public AudioClip uiDefeat;
+        public AudioClip killDing;
+
+        public static GameEffects I { get; private set; }
+
+        float baseTimeScale = 1f;
+        Coroutine hitstopRoutine;
+
+        void Awake() { I = this; baseTimeScale = 1f; }
+
+        public ElementSet Set(ElementId el)
+        {
+            if (elements == null) return null;
+            foreach (var s in elements) if (s != null && s.id == el) return s;
+            return null;
+        }
+
+        // ------------------------------------------------------------------ vfx
+
+        public void MeleeImpact(ElementId el, Vector3 pos, bool blocked, bool heavy)
+        {
+            var set = Set(el);
+            SpawnTemp(set?.slashHit, pos, Quaternion.identity, blocked ? 0.7f : (heavy ? 1.25f : 1f));
+            PlayAt(blocked ? blockImpact : meleeImpact, pos, blocked ? 0.9f : 0.8f, Random.Range(0.92f, 1.08f));
+            if (set != null && !blocked) PlayAt(set.impactSound, pos, 0.35f, Random.Range(0.95f, 1.1f));
+        }
+
+        public void Explosion(ElementId el, Vector3 pos)
+        {
+            var set = Set(el);
+            SpawnTemp(set?.explosion, pos, Quaternion.identity, 1f);
+            if (set != null) PlayAt(set.impactSound, pos, 0.75f, Random.Range(0.92f, 1.05f));
+        }
+
+        public void Muzzle(ElementId el, Vector3 pos, Quaternion rot)
+        {
+            SpawnTemp(Set(el)?.muzzle, pos, rot, 0.9f);
+        }
+
+        public void Nova(ElementId el, Vector3 pos)
+        {
+            var set = Set(el);
+            SpawnTemp(set?.nova, pos + Vector3.up * 0.1f, Quaternion.identity, 1f);
+            if (set != null) PlayAt(set.impactSound, pos, 0.95f, 0.85f);
+        }
+
+        public void RespawnFlash(Vector3 pos)
+        {
+            SpawnTemp(respawnFlash, pos + Vector3.up * 0.1f, Quaternion.identity, 1f);
+        }
+
+        public void AttachMissileVisual(Transform parent, ElementId el)
+        {
+            var prefab = Set(el)?.missile;
+            if (prefab == null)
+            {
+                // fallback: glowing sphere + light
+                var s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Object.Destroy(s.GetComponent<Collider>());
+                s.transform.SetParent(parent, false);
+                s.transform.localScale = Vector3.one * 0.25f;
+                var l = parent.gameObject.AddComponent<Light>();
+                l.color = ElementColors.Get(el);
+                l.range = 5f;
+                l.intensity = 2.2f;
+                return;
+            }
+
+            var vis = Instantiate(prefab, parent);
+            vis.transform.localPosition = Vector3.zero;
+            vis.transform.localRotation = Quaternion.identity;
+
+            // strip the pack's own movers so our Projectile owns motion
+            foreach (var mb in vis.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (mb == null) continue;
+                string n = mb.GetType().Name;
+                if (n.Contains("Projectile") || n.Contains("Beam") || n.Contains("FireProjectile"))
+                    mb.enabled = false;
+            }
+        }
+
+        void SpawnTemp(GameObject prefab, Vector3 pos, Quaternion rot, float scale)
+        {
+            if (prefab == null) return;
+            var go = Instantiate(prefab, pos, rot);
+            if (!Mathf.Approximately(scale, 1f)) go.transform.localScale *= scale;
+            Destroy(go, 4f);
+        }
+
+        // ------------------------------------------------------------------ numbers
+
+        public void ShowDamage(Vector3 pos, float amount, bool blocked)
+        {
+            var prefab = blocked && blockedNumberPrefab != null ? blockedNumberPrefab : damageNumberPrefab;
+            if (prefab == null) return;
+            prefab.Spawn(pos + Vector3.up * 0.55f, Mathf.Max(1f, Mathf.Round(amount)));
+        }
+
+        // ------------------------------------------------------------------ audio
+
+        public void PlaySwing(Vector3 pos, bool heavy)
+        {
+            PlayAt(heavy ? swingHeavy : swingLight, pos, 0.4f, Random.Range(1.05f, 1.25f));
+        }
+
+        public void PlayCast(ElementId el, Vector3 pos)
+        {
+            PlayAt(Set(el)?.castSound, pos, 0.65f, Random.Range(0.95f, 1.08f));
+        }
+
+        public void PlayRoll(Vector3 pos) => PlayAt(rollWhoosh, pos, 0.3f, Random.Range(0.95f, 1.15f));
+        public void PlayDeath(Vector3 pos) => PlayAt(deathCry, pos, 0.75f, Random.Range(0.9f, 1.05f));
+
+        public void PlayUi(AudioClip clip, float vol = 0.8f)
+        {
+            if (clip == null) return;
+            var go = new GameObject("UiSfx");
+            var src = go.AddComponent<AudioSource>();
+            src.spatialBlend = 0f;
+            src.volume = vol;
+            src.clip = clip;
+            src.Play();
+            Destroy(go, clip.length + 0.2f);
+        }
+
+        public void PlayAt(AudioClip clip, Vector3 pos, float vol, float pitch)
+        {
+            if (clip == null) return;
+            var go = new GameObject("Sfx");
+            go.transform.position = pos;
+            var src = go.AddComponent<AudioSource>();
+            src.spatialBlend = 0.82f;
+            src.maxDistance = 32f;
+            src.rolloffMode = AudioRolloffMode.Linear;
+            src.volume = vol;
+            src.pitch = pitch;
+            src.clip = clip;
+            src.Play();
+            Destroy(go, clip.length / Mathf.Max(0.5f, pitch) + 0.2f);
+        }
+
+        // ------------------------------------------------------------------ hitstop
+
+        public void SetBaseTimeScale(float scale)
+        {
+            baseTimeScale = scale;
+            if (hitstopRoutine == null) Time.timeScale = scale;
+        }
+
+        public void Hitstop(float seconds)
+        {
+            if (hitstopRoutine != null) StopCoroutine(hitstopRoutine);
+            hitstopRoutine = StartCoroutine(HitstopRoutine(seconds));
+        }
+
+        IEnumerator HitstopRoutine(float seconds)
+        {
+            Time.timeScale = 0.05f;
+            yield return new WaitForSecondsRealtime(seconds);
+            Time.timeScale = baseTimeScale;
+            hitstopRoutine = null;
+        }
+    }
+}

@@ -138,6 +138,25 @@ namespace BrawlArena.EditorAutomation
                 case "ward_step":
                     ok = self.TryWardStep(dir.sqrMagnitude > 0.01f ? dir : transform.forward);
                     break;
+                case "kill_self":
+                {
+                    // Lifecycle probes need a deterministic death. The probe
+                    // harness protects its subject with Health.Invulnerable
+                    // during takeover, so clear it before the lethal hit.
+                    Health health = self.Health;
+                    ok = health != null && !health.IsDead;
+                    if (ok)
+                    {
+                        health.Invulnerable = false;
+                        ok = health.TakeDamage(
+                            health.Current + health.Max, gameObject) > 0f;
+                    }
+                    break;
+                }
+                case "charge_super":
+                    PrimeSuperForEditorReview();
+                    ok = self.SuperReady;
+                    break;
                 default:
                     Debug.LogWarning("[GameplayProbe] unknown action '" + step.action + "'");
                     return;

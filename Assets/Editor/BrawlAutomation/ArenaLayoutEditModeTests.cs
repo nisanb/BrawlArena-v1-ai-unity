@@ -72,19 +72,19 @@ namespace BrawlArena.EditorAutomation
                 },
                 roster.Select(definition => definition.specialty.school).ToArray());
             Assert.AreEqual("Archer", roster[1].role);
-            Assert.IsNotNull(roster[1].invectorHumanPrefab);
-            Assert.IsNotNull(roster[1].invectorAIPrefab);
-            StringAssert.Contains("Thorn", roster[1].invectorHumanPrefab.name);
-            StringAssert.Contains("Thorn", roster[1].invectorAIPrefab.name);
-            Assert.AreEqual("Arrow01", roster[1].projectilePrefab.name);
+            Assert.IsNotNull(roster[1].humanBodyPrefab);
+            Assert.IsNotNull(roster[1].aiBodyPrefab);
+            Assert.AreEqual("ThornHeavyHuman", roster[1].humanBodyPrefab.name);
+            Assert.AreEqual("ThornHeavyAI", roster[1].aiBodyPrefab.name);
+            Assert.AreEqual("Arrow01Projectile", roster[1].projectilePrefab.name);
             Assert.AreEqual("EXPLOSIVE ARROW", roster[1].superName);
             Assert.AreEqual(3, CharacterSkillBook.For(roster[1]).Length);
 
             Assert.AreEqual("Vanguard", roster[2].role);
-            Assert.IsNotNull(roster[2].invectorHumanPrefab);
-            Assert.IsNotNull(roster[2].invectorAIPrefab);
-            StringAssert.Contains("Bastion", roster[2].invectorHumanPrefab.name);
-            StringAssert.Contains("Bastion", roster[2].invectorAIPrefab.name);
+            Assert.IsNotNull(roster[2].humanBodyPrefab);
+            Assert.IsNotNull(roster[2].aiBodyPrefab);
+            Assert.AreEqual("BastionHeavyHuman", roster[2].humanBodyPrefab.name);
+            Assert.AreEqual("BastionHeavyAI", roster[2].aiBodyPrefab.name);
             Assert.IsNull(roster[2].projectilePrefab);
             Assert.AreEqual("AEGIS SHOCKWAVE", roster[2].superName);
             Assert.AreEqual(3, CharacterSkillBook.For(roster[2]).Length);

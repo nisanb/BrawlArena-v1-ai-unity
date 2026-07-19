@@ -58,8 +58,8 @@ namespace BrawlArena.EditorAutomation
             try
             {
                 go.AddComponent<Health>().SetMax(100f);
-                go.AddComponent<Tests.InvectorCutoverTestMotor>();
-                go.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
+                go.AddComponent<Tests.BrawlFacadeTestMotor>();
+                go.AddComponent<Tests.BrawlFacadeTestAnimationDriver>();
                 var ctrl = go.AddComponent<BrawlerController>();
                 ctrl.attackDamage = 20f;
                 ctrl.moveSpeed = 5f;

@@ -10,43 +10,55 @@ namespace BrawlArena
     public static class MobileCombatRules
     {
         public const int BasicAttackChargeCapacity = 3;
-        public const float BasicAttackReloadInterval = 2.25f;
+        public const float BasicAttackReloadInterval = 1.6f;
         public const float ArcaneFlowCapacity = 60f;
-        public const float WardStepCost = 20f;
-        public const float WardStepDistance = 2.75f;
-        public const float WardStepDuration = 0.22f;
+        public const float WardStepCost = 25f;
+        public const float WardStepDistance = 3.2f;
+        public const float WardStepDuration = 0.42f;
         public const float WardRegenPerSecond = 8f;
         public const float WardRegenDelay = 0.75f;
         public const float AutoAimCorrectionDegrees = 12f;
 
-        /// <summary>Melee heroes barely creep forward during their swing windup.</summary>
-        public const float MeleeWindupMovementMultiplier = 0.15f;
-        /// <summary>Ranged windups keep more mobility than melee since there is no lunge.</summary>
-        public const float RangedWindupMovementMultiplier = 0.5f;
-        /// <summary>Post-impact recovery is nearly full speed for every attack kind.</summary>
-        public const float RecoveryMovementMultiplier = 0.85f;
+        /// <summary>
+        /// The dodge roll's invulnerability window. Souls-grade dodges are
+        /// only worth committing to when a well-timed roll beats the hit.
+        /// </summary>
+        public const float RollInvulnerabilitySeconds = 0.3f;
+
+        /// <summary>Souls commitment: a melee windup roots most of your speed.</summary>
+        public const float MeleeWindupMovementMultiplier = 0.3f;
+        /// <summary>Souls commitment: a draw/cast windup slows movement hard.</summary>
+        public const float RangedWindupMovementMultiplier = 0.45f;
+        /// <summary>Recovery keeps partial commitment after the hit lands.</summary>
+        public const float RecoveryMovementMultiplier = 0.55f;
 
         /// <summary>Bounded facing turn rate used by committed attack/Super presentation.</summary>
-        public const float CombatTurnRateDegreesPerSecond = 720f;
+        public const float CombatTurnRateDegreesPerSecond = 540f;
 
         /// <summary>Half of this arc, either side of the committed direction, is a valid melee hit.</summary>
         public const float MeleeArcDegrees = 100f;
 
         /// <summary>Hit-stop applied to the attacker on a confirmed basic hit.</summary>
-        public const float HitStopLightAttacker = 0.045f;
+        public const float HitStopLightAttacker = 0.075f;
         /// <summary>Hit-stop applied to the victim on a confirmed basic hit.</summary>
-        public const float HitStopLightVictim = 0.06f;
+        public const float HitStopLightVictim = 0.095f;
         /// <summary>Hit-stop applied to the attacker on a confirmed Super hit.</summary>
-        public const float HitStopHeavyAttacker = 0.09f;
+        public const float HitStopHeavyAttacker = 0.13f;
         /// <summary>Hit-stop applied to the victim on a confirmed Super hit.</summary>
-        public const float HitStopHeavyVictim = 0.12f;
+        public const float HitStopHeavyVictim = 0.17f;
 
         /// <summary>Minimum spacing between two hit-reaction plays on the same body.</summary>
-        public const float HitReactionThrottleSeconds = 0.5f;
+        public const float HitReactionThrottleSeconds = 0.35f;
 
-        public const float AttackImpactDelayClipFraction = 0.42f;
-        public const float AttackImpactDelayMinSeconds = 0.15f;
-        public const float AttackImpactDelayMaxSeconds = 0.9f;
+        /// <summary>Local-player camera feel: FOV kick when a Super fires.</summary>
+        public const float SuperFovKickDegrees = 5f;
+        public const float SuperFovKickSeconds = 0.35f;
+        /// <summary>Local-player camera feel: directional punch when hit.</summary>
+        public const float HitPunchAmplitude = 0.3f;
+
+        public const float AttackImpactDelayClipFraction = 0.45f;
+        public const float AttackImpactDelayMinSeconds = 0.14f;
+        public const float AttackImpactDelayMaxSeconds = 1.1f;
 
         public static bool TrySpendBasicAttackCharge(ref int current)
         {
@@ -128,9 +140,9 @@ namespace BrawlArena
         }
 
         /// <summary>
-        /// Movement commitment during a basic attack: barely-there creep during
-        /// the windup (melee lunges less than ranged aims), then a near-full
-        /// speed recovery once the hit frame has already landed.
+        /// Movement commitment during a basic attack. Souls-grade feel means
+        /// a swing is a decision: the windup roots most movement, and the
+        /// recovery keeps partial commitment until the animation releases.
         /// </summary>
         public static float AttackPhaseMovementMultiplier(bool isMelee, bool preImpact)
         {
@@ -144,7 +156,7 @@ namespace BrawlArena
         /// </summary>
         public static float KnockbackDuration(float distance)
         {
-            return Mathf.Clamp(0.16f + Mathf.Max(0f, distance) * 0.06f, 0.16f, 0.5f);
+            return Mathf.Clamp(0.2f + Mathf.Max(0f, distance) * 0.075f, 0.2f, 0.6f);
         }
 
         /// <summary>

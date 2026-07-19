@@ -110,7 +110,7 @@ namespace BrawlArena.EditorAutomation
         {
             public BrawlerController actor;
             public Animator animator;
-            public InvectorBrawlerWeaponPresentation presenter;
+            public HeavyWeaponPresentation presenter;
             public ScriptedBrawlerDriver driver;
             public Transform rightUpperArm;
             public Transform rightLowerArm;
@@ -271,11 +271,9 @@ namespace BrawlArena.EditorAutomation
 
             observation.actor = subject;
             observation.presenter =
-                subject.GetComponent<InvectorBrawlerWeaponPresentation>();
+                subject.GetComponent<HeavyWeaponPresentation>();
             observation.driver = subject.GetComponent<ScriptedBrawlerDriver>();
-            observation.animator = observation.presenter != null
-                ? observation.presenter.ConfiguredAnimator
-                : subject.GetComponentInChildren<Animator>(true);
+            observation.animator = subject.GetComponentInChildren<Animator>(true);
             if (observation.animator == null || !observation.animator.isHuman)
                 return observation;
 
@@ -292,18 +290,19 @@ namespace BrawlArena.EditorAutomation
             observation.leftHand = observation.animator.GetBoneTransform(
                 HumanBodyBones.LeftHand);
 
-            bool heldLeft = observation.presenter != null &&
-                observation.presenter.WeaponHeldInLeftHand;
+            // The heavy stack parents the weapon visual to one hand bone with
+            // no IK; hand-edness is observable from the hierarchy itself.
+            observation.weaponVisual = observation.presenter != null
+                ? observation.presenter.WeaponVisualRoot : null;
+            bool heldLeft = observation.weaponVisual != null &&
+                observation.leftHand != null &&
+                observation.weaponVisual.IsChildOf(observation.leftHand);
             observation.weaponHand = heldLeft
                 ? observation.leftHand : observation.rightHand;
             observation.supportHand = heldLeft
                 ? observation.rightHand : observation.leftHand;
-            observation.weaponVisual = observation.presenter != null
-                ? observation.presenter.WeaponVisualRoot : null;
-            observation.supportTarget = observation.presenter != null
-                ? observation.presenter.SupportHandTarget : null;
-            observation.supportHint = observation.presenter != null
-                ? observation.presenter.SupportHintTarget : null;
+            observation.supportTarget = null;
+            observation.supportHint = null;
 
             if (observation.weaponHand != null && observation.weaponVisual != null)
             {
@@ -331,14 +330,9 @@ namespace BrawlArena.EditorAutomation
                         observation.supportGripPoint);
                 }
             }
-            if (observation.presenter != null)
-            {
-                observation.hasEffectiveSupportPose =
-                    observation.presenter.TryGetCurrentSupportIKPose(
-                        out observation.effectiveSupportTarget,
-                        out _,
-                        out observation.effectiveSupportHint);
-            }
+            // No IK on the heavy stack: there is never an effective support
+            // pose to report.
+            observation.hasEffectiveSupportPose = false;
             return observation;
         }
 
@@ -429,8 +423,8 @@ namespace BrawlArena.EditorAutomation
         {
             if (camera == null || observation.supportHand == null) return;
             var bounds = new Bounds(observation.supportHand.position, Vector3.one * 0.04f);
-            Transform supportLowerArm = observation.presenter != null &&
-                observation.presenter.WeaponHeldInLeftHand
+            Transform supportLowerArm = observation.weaponHand != null &&
+                observation.weaponHand == observation.leftHand
                     ? observation.rightLowerArm
                     : observation.leftLowerArm;
             Encapsulate(ref bounds, supportLowerArm);
@@ -448,8 +442,8 @@ namespace BrawlArena.EditorAutomation
         {
             if (camera == null || observation.supportHand == null) return;
             var bounds = new Bounds(observation.supportHand.position, Vector3.one * 0.04f);
-            Transform supportLowerArm = observation.presenter != null &&
-                observation.presenter.WeaponHeldInLeftHand
+            Transform supportLowerArm = observation.weaponHand != null &&
+                observation.weaponHand == observation.leftHand
                     ? observation.rightLowerArm
                     : observation.leftLowerArm;
             Encapsulate(ref bounds, supportLowerArm);
@@ -603,8 +597,8 @@ namespace BrawlArena.EditorAutomation
             float supportReachDistance = -1f;
             float supportReachMargin = -1f;
             float supportHintLateral = -1f;
-            bool supportIsRight = observation.presenter != null &&
-                observation.presenter.WeaponHeldInLeftHand;
+            bool supportIsRight = observation.weaponHand != null &&
+                observation.weaponHand == observation.leftHand;
             Transform supportUpperArm = supportIsRight
                 ? observation.rightUpperArm
                 : observation.leftUpperArm;
@@ -667,28 +661,22 @@ namespace BrawlArena.EditorAutomation
                 supportReachMargin = supportReachMargin,
                 supportHintLateral = supportHintLateral,
                 supportHintPos = PositionArray(observation.supportHint),
-                weaponCategory = observation.presenter != null
-                    ? observation.presenter.WeaponCategory : string.Empty,
-                weaponHeldInLeftHand = observation.presenter != null &&
-                    observation.presenter.WeaponHeldInLeftHand,
-                weaponHandBone = observation.presenter != null &&
-                    observation.presenter.WeaponHeldInLeftHand
+                weaponCategory = string.Empty,
+                weaponHeldInLeftHand = observation.weaponHand != null &&
+                    observation.weaponHand == observation.leftHand,
+                weaponHandBone = observation.weaponHand != null &&
+                    observation.weaponHand == observation.leftHand
                         ? HumanBodyBones.LeftHand.ToString()
                         : HumanBodyBones.RightHand.ToString(),
-                supportHandBone = observation.presenter != null &&
-                    observation.presenter.WeaponHeldInLeftHand
+                supportHandBone = observation.weaponHand != null &&
+                    observation.weaponHand == observation.leftHand
                         ? HumanBodyBones.RightHand.ToString()
                         : HumanBodyBones.LeftHand.ToString(),
-                ikState = observation.presenter != null
-                    ? observation.presenter.CurrentIKState : string.Empty,
+                ikState = string.Empty,
                 aimPresented = observation.presenter != null &&
                     observation.presenter.AimPresented,
-                ikSuppression = observation.presenter != null
-                    ? observation.presenter.LastSuppression.ToString() : string.Empty,
-                invalidIKPoseStage = observation.presenter != null &&
-                    observation.presenter.LastSuppression ==
-                        InvectorWeaponPresentationSuppression.InvalidIKPose
-                    ? observation.presenter.LastInvalidPoseStage : string.Empty,
+                ikSuppression = string.Empty,
+                invalidIKPoseStage = string.Empty,
                 animClips = CollectClipNames(observation.animator),
                 lastAction = observation.driver != null
                     ? observation.driver.LastAction : string.Empty,

@@ -177,8 +177,8 @@ namespace BrawlArena.EditorAutomation
             gameObject.transform.position = position;
             Health health = gameObject.AddComponent<Health>();
             health.SetMax(100f);
-            gameObject.AddComponent<Tests.InvectorCutoverTestMotor>();
-            gameObject.AddComponent<Tests.InvectorCutoverTestAnimationDriver>();
+            gameObject.AddComponent<Tests.BrawlFacadeTestMotor>();
+            gameObject.AddComponent<Tests.BrawlFacadeTestAnimationDriver>();
             BrawlerController controller = gameObject.AddComponent<BrawlerController>();
             controller.team = team;
             InvokePrivate(controller, "Awake");
