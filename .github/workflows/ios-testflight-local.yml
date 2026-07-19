@@ -30,6 +30,17 @@ jobs:
       - name: Extract Xcode project
         run: mkdir -p build && tar -C build -xzf ios-project.tgz
 
+      - name: Restore executable bits (export was tarred on Windows)
+        run: |
+          find build -name "*.sh" -exec chmod +x {} +
+          find build -type d -name "*.app" -prune -o -type f \( -name "usymtool" -o -name "bee_backend" -o -name "il2cpp" -o -name "UnityLinker" \) -exec chmod +x {} +
+
+      - name: Select newest Xcode (App Store requires iOS 26 SDK)
+        run: |
+          ls -d /Applications/Xcode_*.app
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+
       - name: Install fastlane
         run: brew install fastlane
 
