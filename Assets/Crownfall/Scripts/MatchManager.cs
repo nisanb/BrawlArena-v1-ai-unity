@@ -6,7 +6,7 @@ using UnityEngine.SceneManagement;
 
 namespace Crownfall
 {
-    public enum MatchState { ClassSelect, Countdown, Fighting, Ended }
+    public enum MatchState { Menu, ClassSelect, Countdown, Fighting, Ended }
 
     /// Owns the 3v3 flow: class select, countdown, kills/score, respawns,
     /// sudden death and the end ceremony.
@@ -22,7 +22,8 @@ namespace Crownfall
 
         public static MatchManager I { get; private set; }
 
-        public MatchState State { get; private set; } = MatchState.ClassSelect;
+        public MatchState State { get; private set; } = MatchState.Menu;
+        public bool Paused { get; private set; }
         public float TimeLeft { get; private set; }
         public bool SuddenDeath { get; private set; }
         public CombatMotor PlayerMotor { get; private set; }
@@ -30,6 +31,7 @@ namespace Crownfall
         public int ScoreCrimson { get; private set; }
 
         public event Action<MatchState> StateChanged;
+        public event Action<bool> PausedChanged;
         public event Action<int, int> ScoreChanged;
         public event Action<CombatantIdentity, CombatantIdentity> KillFeed;
         public event Action<int> CountdownTick;
@@ -72,8 +74,36 @@ namespace Crownfall
                 h.Died += killer => OnCombatantDied(motor, killer);
             }
 
+            CrownfallSettings.Load();
             SetCursorFree(true);
-            SetState(MatchState.ClassSelect);
+            SetState(MatchState.Menu);
+        }
+
+        public void OpenClassSelect()
+        {
+            if (State == MatchState.Menu) SetState(MatchState.ClassSelect);
+        }
+
+        public void BackToMenu()
+        {
+            if (State == MatchState.ClassSelect) SetState(MatchState.Menu);
+        }
+
+        /// Autopilot exhibition match with a random champion.
+        public void StartDemo()
+        {
+            if (State != MatchState.Menu && State != MatchState.ClassSelect) return;
+            Autopilot = true;
+            SelectClass(UnityEngine.Random.Range(0, playerVariants.Length));
+        }
+
+        public void TogglePause()
+        {
+            if (State != MatchState.Fighting) return;
+            Paused = !Paused;
+            GameEffects.I?.SetBaseTimeScale(Paused ? 0f : 1f);
+            SetCursorFree(Paused);
+            PausedChanged?.Invoke(Paused);
         }
 
         void Update()
@@ -99,16 +129,18 @@ namespace Crownfall
                 }
             }
 
-            if (UnityEngine.InputSystem.Keyboard.current != null &&
-                UnityEngine.InputSystem.Keyboard.current.f1Key.wasPressedThisFrame)
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null && kb.f1Key.wasPressedThisFrame && !Paused)
                 Autopilot = !Autopilot;
+            if (kb != null && kb.escapeKey.wasPressedThisFrame)
+                TogglePause();
         }
 
         // ------------------------------------------------------------------ flow
 
         public void SelectClass(int classIndex)
         {
-            if (State != MatchState.ClassSelect) return;
+            if (State != MatchState.ClassSelect && State != MatchState.Menu) return;
             classIndex = Mathf.Clamp(classIndex, 0, playerVariants.Length - 1);
 
             for (int i = 0; i < playerVariants.Length; i++)

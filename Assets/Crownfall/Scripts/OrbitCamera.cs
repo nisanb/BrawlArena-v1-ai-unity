@@ -22,6 +22,7 @@ namespace Crownfall
         Camera cam;
         float baseFov = 57f;
         Vector2 pendingOrbit;
+        float menuYaw = 160f;
 
         /// External orbit input in degrees (touch drag). Consumed next LateUpdate.
         public void AddOrbitInput(Vector2 degrees) { pendingOrbit += degrees; }
@@ -48,10 +49,25 @@ namespace Crownfall
 
         void LateUpdate()
         {
-            if (target == null) return;
-
             var mm = MatchManager.I;
-            bool fighting = mm != null && mm.State == MatchState.Fighting;
+
+            if (target == null)
+            {
+                // cinematic slow orbit around the arena behind the menus
+                if (mm != null && (mm.State == MatchState.Menu || mm.State == MatchState.ClassSelect))
+                {
+                    menuYaw += 3.5f * Time.deltaTime;
+                    Vector3 pivot = new Vector3(0f, 1.2f, 0f);
+                    Vector3 wanted = pivot + Quaternion.Euler(0f, menuYaw, 0f) * new Vector3(0f, 0f, -17.5f);
+                    wanted.y = 7.4f;
+                    transform.position = Vector3.Lerp(transform.position, wanted, 1.6f * Time.deltaTime);
+                    var look = Quaternion.LookRotation(pivot + Vector3.up * 0.4f - transform.position);
+                    transform.rotation = Quaternion.Slerp(transform.rotation, look, 1.6f * Time.deltaTime);
+                }
+                return;
+            }
+
+            bool fighting = mm != null && mm.State == MatchState.Fighting && !mm.Paused;
             var mouse = Mouse.current;
 
             var lockTarget = target.LockTarget;
@@ -61,7 +77,7 @@ namespace Crownfall
             pendingOrbit = Vector2.zero;
 
             if (fighting && !locked && mouse != null && Cursor.lockState == CursorLockMode.Locked)
-                orbit += mouse.delta.ReadValue() * mouseSensitivity;
+                orbit += mouse.delta.ReadValue() * mouseSensitivity * CrownfallSettings.Sensitivity;
 
             if (!locked)
             {
@@ -83,7 +99,7 @@ namespace Crownfall
                 pitch = Mathf.Lerp(pitch, desiredPitch, 4f * Time.deltaTime);
 
                 if (fighting && mouse != null && Cursor.lockState == CursorLockMode.Locked)
-                    orbit += mouse.delta.ReadValue() * mouseSensitivity;
+                    orbit += mouse.delta.ReadValue() * mouseSensitivity * CrownfallSettings.Sensitivity;
                 yaw += orbit.x * 0.35f;
                 pitch -= orbit.y * 0.35f;
             }
@@ -134,7 +150,11 @@ namespace Crownfall
             }
         }
 
-        public void Shake(float amount) { shake = Mathf.Max(shake, amount); }
+        public void Shake(float amount)
+        {
+            if (!CrownfallSettings.ShakeEnabled) return;
+            shake = Mathf.Max(shake, amount);
+        }
 
         public void ShakeIfNear(Vector3 pos, float radius, float amount)
         {

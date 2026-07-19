@@ -29,8 +29,14 @@ namespace Crownfall
         Canvas canvas;
         RectTransform root;
 
+        GameObject fightHudRoot;
+        GameObject titlePanel;
+        GameObject settingsPanel;
+        GameObject pausePanel;
+        GameObject pauseBtn;
         GameObject classPanel;
         GameObject resultPanel;
+        TMP_Text shakeLabel;
         TMP_Text resultTitle, resultSub;
         TMP_Text scoreAzureText, scoreCrimsonText, timerText;
         TMP_Text announceText;
@@ -54,13 +60,17 @@ namespace Crownfall
         {
             BuildCanvas();
             BuildFightHud();
+            BuildTitleMenu();
             BuildClassSelect();
+            BuildSettingsPanel();
+            BuildPause();
             BuildResultPanel();
 
             var mm = MatchManager.I;
             if (mm != null)
             {
                 mm.StateChanged += OnStateChanged;
+                mm.PausedChanged += p => pausePanel.SetActive(p);
                 mm.ScoreChanged += (a, c) => { scoreAzureText.text = a.ToString(); scoreCrimsonText.text = c.ToString(); };
                 mm.CountdownTick += n => Pop(n > 0 ? n.ToString() : "FIGHT!", n > 0 ? Color.white : Gold, n > 0 ? 0.9f : 1.2f);
                 mm.Announce += msg => Pop(msg, Gold, 1.6f);
@@ -151,8 +161,12 @@ namespace Crownfall
 
         void BuildFightHud()
         {
+            var fight = Rect("FightHud", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero);
+            fightHudRoot = fight.gameObject;
+
             // -- score banner
-            var banner = Img("ScoreBanner", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            var banner = Img("ScoreBanner", fight, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                 new Vector2(0, -8), new Vector2(430, 92), bannerNavy, new Color(1f, 1f, 1f, 0.96f));
             Txt("AzLabel", banner.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
                 new Vector2(-150, 6), new Vector2(110, 60), "AZURE", fontSmall, 20, AzureCol);
@@ -168,7 +182,7 @@ namespace Crownfall
                 new Vector2(0, -26), new Vector2(140, 40), "5:00", fontSmall, 24, new Color(1f, 1f, 1f, 0.9f));
 
             // -- player panel
-            var panel = Rect("PlayerPanel", root, Vector2.zero, Vector2.zero, Vector2.zero,
+            var panel = Rect("PlayerPanel", fight, Vector2.zero, Vector2.zero, Vector2.zero,
                 new Vector2(28, 26), new Vector2(560, 150));
             var portrait = Img("Portrait", panel, Vector2.zero, Vector2.zero, Vector2.zero,
                 new Vector2(0, 8), new Vector2(96, 96), frameCircle, new Color(0.16f, 0.2f, 0.3f, 0.95f));
@@ -186,7 +200,7 @@ namespace Crownfall
             // -- ally rows
             for (int i = 0; i < 2; i++)
             {
-                var row = Rect("Ally" + i, root, Vector2.zero, Vector2.zero, Vector2.zero,
+                var row = Rect("Ally" + i, fight, Vector2.zero, Vector2.zero, Vector2.zero,
                     new Vector2(28, 196 + i * 58), new Vector2(280, 52));
                 var label = Txt("AllyName", row, Vector2.zero, Vector2.zero, Vector2.zero,
                     new Vector2(0, 26), new Vector2(280, 28), "Ally", fontSmall, 18, new Color(0.8f, 0.9f, 1f),
@@ -197,30 +211,177 @@ namespace Crownfall
             }
 
             // -- kill feed
-            feedContainer = Rect("KillFeed", root, Vector2.one, Vector2.one, Vector2.one,
+            feedContainer = Rect("KillFeed", fight, Vector2.one, Vector2.one, Vector2.one,
                 new Vector2(-20, -110), new Vector2(430, 400));
 
             // -- announcement
-            announceText = Txt("Announce", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            announceText = Txt("Announce", fight, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), new Vector2(0, 130), new Vector2(1400, 220), "", fontBig, 130, Gold);
             announceText.gameObject.SetActive(false);
 
             // -- lock-on marker
-            var marker = Img("LockOn", root, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f),
+            var marker = Img("LockOn", fight, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f),
                 Vector2.zero, new Vector2(56, 56), frameCircle, Gold);
             marker.type = Image.Type.Simple;
             lockOnMarker = marker.rectTransform;
             lockOnMarker.gameObject.SetActive(false);
 
             // -- damage flash
-            damageFlash = Img("DamageFlash", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            damageFlash = Img("DamageFlash", fight, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
                 Vector2.zero, Vector2.zero, null, new Color(0.8f, 0.05f, 0.05f, 0f));
 
             // -- autopilot tag
-            autopilotText = Txt("Autopilot", root, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
+            autopilotText = Txt("Autopilot", fight, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
                 new Vector2(-24, 20), new Vector2(360, 34), "AUTOPILOT ON  [F1]", fontSmall, 20, Gold,
                 TextAlignmentOptions.Right);
             autopilotText.gameObject.SetActive(false);
+        }
+
+        Button MenuButton(Transform parent, Vector2 pos, Vector2 size, string label, float fontSize,
+            UnityEngine.Events.UnityAction onClick)
+        {
+            var img = Img("Btn_" + label, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), pos, size, frameRound, new Color(0.13f, 0.17f, 0.28f, 0.97f), true);
+            var b = img.gameObject.AddComponent<Button>();
+            var colors = b.colors;
+            colors.highlightedColor = new Color(1.3f, 1.3f, 1.45f);
+            colors.pressedColor = new Color(0.75f, 0.75f, 0.85f);
+            b.colors = colors;
+            b.onClick.AddListener(onClick);
+            Txt("L", img.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, size - new Vector2(16, 10), label, fontMid, fontSize, Gold);
+            return b;
+        }
+
+        void BuildTitleMenu()
+        {
+            titlePanel = Rect("TitleMenu", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero).gameObject;
+            Img("BottomDim", titlePanel.transform, Vector2.zero, new Vector2(1f, 0.3f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero, null, new Color(0.02f, 0.02f, 0.05f, 0.4f));
+
+            var titleBack = Img("TitleBack", titlePanel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f), new Vector2(0, -55), new Vector2(1240, 250), frameRound,
+                new Color(0.03f, 0.04f, 0.09f, 0.62f));
+            Txt("Title", titlePanel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0, -95), new Vector2(1500, 170), "CROWNFALL ARENA", fontBig, 118, Gold);
+            Txt("Sub", titlePanel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0, -252), new Vector2(1200, 56), "3 v 3  arena of champions", fontMid, 32,
+                new Color(0.87f, 0.87f, 0.95f));
+
+            MenuButton(titlePanel.transform, new Vector2(0, -30), new Vector2(460, 108), "PLAY", 46,
+                () => MatchManager.I?.OpenClassSelect());
+            MenuButton(titlePanel.transform, new Vector2(0, -158), new Vector2(390, 84), "WATCH AI DEMO", 28,
+                () => MatchManager.I?.StartDemo());
+            MenuButton(titlePanel.transform, new Vector2(0, -262), new Vector2(390, 84), "SETTINGS", 30,
+                OpenSettings);
+            if (!Application.isMobilePlatform)
+                MenuButton(titlePanel.transform, new Vector2(0, -366), new Vector2(390, 84), "QUIT", 30,
+                    Application.Quit);
+
+            Txt("Version", titlePanel.transform, Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(22, 16), new Vector2(500, 34), "Crownfall Arena  ·  build " + Application.version,
+                fontSmall, 18, new Color(1f, 1f, 1f, 0.5f), TextAlignmentOptions.Left);
+        }
+
+        public void OpenSettings() { settingsPanel.SetActive(true); }
+
+        Slider MakeSlider(Transform parent, Vector2 pos, float width, float min, float max, float initial,
+            UnityEngine.Events.UnityAction<float> onChanged)
+        {
+            var bg = Img("SliderBg", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), pos, new Vector2(width, 30), barBgBasic,
+                new Color(0.1f, 0.1f, 0.16f, 0.95f), true);
+            var slider = bg.gameObject.AddComponent<Slider>();
+
+            var fillArea = Rect("FillArea", bg.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, new Vector2(-14, -12));
+            var fill = Img("Fill", fillArea, Vector2.zero, new Vector2(0f, 1f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, new Vector2(10, 0), barFillBasic, Gold);
+            var handleArea = Rect("HandleArea", bg.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, new Vector2(-20, 0));
+            var handle = Img("Handle", handleArea, Vector2.zero, new Vector2(0f, 1f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, new Vector2(34, 0), frameCircle, Color.white, true);
+            handle.type = Image.Type.Simple;
+
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = handle.rectTransform;
+            slider.targetGraphic = handle;
+            slider.minValue = min;
+            slider.maxValue = max;
+            slider.value = initial;
+            slider.onValueChanged.AddListener(onChanged);
+            return slider;
+        }
+
+        void BuildSettingsPanel()
+        {
+            settingsPanel = Rect("Settings", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero).gameObject;
+            Img("Dim", settingsPanel.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero, null, new Color(0.02f, 0.02f, 0.05f, 0.72f), true);
+            var frame = Img("Frame", settingsPanel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(680, 560), frameRound,
+                new Color(0.11f, 0.14f, 0.24f, 0.98f), true);
+
+            Txt("T", frame.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0, -26), new Vector2(500, 70), "SETTINGS", fontMid, 44, Gold);
+
+            Txt("VolL", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0, 122), new Vector2(560, 40), "VOLUME", fontSmall, 24, Color.white);
+            MakeSlider(frame.transform, new Vector2(0, 78), 520, 0f, 1f, CrownfallSettings.Volume, v =>
+            {
+                CrownfallSettings.Volume = v;
+                CrownfallSettings.Apply();
+                CrownfallSettings.Save();
+            });
+
+            Txt("SensL", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0, 8), new Vector2(560, 40), "CAMERA SENSITIVITY", fontSmall, 24, Color.white);
+            MakeSlider(frame.transform, new Vector2(0, -36), 520, 0.4f, 2f, CrownfallSettings.Sensitivity, v =>
+            {
+                CrownfallSettings.Sensitivity = v;
+                CrownfallSettings.Save();
+            });
+
+            shakeLabel = MenuButton(frame.transform, new Vector2(0, -122), new Vector2(430, 74),
+                ShakeText(), 24, () =>
+                {
+                    CrownfallSettings.ShakeEnabled = !CrownfallSettings.ShakeEnabled;
+                    CrownfallSettings.Save();
+                    shakeLabel.text = ShakeText();
+                }).GetComponentInChildren<TMP_Text>();
+            shakeLabel.text = ShakeText();
+
+            MenuButton(frame.transform, new Vector2(0, -222), new Vector2(300, 82), "CLOSE", 30,
+                () => settingsPanel.SetActive(false));
+            settingsPanel.SetActive(false);
+        }
+
+        string ShakeText() => "SCREEN SHAKE: " + (CrownfallSettings.ShakeEnabled ? "ON" : "OFF");
+
+        void BuildPause()
+        {
+            var btnImg = Img("PauseBtn", root, Vector2.one, Vector2.one, Vector2.one,
+                new Vector2(-24, -22), new Vector2(64, 64), frameCircle, new Color(0.1f, 0.12f, 0.2f, 0.7f), true);
+            btnImg.type = Image.Type.Simple;
+            btnImg.gameObject.AddComponent<Button>().onClick.AddListener(() => MatchManager.I?.TogglePause());
+            Txt("L", btnImg.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                new Vector2(0, 2), new Vector2(60, 60), "II", fontSmall, 26, Color.white);
+            pauseBtn = btnImg.gameObject;
+            pauseBtn.SetActive(false);
+
+            pausePanel = Rect("PausePanel", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero).gameObject;
+            Img("Dim", pausePanel.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero, null, new Color(0.02f, 0.02f, 0.05f, 0.7f), true);
+            Txt("T", pausePanel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0, 150), new Vector2(800, 130), "PAUSED", fontBig, 96, Gold);
+            MenuButton(pausePanel.transform, new Vector2(0, 20), new Vector2(390, 92), "RESUME", 34,
+                () => MatchManager.I?.TogglePause());
+            MenuButton(pausePanel.transform, new Vector2(0, -96), new Vector2(390, 84), "QUIT MATCH", 28,
+                () => MatchManager.I?.Restart());
+            pausePanel.SetActive(false);
         }
 
         void BuildClassSelect()
@@ -231,10 +392,14 @@ namespace Crownfall
                 Vector2.zero, Vector2.zero, null, new Color(0.03f, 0.03f, 0.06f, 0.82f));
 
             Txt("Title", classPanel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0, -110), new Vector2(1500, 160), "CROWNFALL ARENA", fontBig, 110, Gold);
-            Txt("Sub", classPanel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0, -258), new Vector2(1200, 60), "3 v 3  ·  choose your champion", fontMid, 34,
-                new Color(0.85f, 0.85f, 0.95f));
+                new Vector2(0, -110), new Vector2(1500, 160), "CHOOSE YOUR CHAMPION", fontBig, 88, Gold);
+
+            var backImg = Img("Back", classPanel.transform, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, 1f), new Vector2(36, -34), new Vector2(170, 70), frameRound,
+                new Color(0.13f, 0.17f, 0.28f, 0.97f), true);
+            backImg.gameObject.AddComponent<Button>().onClick.AddListener(() => MatchManager.I?.BackToMenu());
+            Txt("L", backImg.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, new Vector2(150, 60), "< BACK", fontSmall, 26, Gold);
 
             string[] names = { "KNIGHT", "WARBRAND", "DUELIST", "MAGE" };
             for (int i = 0; i < 4; i++)
@@ -295,7 +460,12 @@ namespace Crownfall
 
         void OnStateChanged(MatchState s)
         {
+            titlePanel.SetActive(s == MatchState.Menu);
             classPanel.SetActive(s == MatchState.ClassSelect);
+            fightHudRoot.SetActive(s == MatchState.Countdown || s == MatchState.Fighting || s == MatchState.Ended);
+            pauseBtn.SetActive(s == MatchState.Fighting);
+            if (s != MatchState.Fighting) pausePanel.SetActive(false);
+            settingsPanel.SetActive(false);
             if (s == MatchState.Countdown || s == MatchState.Fighting) BindPlayer();
         }
 

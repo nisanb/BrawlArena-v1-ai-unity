@@ -25,7 +25,7 @@ namespace Crownfall
             var mm = MatchManager.I;
             if (mm == null || Motor.IsDead) return;
 
-            if (mm.State != MatchState.Fighting || mm.Autopilot)
+            if (mm.State != MatchState.Fighting || mm.Autopilot || mm.Paused)
             {
                 Motor.SetMoveInput(Vector3.zero, false);
                 Motor.SetBlock(false);

@@ -125,7 +125,7 @@ namespace Crownfall
             var mm = MatchManager.I;
             if (mm == null || canvas == null) return;
 
-            bool fighting = mm.State == MatchState.Fighting;
+            bool fighting = mm.State == MatchState.Fighting && !mm.Paused;
             var motor = mm.PlayerMotor;
             bool driving = fighting && !mm.Autopilot && motor != null && !motor.IsDead;
 
@@ -228,7 +228,7 @@ namespace Crownfall
                     else if (id == cameraTouchId && touch.phase == UnityEngine.InputSystem.TouchPhase.Moved)
                     {
                         Vector2 d = touch.delta;
-                        float sens = 0.24f * (1080f / Screen.height);
+                        float sens = 0.24f * (1080f / Screen.height) * CrownfallSettings.Sensitivity;
                         OrbitCamera.I?.AddOrbitInput(new Vector2(d.x * sens, d.y * sens));
                     }
                     break;
