@@ -122,3 +122,6 @@ fastlane/README.md
 
 # CI helper file (LFS cache key)
 .lfs-assets-id
+
+# Apple API keys must never be committed
+*.p8
