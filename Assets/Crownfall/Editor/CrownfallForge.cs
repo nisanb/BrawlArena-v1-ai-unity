@@ -678,6 +678,15 @@ namespace Crownfall.EditorTools
             surface.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
             surface.layerMask = Physics.DefaultRaycastLayers;
             surface.BuildNavMesh();
+
+            // NavMeshData is [PreferBinarySerialization]; embedding it forces the
+            // whole scene file binary, which git's text normalization then corrupts
+            // on CI. Persist it as its own asset (marked binary in .gitattributes)
+            // so the scene stays Force-Text YAML.
+            string navPath = $"{GenDir}/CrownfallNavMesh.asset";
+            AssetDatabase.DeleteAsset(navPath);
+            AssetDatabase.CreateAsset(surface.navMeshData, navPath);
+            EditorUtility.SetDirty(surface);
         }
 
         // ------------------------------------------------------------------ fighters

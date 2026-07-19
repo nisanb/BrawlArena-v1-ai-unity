@@ -156,3 +156,6 @@ LightingData.asset     binary
 Packages/com.unity.ai.assistant/RelayApp~/gateway/codex-acp-darwin-arm64 filter=lfs diff=lfs merge=lfs -text
 Packages/com.unity.ai.assistant/RelayApp~/gateway/codex-acp-darwin-x64 filter=lfs diff=lfs merge=lfs -text
 Packages/com.unity.ai.assistant/RelayApp~/relay_linux filter=lfs diff=lfs merge=lfs -text
+
+# Baked NavMesh data is genuinely binary - never text-normalize it
+Assets/Crownfall/Generated/CrownfallNavMesh.asset binary
