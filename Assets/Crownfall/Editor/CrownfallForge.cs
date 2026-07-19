@@ -907,23 +907,28 @@ namespace Crownfall.EditorTools
             barGo.transform.localScale = Vector3.one * 0.0145f;
             var group = barGo.AddComponent<CanvasGroup>();
 
-            Image MakeImg(string n, Color c, Vector2 size)
+            // fillAmount is silently ignored on sprite-less Images, so the fills
+            // MUST carry a real sprite or the bar renders full forever
+            var fillSprite = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic01_Fill_White.png");
+
+            Image MakeImg(string n, Color c, Vector2 size, Sprite sprite)
             {
                 var go = new GameObject(n, typeof(RectTransform));
                 var r = go.GetComponent<RectTransform>();
                 r.SetParent(barGo.transform, false);
                 r.sizeDelta = size;
                 var img = go.AddComponent<Image>();
+                img.sprite = sprite;
                 img.color = c;
                 img.raycastTarget = false;
                 return img;
             }
 
-            MakeImg("Bg", new Color(0.05f, 0.05f, 0.08f, 0.88f), new Vector2(120f, 16f));
-            var ghost = MakeImg("Ghost", new Color(1f, 0.85f, 0.7f, 0.9f), new Vector2(114f, 11f));
+            MakeImg("Bg", new Color(0.05f, 0.05f, 0.08f, 0.88f), new Vector2(120f, 16f), null);
+            var ghost = MakeImg("Ghost", new Color(1f, 0.85f, 0.7f, 0.9f), new Vector2(114f, 11f), fillSprite);
             ghost.type = Image.Type.Filled;
             ghost.fillMethod = Image.FillMethod.Horizontal;
-            var fill = MakeImg("Fill", teamColor, new Vector2(114f, 11f));
+            var fill = MakeImg("Fill", teamColor, new Vector2(114f, 11f), fillSprite);
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
 

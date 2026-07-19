@@ -45,9 +45,23 @@ namespace Crownfall
                 wordWrap = true,
             };
             var mm = MatchManager.I;
+            string foe = "";
+            if (mm != null && mm.PlayerMotor != null && mm.State == MatchState.Fighting)
+            {
+                var pm = mm.PlayerMotor;
+                CombatMotor nearest = null;
+                float best = float.MaxValue;
+                foreach (var e in mm.AliveEnemiesOf(pm.Identity.team))
+                {
+                    float d = (e.transform.position - pm.transform.position).sqrMagnitude;
+                    if (d < best) { best = d; nearest = e; }
+                }
+                if (nearest != null)
+                    foe = $"  foe:{nearest.Identity.displayName} {nearest.Health.Current:0}/{nearest.Health.Max:0}";
+            }
             string beat = $"Crownfall f{Time.frameCount}  {SceneManager.GetActiveScene().name}" +
                           $"  cam:{(Camera.main != null ? "ok" : "MISSING")}" +
-                          $"  match:{(mm != null ? mm.State.ToString() : "MISSING")}" +
+                          $"  match:{(mm != null ? mm.State.ToString() : "MISSING")}" + foe +
                           (errorCount > 0 ? $"  ERRORS:{errorCount}" : "");
             style.normal.textColor = errorCount > 0 ? Color.red : new Color(1f, 1f, 1f, 0.5f);
             GUI.Label(new Rect(14, 6, Screen.width - 28, 46), beat, style);

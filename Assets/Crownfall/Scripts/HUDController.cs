@@ -42,6 +42,11 @@ namespace Crownfall
         TMP_Text announceText;
         TMP_Text playerName;
         TMP_Text portraitLetter;
+        GameObject targetFrame;
+        TMP_Text targetName;
+        Image targetFill, targetGhost;
+        float targetShown = 1f, targetGhostShown = 1f;
+        CombatMotor shownTarget;
         Image hpFill, hpGhost, stFill;
         Image damageFlash;
         RectTransform lockOnMarker;
@@ -209,6 +214,19 @@ namespace Crownfall
                     barBgBasic, barFillBasic, AzureCol, out _);
                 allyRows.Add(new AllyRow { fill = fill, label = label });
             }
+
+            // -- target frame: the enemy you are locked onto or last damaged
+            var tf = Img("TargetFrame", fight, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0, -112), new Vector2(520, 84), frameRound, new Color(0.08f, 0.09f, 0.16f, 0.92f));
+            targetFrame = tf.gameObject;
+            targetName = Txt("TName", tf.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0, -6), new Vector2(490, 34), "Vex  ·  Knight", fontSmall, 24, Color.white);
+            var tBarBg = Img("TBarBg", tf.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0, 10), new Vector2(480, 26), barBgBasic, new Color(0.07f, 0.06f, 0.1f, 0.95f));
+            targetGhost = MakeFill(tBarBg.rectTransform, barFillBasic, new Color(1f, 0.88f, 0.75f, 0.95f),
+                new Vector2(480, 26));
+            targetFill = MakeFill(tBarBg.rectTransform, barFillBasic, CrimsonCol, new Vector2(480, 26));
+            targetFrame.SetActive(false);
 
             // -- kill feed
             feedContainer = Rect("KillFeed", fight, Vector2.one, Vector2.one, Vector2.one,
@@ -623,6 +641,34 @@ namespace Crownfall
             }
 
             autopilotText.gameObject.SetActive(mm.Autopilot);
+
+            // target frame: locked enemy, else last-damaged enemy for 6s
+            CombatMotor frameTarget = null;
+            if (pm != null && mm.State == MatchState.Fighting)
+            {
+                if (pm.LockTarget != null && !pm.LockTarget.IsDead) frameTarget = pm.LockTarget;
+                else if (pm.LastEngagedEnemy != null && !pm.LastEngagedEnemy.IsDead &&
+                         Time.time - pm.LastEngagedAt < 6f) frameTarget = pm.LastEngagedEnemy;
+            }
+            if (frameTarget != shownTarget)
+            {
+                shownTarget = frameTarget;
+                if (shownTarget != null)
+                {
+                    targetName.text = $"{shownTarget.Identity.displayName}  ·  {shownTarget.Kit.displayName}";
+                    float f0 = shownTarget.Health.Max > 0 ? shownTarget.Health.Current / shownTarget.Health.Max : 0f;
+                    targetShown = targetGhostShown = f0;
+                }
+            }
+            targetFrame.SetActive(shownTarget != null);
+            if (shownTarget != null)
+            {
+                float tf = shownTarget.Health.Max > 0 ? shownTarget.Health.Current / shownTarget.Health.Max : 0f;
+                targetShown = Mathf.Lerp(targetShown, tf, 16f * Time.unscaledDeltaTime);
+                targetGhostShown = Mathf.Lerp(targetGhostShown, tf, 4f * Time.unscaledDeltaTime);
+                targetFill.fillAmount = targetShown;
+                targetGhost.fillAmount = Mathf.Max(targetGhostShown, targetShown);
+            }
 
             // lock-on marker
             var target = pm != null ? pm.LockTarget : null;

@@ -64,6 +64,9 @@ namespace Crownfall
         float animMoveX, animMoveZ;
         CombatMotor attackAim;
 
+        public CombatMotor LastEngagedEnemy { get; private set; }
+        public float LastEngagedAt { get; private set; } = -99f;
+
         public bool IsConcealed { get; private set; }
         float revealedUntil;
         float concealTimer;
@@ -516,6 +519,7 @@ namespace Crownfall
                 if (!res.landed) continue;
                 anyHit = true;
                 anyKill |= res.killed;
+                if (victim.Motor != null) { LastEngagedEnemy = victim.Motor; LastEngagedAt = Time.time; }
 
                 GameEffects.I?.MeleeImpact(Identity.element, hit.point, res.blocked, heavy);
                 GameEffects.I?.ShowDamage(hit.point, res.damageDealt, res.blocked);
@@ -539,6 +543,7 @@ namespace Crownfall
             Vector3 aim = homing != null ? homing.AimPoint : AimPoint + transform.forward * 14f;
             GameEffects.I?.Muzzle(Identity.element, origin, transform.rotation);
             GameEffects.I?.PlayCast(Identity.element, origin);
+            if (homing != null) { LastEngagedEnemy = homing; LastEngagedAt = Time.time; }
             Projectile.Fire(this, Identity.element, origin, aim, homing,
                 Kit.lightDamage, Kit.lightPoiseDamage, Kit.projectileSpeed);
         }
@@ -563,7 +568,12 @@ namespace Crownfall
                     unblockable = true,
                 };
                 var res = victim.Health.TakeHit(hit);
-                if (res.landed) GameEffects.I?.ShowDamage(hit.point, res.damageDealt, false);
+                if (res.landed)
+                {
+                    GameEffects.I?.ShowDamage(hit.point, res.damageDealt, false);
+                    LastEngagedEnemy = victim;
+                    LastEngagedAt = Time.time;
+                }
             }
             OrbitCamera.I?.ShakeIfNear(transform.position, 8f, 0.6f);
         }
