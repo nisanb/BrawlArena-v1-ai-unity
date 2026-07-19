@@ -312,6 +312,9 @@ namespace BrawlArena.EditorAutomation
                 case "mixamo_reimport":
                     result.message = MixamoImportTools.ReimportAndValidateInternal();
                     break;
+                case "build_ios_export":
+                    result.message = IosExportBuilder.BuildXcodeProject();
+                    break;
                 case "camera_style":
                 {
                     // arg: "action" => ActionThirdPerson, anything else => TopDownBrawl.

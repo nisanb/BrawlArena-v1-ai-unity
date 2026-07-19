@@ -21,15 +21,18 @@ platform :ios do
       readonly: false
     )
 
-    xcodeproj = Dir["build/iOS/**/Unity-iPhone.xcodeproj"].first
-    UI.user_error!("Unity-iPhone.xcodeproj not found under build/iOS") unless xcodeproj
+    xcodeproj = Dir["build/**/Unity-iPhone.xcodeproj"].first
+    UI.user_error!("Unity-iPhone.xcodeproj not found under build/") unless xcodeproj
 
     profile_name = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING][app_id]
+    team_id = ENV["APPLE_TEAM_ID"].to_s
+    team_id = ENV["sigh_#{app_id}_appstore_team-id"].to_s if team_id.empty?
+    UI.user_error!("No team id: set APPLE_TEAM_ID secret or let match provide it") if team_id.empty?
 
     update_code_signing_settings(
       path: xcodeproj,
       use_automatic_signing: false,
-      team_id: ENV.fetch("APPLE_TEAM_ID"),
+      team_id: team_id,
       code_sign_identity: "Apple Distribution",
       bundle_identifier: app_id,
       profile_name: profile_name,

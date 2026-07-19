@@ -1,0 +1,46 @@
+name: iOS TestFlight (local export)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag holding ios-project.tgz
+        required: false
+        default: ios-export-latest
+
+concurrency:
+  group: ios-testflight-local
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Sign and upload to TestFlight
+    runs-on: macos-15
+    steps:
+      - name: Checkout (fastlane config only)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Download Xcode project from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${{ inputs.release_tag }}" --pattern ios-project.tgz --repo "${{ github.repository }}"
+
+      - name: Extract Xcode project
+        run: mkdir -p build && tar -C build -xzf ios-project.tgz
+
+      - name: Install fastlane
+        run: brew install fastlane
+
+      - name: Build, sign, upload to TestFlight
+        run: fastlane ios beta
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTH: ${{ secrets.MATCH_GIT_BASIC_AUTH }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
