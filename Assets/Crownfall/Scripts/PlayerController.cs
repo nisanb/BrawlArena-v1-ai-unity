@@ -101,7 +101,7 @@ namespace Crownfall
             }
         }
 
-        void ToggleLockOn()
+        public void ToggleLockOn()
         {
             if (Motor.LockTarget != null) { Motor.LockTarget = null; return; }
             AcquireOrClear();

@@ -263,9 +263,11 @@ namespace Crownfall
                     new Color(0.65f, 0.75f, 0.85f));
             }
 
+            string controls = Application.isMobilePlatform
+                ? "left thumb: move  ·  right drag: camera  ·  ATTACK tap = light, hold = heavy  ·  DODGE tap = roll, hold = sprint  ·  AUTO = watch the AI play"
+                : "WASD move  ·  LMB attack (hold = heavy)  ·  RMB block / heavy  ·  SPACE roll  ·  SHIFT sprint  ·  Q lock-on  ·  F1 autopilot";
             Txt("Controls", classPanel.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0, 40), new Vector2(1700, 60),
-                "WASD move  ·  LMB attack (hold = heavy)  ·  RMB block / heavy  ·  SPACE roll  ·  SHIFT sprint  ·  Q lock-on  ·  F1 autopilot",
+                new Vector2(0, 40), new Vector2(1700, 60), controls,
                 fontSmall, 21, new Color(0.75f, 0.78f, 0.85f));
         }
 
@@ -332,7 +334,7 @@ namespace Crownfall
             var entry = Txt("Feed", feedContainer,
                 new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
                 new Vector2(0, 0), new Vector2(430, 34),
-                $"<color=#{ColorUtility.ToHtmlStringRGB(kc)}>{k}</color>  ⚔  <color=#{ColorUtility.ToHtmlStringRGB(victim.TeamColor)}>{victim.displayName}</color>",
+                $"<color=#{ColorUtility.ToHtmlStringRGB(kc)}>{k}</color>  >  <color=#{ColorUtility.ToHtmlStringRGB(victim.TeamColor)}>{victim.displayName}</color>",
                 fontSmall, 22, Color.white, TextAlignmentOptions.Right);
             feedEntries.Add((entry.rectTransform, Time.unscaledTime + 5f));
             if (feedEntries.Count > 6)

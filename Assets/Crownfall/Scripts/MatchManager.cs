@@ -52,8 +52,6 @@ namespace Crownfall
             I = this;
             Time.timeScale = 1f;
             TimeLeft = matchDuration;
-            // no touch combat controls yet: phone builds run as a self-playing demo
-            if (Application.isMobilePlatform) autopilot = true;
         }
 
         void Start()

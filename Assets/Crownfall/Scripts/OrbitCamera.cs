@@ -21,6 +21,10 @@ namespace Crownfall
         Vector3 pivotSmoothed;
         Camera cam;
         float baseFov = 57f;
+        Vector2 pendingOrbit;
+
+        /// External orbit input in degrees (touch drag). Consumed next LateUpdate.
+        public void AddOrbitInput(Vector2 degrees) { pendingOrbit += degrees; }
 
         void Awake()
         {
@@ -53,13 +57,18 @@ namespace Crownfall
             var lockTarget = target.LockTarget;
             bool locked = lockTarget != null && !lockTarget.IsDead;
 
+            Vector2 orbit = pendingOrbit;
+            pendingOrbit = Vector2.zero;
+
             if (fighting && !locked && mouse != null && Cursor.lockState == CursorLockMode.Locked)
+                orbit += mouse.delta.ReadValue() * mouseSensitivity;
+
+            if (!locked)
             {
-                Vector2 delta = mouse.delta.ReadValue();
-                yaw += delta.x * mouseSensitivity;
-                pitch -= delta.y * mouseSensitivity;
+                yaw += orbit.x;
+                pitch -= orbit.y;
             }
-            else if (locked)
+            else
             {
                 // frame player and target
                 Vector3 to = lockTarget.AimPoint - target.transform.position;
@@ -74,11 +83,9 @@ namespace Crownfall
                 pitch = Mathf.Lerp(pitch, desiredPitch, 4f * Time.deltaTime);
 
                 if (fighting && mouse != null && Cursor.lockState == CursorLockMode.Locked)
-                {
-                    Vector2 delta = mouse.delta.ReadValue();
-                    yaw += delta.x * mouseSensitivity * 0.35f;
-                    pitch -= delta.y * mouseSensitivity * 0.35f;
-                }
+                    orbit += mouse.delta.ReadValue() * mouseSensitivity;
+                yaw += orbit.x * 0.35f;
+                pitch -= orbit.y * 0.35f;
             }
             pitch = Mathf.Clamp(pitch, -28f, 62f);
 

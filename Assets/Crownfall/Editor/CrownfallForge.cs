@@ -330,8 +330,12 @@ namespace Crownfall.EditorTools
             var mm = managers.AddComponent<MatchManager>();
             var fx = managers.AddComponent<GameEffects>();
             var hud = managers.AddComponent<HUDController>();
+            var touch = managers.AddComponent<TouchController>();
             WireEffects(fx);
             WireHud(hud);
+            touch.circleSprite = hud.frameCircle;
+            touch.font = hud.fontSmall;
+            EditorUtility.SetDirty(touch);
 
             var esGo = new GameObject("EventSystem");
             esGo.AddComponent<EventSystem>();
