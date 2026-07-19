@@ -585,9 +585,9 @@ namespace Crownfall.EditorTools
                 Place(prefab, pos, i * 22.5f + 180f, 1.25f + (i % 3) * 0.18f, true);
             }
 
-            // pillars with torch fire
+            // pillars with torch fire (FireFlame is warm orange; StretchyFlame reads purple)
             string[] pillars = { "Pilar1", "Pilar2", "Pilar3", "Pilar4" };
-            var flame = FindPrefab("MagicArsenal", "StretchyFlame") ?? FindPrefab("MagicArsenal", "FireFlame");
+            var flame = FindPrefab("MagicArsenal", "FireFlame") ?? FindPrefab("MagicArsenal", "StretchyFlame");
             Vector3[] pillarSpots =
             {
                 new Vector3(-9f, 0f, -9f), new Vector3(9f, 0f, -9f),
@@ -597,19 +597,16 @@ namespace Crownfall.EditorTools
             {
                 var p = FindPrefab("Battle Arena", pillars[i]);
                 var placed = Place(p, pillarSpots[i], i * 90f, 1f, true);
-                float topY = 3.4f;
-                if (placed != null)
-                {
-                    var b = MeasureBoundsInstance(placed);
-                    if (b.size.y > 0.5f) topY = b.max.y - envRoot.position.y + 0.15f;
-                }
+                if (placed == null) continue; // no floating fire over missing pillars
+                var b = MeasureBoundsInstance(placed);
+                float topY = b.size.y > 0.5f ? b.max.y - envRoot.position.y + 0.1f : 3.4f;
                 Vector3 firePos = pillarSpots[i] + Vector3.up * topY;
                 if (flame != null)
                 {
                     var f = (GameObject)PrefabUtility.InstantiatePrefab(flame);
                     f.transform.SetParent(envRoot);
                     f.transform.position = firePos;
-                    f.transform.localScale = Vector3.one * 0.8f;
+                    f.transform.localScale = Vector3.one * 0.6f;
                 }
                 var lightGo = new GameObject("TorchLight");
                 lightGo.transform.SetParent(envRoot);
@@ -661,21 +658,47 @@ namespace Crownfall.EditorTools
                 Place(FindPrefab("Battle Arena", grass[i % grass.Length]), pos, R(0f, 360f), R(0.8f, 1.35f), false);
             }
 
-            // gate braziers with team-hint flames
+            // gate braziers with flames seated on the barrel rim
             foreach (float z in new[] { -edge, edge })
             {
                 foreach (float x in new[] { -4.6f, 4.6f })
                 {
-                    Place(FindPrefab("Battle Arena", "Barrel01"), new Vector3(x, 0f, z * 0.985f), 0f, 0.9f, true);
-                    if (flame != null)
-                    {
-                        var f = (GameObject)PrefabUtility.InstantiatePrefab(flame);
-                        f.transform.SetParent(envRoot);
-                        f.transform.position = new Vector3(x, 1.05f, z * 0.985f);
-                        f.transform.localScale = Vector3.one * 0.6f;
-                    }
+                    var barrel = Place(FindPrefab("Battle Arena", "Barrel01"), new Vector3(x, 0f, z * 0.985f), 0f, 0.9f, true);
+                    if (barrel == null || flame == null) continue;
+                    float rimY = MeasureBoundsInstance(barrel).max.y - envRoot.position.y - 0.05f;
+                    var f = (GameObject)PrefabUtility.InstantiatePrefab(flame);
+                    f.transform.SetParent(envRoot);
+                    f.transform.position = new Vector3(x, rimY, z * 0.985f);
+                    f.transform.localScale = Vector3.one * 0.45f;
                 }
             }
+
+            // concealment bush patches: tall grass clusters players can hide in
+            var bushField = new GameObject("BushField").AddComponent<BushField>();
+            bushField.transform.SetParent(root.transform);
+            Vector2[] patchCenters =
+            {
+                new Vector2(-13f, -5f), new Vector2(13f, 5f),
+                new Vector2(-7f, 12f), new Vector2(7f, -12f),
+                new Vector2(-15f, 9f), new Vector2(15f, -9f),
+            };
+            const float patchRadius = 2.4f;
+            string[] bushKinds = { "SolGrass01", "SolGrass02", "SolGrass03", "Grass02", "Grass01" };
+            var patchList = new List<Vector4>();
+            foreach (var c in patchCenters)
+            {
+                patchList.Add(new Vector4(c.x, 0f, c.y, patchRadius));
+                for (int i = 0; i < 9; i++)
+                {
+                    float a = (float)rand.NextDouble() * Mathf.PI * 2f;
+                    float r2 = Mathf.Sqrt((float)rand.NextDouble()) * (patchRadius - 0.3f);
+                    Vector3 pos = new Vector3(c.x + Mathf.Cos(a) * r2, 0f, c.y + Mathf.Sin(a) * r2);
+                    Place(FindPrefab("Battle Arena", bushKinds[i % bushKinds.Length]),
+                        pos, R(0f, 360f), R(1.9f, 2.5f), false);
+                }
+            }
+            bushField.patches = patchList.ToArray();
+            EditorUtility.SetDirty(bushField);
 
             // mark env static for batching
             foreach (var tr in root.GetComponentsInChildren<Transform>(true))
@@ -734,6 +757,11 @@ namespace Crownfall.EditorTools
             anim.runtimeAnimatorController = aoc;
             anim.applyRootMotion = false;
             anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+
+            // weapons ship parented to loose "weaponShield_l/r" holder nodes whose
+            // motion is baked per-clip; fast cross-fades make them drift off the
+            // hands. Reparent them into the real hand bones so they are bone-driven.
+            ReparentWeaponsToHands(model.transform);
 
             // physics + brain components
             var cc = root.AddComponent<CharacterController>();
@@ -818,6 +846,7 @@ namespace Crownfall.EditorTools
 
             BuildTeamRing(root.transform, id.TeamColor);
             BuildWorldBar(root.transform, id.TeamColor);
+            root.AddComponent<HitFlash>();
 
             SetLayerRecursive(root, 2); // Ignore Raycast: cameras/projectiles ignore, melee overlap still hits
             return root;
@@ -870,12 +899,12 @@ namespace Crownfall.EditorTools
         {
             var barGo = new GameObject("WorldBar", typeof(Canvas));
             barGo.transform.SetParent(root, false);
-            barGo.transform.localPosition = new Vector3(0f, 2.3f, 0f);
+            barGo.transform.localPosition = new Vector3(0f, 2.1f, 0f);
             var canvas = barGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             var rt = barGo.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(120f, 14f);
-            barGo.transform.localScale = Vector3.one * 0.012f;
+            rt.sizeDelta = new Vector2(120f, 16f);
+            barGo.transform.localScale = Vector3.one * 0.0145f;
             var group = barGo.AddComponent<CanvasGroup>();
 
             Image MakeImg(string n, Color c, Vector2 size)
@@ -890,11 +919,11 @@ namespace Crownfall.EditorTools
                 return img;
             }
 
-            MakeImg("Bg", new Color(0.05f, 0.05f, 0.08f, 0.85f), new Vector2(120f, 14f));
-            var ghost = MakeImg("Ghost", new Color(1f, 0.85f, 0.7f, 0.9f), new Vector2(114f, 9f));
+            MakeImg("Bg", new Color(0.05f, 0.05f, 0.08f, 0.88f), new Vector2(120f, 16f));
+            var ghost = MakeImg("Ghost", new Color(1f, 0.85f, 0.7f, 0.9f), new Vector2(114f, 11f));
             ghost.type = Image.Type.Filled;
             ghost.fillMethod = Image.FillMethod.Horizontal;
-            var fill = MakeImg("Fill", teamColor, new Vector2(114f, 9f));
+            var fill = MakeImg("Fill", teamColor, new Vector2(114f, 11f));
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
 
@@ -1056,6 +1085,31 @@ namespace Crownfall.EditorTools
             var b = rends[0].bounds;
             foreach (var r in rends) b.Encapsulate(r.bounds);
             return b;
+        }
+
+        static void ReparentWeaponsToHands(Transform model)
+        {
+            Transform FindDeep(Transform t, string name)
+            {
+                foreach (var tr in t.GetComponentsInChildren<Transform>(true))
+                    if (string.Equals(tr.name, name, System.StringComparison.OrdinalIgnoreCase))
+                        return tr;
+                return null;
+            }
+
+            var pairs = new (string holder, string hand)[]
+            {
+                ("weaponShield_l", "hand_l"),
+                ("weaponShield_r", "hand_r"),
+            };
+            foreach (var (holderName, handName) in pairs)
+            {
+                var holder = FindDeep(model, holderName);
+                var hand = FindDeep(model, handName);
+                if (holder == null || hand == null) continue;
+                for (int i = holder.childCount - 1; i >= 0; i--)
+                    holder.GetChild(i).SetParent(hand, true);
+            }
         }
 
         static Transform FindWeaponTransform(Transform model)

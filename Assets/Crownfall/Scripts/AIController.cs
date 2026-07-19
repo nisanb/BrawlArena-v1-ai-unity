@@ -59,7 +59,8 @@ namespace Crownfall
 
             if (agent != null && agent.isOnNavMesh) agent.nextPosition = transform.position;
 
-            if (target == null || target.IsDead || Time.time >= retargetAt)
+            if (target == null || target.IsDead || Time.time >= retargetAt ||
+                (target != null && target.IsConcealedFrom(motor)))
                 PickTarget(mm);
 
             if (target == null)
@@ -86,6 +87,7 @@ namespace Crownfall
             float bestScore = float.MinValue;
             foreach (var cand in scratch)
             {
+                if (cand.IsConcealedFrom(motor)) continue; // can't target what you can't see
                 float dist = (cand.transform.position - transform.position).magnitude;
                 float score = -dist;
                 score -= mm.CountTargeting(cand, this) * 3.5f;          // spread targets

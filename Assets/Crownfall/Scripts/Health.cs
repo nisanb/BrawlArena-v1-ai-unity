@@ -62,6 +62,7 @@ namespace Crownfall
             Current = Mathf.Max(0f, Current - dmg);
             res.landed = true;
             res.damageDealt = dmg;
+            Motor?.MarkRevealed(0.8f); // taking a hit briefly reveals you
 
             if (!blocked && !res.staggered)
             {

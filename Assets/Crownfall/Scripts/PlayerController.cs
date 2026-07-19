@@ -98,7 +98,7 @@ namespace Crownfall
             {
                 var t = Motor.LockTarget;
                 bool tooFar = (t.transform.position - transform.position).sqrMagnitude > 24f * 24f;
-                if (t.IsDead || tooFar) AcquireOrClear();
+                if (t.IsDead || tooFar || t.IsConcealedFrom(Motor)) AcquireOrClear();
             }
         }
 
@@ -129,6 +129,7 @@ namespace Crownfall
             foreach (var enemy in mm.AliveEnemiesOf(Motor.Identity.team))
             {
                 if (enemy == exclude) continue;
+                if (enemy.IsConcealedFrom(Motor)) continue;
                 Vector3 to = enemy.transform.position - transform.position;
                 float dist = to.magnitude;
                 if (dist > 22f) continue;

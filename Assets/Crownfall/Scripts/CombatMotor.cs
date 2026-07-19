@@ -64,6 +64,14 @@ namespace Crownfall
         float animMoveX, animMoveZ;
         CombatMotor attackAim;
 
+        public bool IsConcealed { get; private set; }
+        float revealedUntil;
+        bool renderersHidden;
+        Renderer[] visualRenderers;
+        Material ringMat;
+        Color ringBaseColor;
+        static readonly Color RingConcealColor = new Color(0.35f, 0.9f, 0.4f, 0.8f);
+
         void Awake()
         {
             cc = GetComponent<CharacterController>();
@@ -85,6 +93,49 @@ namespace Crownfall
                 Anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             }
             SetTrail(false);
+
+            visualRenderers = GetComponentsInChildren<Renderer>(true);
+            foreach (var r in visualRenderers)
+            {
+                if (r.name == "TeamRing")
+                {
+                    ringMat = r.sharedMaterial;
+                    if (ringMat != null) ringBaseColor = ringMat.color;
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ concealment
+
+        public bool IsConcealedFrom(CombatMotor viewer)
+        {
+            return IsConcealed && viewer != null &&
+                   (viewer.transform.position - transform.position).sqrMagnitude > 9f;
+        }
+
+        public void MarkRevealed(float duration)
+        {
+            revealedUntil = Mathf.Max(revealedUntil, Time.time + duration);
+        }
+
+        void UpdateConcealment()
+        {
+            IsConcealed = !IsDead && State != MotorState.Attacking &&
+                          Time.time > revealedUntil && BushField.IsInBush(transform.position);
+
+            var pm = MatchManager.I != null ? MatchManager.I.PlayerMotor : null;
+            bool hideFromView = pm != null && pm != this && Identity != null && pm.Identity != null &&
+                                Identity.team != pm.Identity.team && IsConcealedFrom(pm);
+            if (hideFromView != renderersHidden)
+            {
+                renderersHidden = hideFromView;
+                foreach (var r in visualRenderers)
+                    if (r != null) r.enabled = !hideFromView;
+            }
+
+            if (ringMat != null)
+                ringMat.color = Color.Lerp(ringMat.color,
+                    IsConcealed ? RingConcealColor : ringBaseColor, 10f * Time.deltaTime);
         }
 
         // ------------------------------------------------------------------ driver API
@@ -110,6 +161,8 @@ namespace Crownfall
 
         void Update()
         {
+            UpdateConcealment();
+
             if (State == MotorState.Dead || State == MotorState.Victory)
             {
                 ApplyGravity();
@@ -240,6 +293,7 @@ namespace Crownfall
             State = MotorState.Attacking;
             comboIndex = 1;
             comboWindowOpen = false;
+            MarkRevealed(1.3f); // attacking breaks concealment
 
             // auto-aim: face the stick, acquire the best target, then face IT
             if (moveInput.sqrMagnitude > 0.04f && (LockTarget == null || LockTarget.IsDead))
@@ -269,6 +323,7 @@ namespace Crownfall
             float bestScore = float.MinValue;
             foreach (var e in MatchManager.I.AliveEnemiesOf(Identity.team))
             {
+                if (e.IsConcealedFrom(this)) continue;
                 Vector3 to = e.transform.position - transform.position;
                 to.y = 0f;
                 float dist = to.magnitude;
@@ -625,6 +680,7 @@ namespace Crownfall
             if (actionRoutine != null) StopCoroutine(actionRoutine);
             SetTrail(false);
             ClearStunFx();
+            MarkRevealed(10f); // corpses are visible
             State = MotorState.Dead;
             IsInvulnerable = true;
             blockHeld = false;

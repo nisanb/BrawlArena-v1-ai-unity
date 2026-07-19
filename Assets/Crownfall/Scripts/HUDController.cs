@@ -373,14 +373,23 @@ namespace Crownfall
         {
             announceText.gameObject.SetActive(true);
             announceText.text = msg;
-            announceText.color = color;
+
+            // countdown digits live just under a second so each fades out before
+            // the next fades in; announcements linger longer
+            float life = msg.Length <= 2 ? 0.92f : 1.6f;
+            float fadeIn = 0.16f;
+            float fadeOut = 0.32f;
+
             float t = 0f;
-            while (t < 1.4f)
+            while (t < life)
             {
                 t += Time.unscaledDeltaTime;
-                float s = Mathf.Lerp(0.55f, scale, 1f - Mathf.Pow(1f - Mathf.Clamp01(t / 0.22f), 3f));
+                float s = Mathf.Lerp(0.6f, scale, 1f - Mathf.Pow(1f - Mathf.Clamp01(t / 0.24f), 3f));
+                s += 0.05f * Mathf.Clamp01(t / life); // slow drift upward
                 announceText.rectTransform.localScale = Vector3.one * s;
-                float alpha = t < 1f ? 1f : 1f - (t - 1f) / 0.4f;
+
+                float alpha = Mathf.Clamp01(t / fadeIn);
+                if (t > life - fadeOut) alpha = Mathf.Clamp01((life - t) / fadeOut);
                 announceText.color = new Color(color.r, color.g, color.b, alpha);
                 yield return null;
             }
