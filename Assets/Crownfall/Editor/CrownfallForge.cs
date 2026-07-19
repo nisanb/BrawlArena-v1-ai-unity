@@ -928,6 +928,7 @@ namespace Crownfall.EditorTools
             }
             fx.elements = sets.ToArray();
             fx.respawnFlash = FindPrefab("MagicArsenal", "NovaLife");
+            fx.stunFx = FindPrefab("MagicArsenal", "LightOrbitSphere");
 
             var dmgGo = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/DamageNumbersPro/Demo/Prefabs/3D/Red Shadow.prefab");
             if (dmgGo != null) fx.damageNumberPrefab = dmgGo.GetComponent<DamageNumber>();

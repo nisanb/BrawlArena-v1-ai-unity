@@ -24,6 +24,7 @@ namespace Crownfall
 
         public ElementSet[] elements;
         public GameObject respawnFlash;
+        public GameObject stunFx;
 
         public DamageNumber damageNumberPrefab;
         public DamageNumber blockedNumberPrefab;
@@ -86,6 +87,16 @@ namespace Crownfall
         public void RespawnFlash(Vector3 pos)
         {
             SpawnTemp(respawnFlash, pos + Vector3.up * 0.1f, Quaternion.identity, 1f);
+        }
+
+        /// Orbiting "dizzy stars" above a staggered fighter. Caller destroys it.
+        public GameObject SpawnStun(Transform owner)
+        {
+            if (stunFx == null) return null;
+            var go = Instantiate(stunFx, owner);
+            go.transform.localPosition = new Vector3(0f, 1.95f, 0f);
+            go.transform.localScale = Vector3.one * 0.5f;
+            return go;
         }
 
         public void AttachMissileVisual(Transform parent, ElementId el)

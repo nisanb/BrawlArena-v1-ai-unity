@@ -241,10 +241,17 @@ namespace Crownfall
             comboIndex = 1;
             comboWindowOpen = false;
 
-            // attack magnetism: face the stick first, then glue onto the best target
+            // auto-aim: face the stick, acquire the best target, then face IT
             if (moveInput.sqrMagnitude > 0.04f && (LockTarget == null || LockTarget.IsDead))
                 transform.rotation = Quaternion.LookRotation(moveInput);
             attackAim = AcquireAttackAim();
+            if (attackAim != null)
+            {
+                Vector3 toAim = attackAim.transform.position - transform.position;
+                toAim.y = 0f;
+                if (toAim.sqrMagnitude > 0.04f)
+                    transform.rotation = Quaternion.LookRotation(toAim);
+            }
 
             if (actionRoutine != null) StopCoroutine(actionRoutine);
             Anim.ResetTrigger(HashRoll);
@@ -256,6 +263,8 @@ namespace Crownfall
         {
             if (LockTarget != null && !LockTarget.IsDead) return LockTarget;
             if (MatchManager.I == null || Identity == null) return null;
+            float maxRange = Kit.isRanged ? 16f : 9f;
+            Vector3 refFwd = moveInput.sqrMagnitude > 0.04f ? moveInput.normalized : transform.forward;
             CombatMotor best = null;
             float bestScore = float.MinValue;
             foreach (var e in MatchManager.I.AliveEnemiesOf(Identity.team))
@@ -263,10 +272,10 @@ namespace Crownfall
                 Vector3 to = e.transform.position - transform.position;
                 to.y = 0f;
                 float dist = to.magnitude;
-                if (dist > 7.5f) continue;
-                float ang = Vector3.Angle(transform.forward, to);
-                if (ang > 110f) continue;
-                float score = -dist - ang * 0.05f;
+                if (dist > maxRange) continue;
+                // full-circle acquisition; the angle term just prefers what you face
+                float ang = Vector3.Angle(refFwd, to);
+                float score = -dist * 1.2f - ang * 0.045f;
                 if (score > bestScore) { bestScore = score; best = e; }
             }
             return best;
@@ -295,6 +304,7 @@ namespace Crownfall
                 comboWindowOpen = false;
                 bool struck = false, swung = false, chained = false;
                 float trailOffAt = 0.78f;
+                float lungeDist = -1f;
                 SetTrail(false);
 
                 float t = 0f;
@@ -311,15 +321,25 @@ namespace Crownfall
                         to.y = 0f;
                         if (to.sqrMagnitude > 0.04f)
                             transform.rotation = Quaternion.RotateTowards(transform.rotation,
-                                Quaternion.LookRotation(to), 420f * Time.deltaTime);
+                                Quaternion.LookRotation(to), 560f * Time.deltaTime);
                     }
 
-                    // forward lunge through the swing
+                    // lunge through the swing; reach further when the target needs it
                     if (!Kit.isRanged && t >= Tuning.LungeStart && t <= Tuning.LungeEnd)
                     {
-                        float lunge = heavy ? Kit.heavyLunge : Kit.lightLunge;
+                        if (lungeDist < 0f)
+                        {
+                            lungeDist = heavy ? Kit.heavyLunge : Kit.lightLunge;
+                            if (attackAim != null && !attackAim.IsDead)
+                            {
+                                Vector3 toAim = attackAim.transform.position - transform.position;
+                                toAim.y = 0f;
+                                float need = toAim.magnitude - Kit.attackRange * 0.85f;
+                                lungeDist = Mathf.Clamp(need, 0.15f, heavy ? 2.6f : 2.0f);
+                            }
+                        }
                         float window = (Tuning.LungeEnd - Tuning.LungeStart) * len;
-                        cc.Move(transform.forward * (lunge / Mathf.Max(0.05f, window)) * Time.deltaTime);
+                        cc.Move(transform.forward * (lungeDist / Mathf.Max(0.05f, window)) * Time.deltaTime);
                     }
 
                     if (!swung && t >= Tuning.StrikeMoment - 0.1f)
@@ -431,8 +451,9 @@ namespace Crownfall
 
             if (anyHit)
             {
-                bool playerInvolved = Identity.isPlayer ||
-                    (LockTarget != null && LockTarget.Identity != null && LockTarget.Identity.isPlayer);
+                bool playerInvolved = Identity.isPlayer;
+                foreach (var v in seen)
+                    if (v.Identity != null && v.Identity.isPlayer) playerInvolved = true;
                 GameEffects.I?.Hitstop(anyKill || heavy ? Tuning.HitstopHeavy : Tuning.HitstopLight);
                 if (playerInvolved) OrbitCamera.I?.Shake(heavy ? 0.5f : 0.25f);
             }
@@ -562,6 +583,8 @@ namespace Crownfall
             if (State == MotorState.Hit) State = MotorState.Locomotion;
         }
 
+        GameObject stunFxInstance;
+
         public void EnterStagger()
         {
             if (IsDead) return;
@@ -571,12 +594,15 @@ namespace Crownfall
             State = MotorState.Staggered;
             Anim.ResetTrigger(HashHit);
             Anim.SetTrigger(HashStagger);
+            ClearStunFx();
+            stunFxInstance = GameEffects.I?.SpawnStun(transform);
             actionRoutine = StartCoroutine(StaggerRoutine());
         }
 
         IEnumerator StaggerRoutine()
         {
             yield return new WaitForSeconds(Tuning.StaggerDuration);
+            ClearStunFx();
             if (State == MotorState.Staggered)
             {
                 Anim.SetTrigger(HashRecover);
@@ -585,10 +611,20 @@ namespace Crownfall
             }
         }
 
+        void ClearStunFx()
+        {
+            if (stunFxInstance != null)
+            {
+                Destroy(stunFxInstance);
+                stunFxInstance = null;
+            }
+        }
+
         public void EnterDeath()
         {
             if (actionRoutine != null) StopCoroutine(actionRoutine);
             SetTrail(false);
+            ClearStunFx();
             State = MotorState.Dead;
             IsInvulnerable = true;
             blockHeld = false;
@@ -601,6 +637,7 @@ namespace Crownfall
         public void ResetForRespawn(Vector3 pos, Quaternion rot)
         {
             if (actionRoutine != null) StopCoroutine(actionRoutine);
+            ClearStunFx();
             cc.enabled = false;
             transform.SetPositionAndRotation(pos, rot);
             cc.enabled = true;
