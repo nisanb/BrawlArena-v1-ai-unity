@@ -66,6 +66,7 @@ namespace Crownfall
 
         public bool IsConcealed { get; private set; }
         float revealedUntil;
+        float concealTimer;
         bool renderersHidden;
         Renderer[] visualRenderers;
         Material ringMat;
@@ -120,8 +121,24 @@ namespace Crownfall
 
         void UpdateConcealment()
         {
-            IsConcealed = !IsDead && State != MotorState.Attacking &&
-                          Time.time > revealedUntil && BushField.IsInBush(transform.position);
+            // Concealment is an ambush tool, not a mid-fight state: it needs a
+            // moment of quiet inside the bush, and ANY enemy within 5m breaks it
+            // (wider than the 3m targeting radius, so there is no flicker window).
+            bool eligible = !IsDead && State != MotorState.Attacking &&
+                            Time.time > revealedUntil && BushField.IsInBush(transform.position);
+            if (eligible && MatchManager.I != null && Identity != null)
+            {
+                foreach (var e in MatchManager.I.AliveEnemiesOf(Identity.team))
+                {
+                    if ((e.transform.position - transform.position).sqrMagnitude < 25f)
+                    {
+                        eligible = false;
+                        break;
+                    }
+                }
+            }
+            concealTimer = eligible ? concealTimer + Time.deltaTime : 0f;
+            IsConcealed = eligible && concealTimer > 0.8f;
 
             var pm = MatchManager.I != null ? MatchManager.I.PlayerMotor : null;
             bool hideFromView = pm != null && pm != this && Identity != null && pm.Identity != null &&
