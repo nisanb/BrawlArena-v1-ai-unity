@@ -129,6 +129,7 @@ namespace BrawlArena
         Button menuButton;
         GameObject respawnRoot;
         GameObject protectionRoot;
+        GameObject hiddenChipRoot;
         GameObject squadRoot;
         TextMeshProUGUI squadHeader;
         BrawlerController player;
@@ -456,6 +457,14 @@ namespace BrawlArena
                     lastRespawnTenths = -1;
                 }
             }
+            if (hiddenChipRoot != null)
+            {
+                bool concealedNow = player != null && !player.IsDead && !matchEnded &&
+                                    player.Concealment != null && player.Concealment.SelfConcealed;
+                if (hiddenChipRoot.activeSelf != concealedNow)
+                    hiddenChipRoot.SetActive(concealedNow);
+            }
+
             if (protectionRoot != null && player != null)
             {
                 bool protectedNow = player.IsSpawnProtected;
@@ -1133,6 +1142,7 @@ namespace BrawlArena
             BuildAnnouncement(safeArea.transform);
             BuildRespawnOverlay(safeArea.transform);
             BuildProtectionIndicator(safeArea.transform);
+            BuildHiddenIndicator(safeArea.transform);
             BuildEndBanner(canvasGo.transform);
         }
 
@@ -2152,6 +2162,29 @@ namespace BrawlArena
                 TextAlignmentOptions.Center, HudTextStyle.Button);
             StretchRect(protectionText.rectTransform);
             protectionRoot.SetActive(false);
+        }
+
+        void BuildHiddenIndicator(Transform root)
+        {
+            hiddenChipRoot = NewRect("HiddenChip", root);
+            var rt = (RectTransform)hiddenChipRoot.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.19f);
+            rt.sizeDelta = new Vector2(260f, 56f);
+            var image = hiddenChipRoot.AddComponent<Image>();
+            image.sprite = theme != null && theme.labelChip != null
+                ? theme.labelChip
+                : GetWhiteSprite();
+            image.type = image.sprite != null && theme != null
+                ? Image.Type.Sliced
+                : Image.Type.Simple;
+            image.color = new Color(0.2f, 0.55f, 0.24f, 0.88f);
+            image.raycastTarget = false;
+
+            var text = MakeText("Text", hiddenChipRoot.transform,
+                "HIDDEN", 27f, Color.white,
+                TextAlignmentOptions.Center, HudTextStyle.Button);
+            StretchRect(text.rectTransform);
+            hiddenChipRoot.SetActive(false);
         }
 
         void BuildEndBanner(Transform root)

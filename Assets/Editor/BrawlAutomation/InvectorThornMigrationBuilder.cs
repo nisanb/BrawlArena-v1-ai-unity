@@ -52,19 +52,22 @@ namespace BrawlArena.EditorAutomation
         public const string WeaponsMaterialPath =
             "Assets/ModularRPGHeroesPBR/Material/RegularPBR/Weapons.mat";
         public const string WeaponsMaterialGuid = "532c7a2f80133ed41b42e2b7a36ecc44";
+        // Mixamo bow attacks (action-MMO experiment); the carry pose is
+        // deliberately untouched — the bow support solver owns the nock
+        // contact and was tuned against the vendor pistol layer.
         public const string BasicAttackClipPath =
-            "Assets/ModularRPGHeroesPBR/Animations/Bow/Attack01_Bow.fbx";
+            "Assets/ThirdParty/Mixamo/Thorn/Mixamo_Thorn_Shoot.fbx";
         public const string BasicAttackClipGuid =
-            "3e88f259de3e4324485ab932c09ff16d";
+            "8218d8bc0588e5942815630a083baef6";
         public const string SuperAttackClipPath =
-            "Assets/ModularRPGHeroesPBR/Animations/Bow/Attack02_Bow.fbx";
+            "Assets/ThirdParty/Mixamo/Thorn/Mixamo_Thorn_PowerShot.fbx";
         public const string SuperAttackClipGuid =
-            "2a792f6dc9f949742a7535f6f146eed7";
+            "9f9b0eb35c671c74eadd7c332c507675";
 
         public const string BasicAttackOverrideSourceName = "WeakAttack_UnarmedA";
         public const string SuperAttackOverrideSourceName = "StrongAttack_PunchA";
-        public const string BasicAttackClipName = "Attack01_Bow";
-        public const string SuperAttackClipName = "Attack02_Bow";
+        public const string BasicAttackClipName = "Mixamo_Thorn_Shoot";
+        public const string SuperAttackClipName = "Mixamo_Thorn_PowerShot";
         // The vendor pistol layer is static across locomotion. Thorn's bow
         // support solver owns the right-hand nock contact outside attacks.
 
@@ -205,8 +208,8 @@ namespace BrawlArena.EditorAutomation
             RequireGuid(ThornAvatarPath, ThornAvatarGuid, "Bow02 Humanoid Avatar");
             RequireGuid(ThornControllerPath, ThornControllerGuid, "Modular RPG Bow controller");
             RequireGuid(WeaponsMaterialPath, WeaponsMaterialGuid, "Modular RPG weapons material");
-            RequireGuid(BasicAttackClipPath, BasicAttackClipGuid, "Attack01_Bow clip");
-            RequireGuid(SuperAttackClipPath, SuperAttackClipGuid, "Attack02_Bow clip");
+            RequireGuid(BasicAttackClipPath, BasicAttackClipGuid, "Mixamo_Thorn_Shoot clip");
+            RequireGuid(SuperAttackClipPath, SuperAttackClipGuid, "Mixamo_Thorn_PowerShot clip");
 
             GameObject thorn = AssetDatabase.LoadAssetAtPath<GameObject>(ThornPath);
             Animator animator = thorn != null ? thorn.GetComponent<Animator>() : null;
@@ -431,6 +434,7 @@ namespace BrawlArena.EditorAutomation
                     BasicAttackClipName,
                     SuperAttackClipName,
                 });
+            InvectorMigrationPilotBuilder.ConfigureLocomotionOverrides(controller);
             ValidateAttackOverrides(controller);
         }
 
@@ -444,7 +448,9 @@ namespace BrawlArena.EditorAutomation
             controller.GetOverrides(overrides);
             KeyValuePair<AnimationClip, AnimationClip>[] active = overrides
                 .Where(value => value.Key != null && value.Value != null &&
-                                value.Value != value.Key)
+                                value.Value != value.Key &&
+                                !InvectorMigrationPilotBuilder.IsLocomotionOverrideSource(
+                                    value.Key.name))
                 .ToArray();
             KeyValuePair<AnimationClip, AnimationClip>[] basic = active
                 .Where(value => string.Equals(
@@ -477,7 +483,8 @@ namespace BrawlArena.EditorAutomation
                     StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
-                    "The Thorn AOC must contain only WeakAttack_UnarmedA -> Attack01_Bow and StrongAttack_PunchA -> Attack02_Bow.");
+                    "The Thorn AOC must contain only WeakAttack_UnarmedA -> " + BasicAttackClipName +
+                    " and StrongAttack_PunchA -> " + SuperAttackClipName + ".");
             }
         }
 

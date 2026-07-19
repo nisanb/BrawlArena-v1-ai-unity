@@ -108,8 +108,13 @@ namespace BrawlArena.EditorAutomation
                 AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath("frost")) != null)
                 return "Invector wizard source art already refreshed in this editor domain.";
 
-            CopyClip("Die", false);
-            CopyClip("VictoryStart", false);
+            // Death/victory now source from the retargeted Mixamo set; output
+            // paths and GUIDs are unchanged so the lifecycle-state motion
+            // references and GUID pins keep working.
+            CopyClip("Die", false,
+                "Assets/ThirdParty/Mixamo/Lifecycle/Mixamo_Death.fbx", "Mixamo_Death");
+            CopyClip("VictoryStart", false,
+                "Assets/ThirdParty/Mixamo/Lifecycle/Mixamo_Victory.fbx", "Mixamo_Victory");
 
             int built = 0;
             foreach (SchoolLook look in Looks)
@@ -124,12 +129,16 @@ namespace BrawlArena.EditorAutomation
             return $"Invector wizard source art ready: 2 lifecycle clips + {built} school prefabs in {Root}";
         }
 
-        static AnimationClip CopyClip(string sourceName, bool loop)
+        static AnimationClip CopyClip(string sourceName, bool loop,
+            string sourcePathOverride = null, string sourceClipName = null)
         {
-            string sourcePath = "Assets/WizardPBR/Animations/" + sourceName + ".fbx";
+            string sourcePath = sourcePathOverride ??
+                "Assets/WizardPBR/Animations/" + sourceName + ".fbx";
             AnimationClip source = AssetDatabase.LoadAllAssetsAtPath(sourcePath)
                 .OfType<AnimationClip>()
-                .FirstOrDefault(c => !c.name.StartsWith("__preview__", StringComparison.Ordinal));
+                .Where(c => !c.name.StartsWith("__preview__", StringComparison.Ordinal))
+                .FirstOrDefault(c => sourceClipName == null ||
+                    string.Equals(c.name, sourceClipName, StringComparison.Ordinal));
             if (source == null) throw new InvalidOperationException("Missing wizard clip: " + sourcePath);
 
             string outputName = sourceName == "Attack04" ? "Attack02" : sourceName;

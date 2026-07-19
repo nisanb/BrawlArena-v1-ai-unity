@@ -50,9 +50,15 @@ namespace BrawlArena
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
+        static bool IsArenaScene(string sceneName)
+        {
+            return string.Equals(sceneName, "Arena", StringComparison.Ordinal) ||
+                   string.Equals(sceneName, "ActionArena", StringComparison.Ordinal);
+        }
+
         static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            if (string.Equals(scene.name, "Arena", StringComparison.Ordinal))
+            if (IsArenaScene(scene.name))
                 TryOptimizeActiveArena(out _);
         }
 
@@ -60,8 +66,7 @@ namespace BrawlArena
         public static bool TryOptimizeActiveArena(out Result result)
         {
             Scene scene = SceneManager.GetActiveScene();
-            if (!scene.IsValid() || !scene.isLoaded ||
-                !string.Equals(scene.name, "Arena", StringComparison.Ordinal))
+            if (!scene.IsValid() || !scene.isLoaded || !IsArenaScene(scene.name))
             {
                 result = default;
                 return false;

@@ -166,6 +166,12 @@ namespace BrawlArena.EditorAutomation
         /// </summary>
         public static void CaptureMinimap(float worldHalfExtent)
         {
+            CaptureMinimap(worldHalfExtent, MinimapPath);
+        }
+
+        /// <summary>Same capture, explicit output — ActionArena keeps its own sprite so rebuilding one arena never clobbers the other's minimap.</summary>
+        public static void CaptureMinimap(float worldHalfExtent, string outputPath)
+        {
             var camGo = new GameObject("__MinimapCam");
             bool fog = RenderSettings.fog;
             RenderSettings.fog = false;
@@ -184,15 +190,15 @@ namespace BrawlArena.EditorAutomation
                 // North (+Z) up on the image.
                 camGo.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
-                Directory.CreateDirectory(Path.GetDirectoryName(MinimapPath));
-                Capture(cam, 1024, 1024, MinimapPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+                Capture(cam, 1024, 1024, outputPath);
             }
             finally
             {
                 RenderSettings.fog = fog;
                 Object.DestroyImmediate(camGo);
             }
-            ImportAsSprite(MinimapPath);
+            ImportAsSprite(outputPath);
         }
 
         static void Capture(Camera cam, int width, int height, string path)

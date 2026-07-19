@@ -136,7 +136,8 @@ namespace BrawlArena.EditorAutomation.Tests
             var slots = new List<KeyValuePair<AnimationClip, AnimationClip>>(overrides.overridesCount);
             overrides.GetOverrides(slots);
             KeyValuePair<AnimationClip, AnimationClip>[] active = slots
-                .Where(value => value.Key != null && value.Value != null && value.Value != value.Key)
+                .Where(value => value.Key != null && value.Value != null && value.Value != value.Key &&
+                                !InvectorMigrationPilotBuilder.IsLocomotionOverrideSource(value.Key.name))
                 .ToArray();
 
             Assert.That(active.Length, Is.EqualTo(3));

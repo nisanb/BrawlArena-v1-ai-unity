@@ -171,11 +171,22 @@ namespace BrawlArena
                 markerOwners.Add(null);
             }
 
+            BrawlerController viewer = null;
+            for (int i = 0; i < brawlers.Count; i++)
+            {
+                if (brawlers[i] != null && brawlers[i].IsPlayer)
+                {
+                    viewer = brawlers[i];
+                    break;
+                }
+            }
+
             for (int i = 0; i < brawlerMarkers.Count; i++)
             {
                 var b = i < brawlers.Count ? brawlers[i] : null;
                 var marker = brawlerMarkers[i];
-                if (b == null || b.IsDead)
+                if (b == null || b.IsDead ||
+                    (viewer != null && b.Concealment != null && b.Concealment.IsHiddenFrom(viewer)))
                 {
                     // Hide the whole marker hierarchy: the local-player marker
                     // owns a child team-colored core that would otherwise keep

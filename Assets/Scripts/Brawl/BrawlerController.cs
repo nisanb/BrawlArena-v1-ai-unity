@@ -142,6 +142,9 @@ namespace BrawlArena
         public string LastWeaponPresentationFailureMessage { get; private set; }
         public bool IsDead => Health.IsDead;
         public bool IsPlayer { get; private set; }
+        /// <summary>Grass-concealment state; created in Start alongside the health bar.</summary>
+        public ConcealmentTracker Concealment => concealment;
+        ConcealmentTracker concealment;
         public int MatchSpawnSlot { get; private set; } = -1;
         public bool IsRespawning => respawning;
         public float RespawnRemaining =>
@@ -360,6 +363,7 @@ namespace BrawlArena
             if (MatchManager.Instance != null) MatchManager.Instance.Register(this);
             CreateTeamRing();
             HealthBarWorld.Create(this);
+            concealment = ConcealmentTracker.Ensure(this);
             initialized = true;
         }
 
@@ -1017,6 +1021,8 @@ namespace BrawlArena
             {
                 var b = brawlers[i];
                 if (b == null || b == this || b.team == team || b.IsDead) continue;
+                // Auto-aim must not leak grass-concealed enemies.
+                if (b.Concealment != null && b.Concealment.IsHiddenFrom(this)) continue;
                 float distanceSq = (transform.position - b.transform.position).sqrMagnitude;
                 if (distanceSq < bestDistSq &&
                     CombatPhysics.HasLineOfSight(CombatAimPoint, b.CombatAimPoint))
@@ -1053,6 +1059,9 @@ namespace BrawlArena
                 BrawlerController candidate = brawlers[i];
                 if (candidate == null || candidate == this || candidate.team == team ||
                     candidate.IsDead)
+                    continue;
+                // Auto-aim must not leak grass-concealed enemies.
+                if (candidate.Concealment != null && candidate.Concealment.IsHiddenFrom(this))
                     continue;
 
                 float distanceSq = (transform.position - candidate.transform.position).sqrMagnitude;
@@ -1387,6 +1396,7 @@ namespace BrawlArena
             PresentWeaponAim(worldDirection);
             attackRoutine = StartCoroutine(AttackRoutine(target, worldDirection));
             BalanceTelemetryRuntime.RecordAttack(this);
+            if (concealment != null) concealment.RevealFor(ConcealmentRules.AttackRevealSeconds);
             return true;
         }
 
@@ -1440,6 +1450,7 @@ namespace BrawlArena
             PresentWeaponAim(worldDirection);
             superRoutine = StartCoroutine(SuperRoutine(target, worldDirection));
             BalanceTelemetryRuntime.RecordSuper(this);
+            if (concealment != null) concealment.RevealFor(ConcealmentRules.AttackRevealSeconds);
             if (IsPlayer) CombatFeedback.ReportLocalSuper();
             return true;
         }

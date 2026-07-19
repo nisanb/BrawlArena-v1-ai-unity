@@ -1,8 +1,20 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace BrawlArena
 {
+    /// <summary>
+    /// Camera rig personalities. TopDownBrawl is the classic 3/4 mobile-brawler
+    /// framing; ActionThirdPerson drops low behind the hero so the horizon is
+    /// visible and the world reads big (action-MMORPG experiment).
+    /// </summary>
+    public enum BrawlCameraStyle
+    {
+        TopDownBrawl,
+        ActionThirdPerson,
+    }
+
     /// <summary>
     /// Brawler chase camera: third-person 3/4 angle with a player-driven
     /// orbit. Default framing sits at a ~42.5 deg pitch and ~13.0 unit
@@ -17,6 +29,11 @@ namespace BrawlArena
     /// </summary>
     public class BrawlCamera : MonoBehaviour
     {
+        [Tooltip("Rig personality. ActionThirdPerson overrides the rig fields below in Awake/SetStyle.")]
+        public BrawlCameraStyle style = BrawlCameraStyle.TopDownBrawl;
+        [Tooltip("Vertical follow-focus offset used by ActionThirdPerson so the frame centers the chest and horizon instead of the feet.")]
+        public float focusHeight = 1.5f;
+
         public Transform target;
         [Tooltip("Follow offset at yaw 0; pitch and distance are derived from it.")]
         // (0, 8.8, -9.6) => pitch ~42.5 deg, distance ~13.0 (ORDER R rig
@@ -83,6 +100,53 @@ namespace BrawlArena
         void Awake()
         {
             instance = this;
+            // Only the action style forces its rig; TopDownBrawl scenes keep
+            // whatever tuning they were built with.
+            if (style == BrawlCameraStyle.ActionThirdPerson) ConfigureStyle();
+            DeriveRigFromOffset();
+        }
+
+        /// <summary>Current style of the live camera; TopDownBrawl when none exists.</summary>
+        public static BrawlCameraStyle ActiveStyle =>
+            instance != null ? instance.style : BrawlCameraStyle.TopDownBrawl;
+
+        /// <summary>Switches rig personality at runtime and re-snaps behind the target.</summary>
+        public void SetStyle(BrawlCameraStyle newStyle)
+        {
+            style = newStyle;
+            ConfigureStyle();
+            if (target != null) SetTarget(target);
+        }
+
+        void ConfigureStyle()
+        {
+            var attachedCamera = GetComponent<Camera>();
+            if (style == BrawlCameraStyle.ActionThirdPerson)
+            {
+                offset = new Vector3(0f, 2.2f, -8.5f); // pitch ~14.5 deg, distance ~8.8
+                minPitch = 4f;
+                maxPitch = 50f;
+                movementAutoTurn = true;
+                autoTurnSpeed = 90f;
+                if (attachedCamera != null)
+                {
+                    attachedCamera.fieldOfView = 60f;
+                    attachedCamera.farClipPlane = 500f;
+                }
+            }
+            else
+            {
+                offset = new Vector3(0f, 8.8f, -9.6f);
+                minPitch = 30f;
+                maxPitch = 62f;
+                movementAutoTurn = false;
+                autoTurnSpeed = 30f;
+                if (attachedCamera != null)
+                {
+                    attachedCamera.fieldOfView = 54f;
+                    attachedCamera.farClipPlane = 200f;
+                }
+            }
             DeriveRigFromOffset();
         }
 
@@ -123,11 +187,15 @@ namespace BrawlArena
             target = t;
             if (target == null) return;
             DeriveRigFromOffset();
-            yaw = 0f;
+            // Action style starts framed behind the hero; classic keeps the
+            // stable world-north yaw drag-aim relies on.
+            yaw = style == BrawlCameraStyle.ActionThirdPerson
+                ? Mathf.Repeat(target.eulerAngles.y, 360f)
+                : 0f;
             lastTargetPos = target.position;
             lastLeadSamplePos = target.position;
             leadOffset = Vector3.zero;
-            ApplyRig(target.position, true);
+            ApplyRig(FocusPoint(target.position), true);
             followVelocity = Vector3.zero;
             obstructionVelocity = 0f;
         }
@@ -141,6 +209,13 @@ namespace BrawlArena
             yaw = Mathf.Repeat(yaw + deltaX * scale * dragYawSensitivity, 360f);
             pitch = Mathf.Clamp(pitch - deltaY * scale * dragPitchSensitivity, minPitch, maxPitch);
             noAutoTurnUntil = Time.time + autoTurnGraceAfterDrag;
+        }
+
+        Vector3 FocusPoint(Vector3 basePosition)
+        {
+            return style == BrawlCameraStyle.ActionThirdPerson
+                ? basePosition + Vector3.up * focusHeight
+                : basePosition;
         }
 
         Vector3 RigOffset(float rigDistance)
@@ -237,6 +312,14 @@ namespace BrawlArena
 
         void LateUpdate()
         {
+#if UNITY_EDITOR
+            // Editor-only style flip for live iteration on any scene.
+            var kb = Keyboard.current;
+            if (kb != null && kb.f5Key.wasPressedThisFrame)
+                SetStyle(style == BrawlCameraStyle.ActionThirdPerson
+                    ? BrawlCameraStyle.TopDownBrawl
+                    : BrawlCameraStyle.ActionThirdPerson);
+#endif
             if (target == null)
             {
                 RestoreHiddenOccluders();
@@ -249,7 +332,7 @@ namespace BrawlArena
             if (movementAutoTurn) UpdateAutoTurn();
             else lastTargetPos = target.position;
             UpdateMovementLead();
-            ApplyRig(target.position + leadOffset, false);
+            ApplyRig(FocusPoint(target.position + leadOffset), false);
 
             if (!AccessibilitySettings.ReducedMotionEnabled && Time.time < shakeUntil)
             {

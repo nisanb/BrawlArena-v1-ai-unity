@@ -22,6 +22,9 @@ namespace BrawlArena.EditorAutomation
     public static class ArenaSceneBuilder
     {
         const string ScenePath = "Assets/Scenes/Arena.unity";
+        public const string ActionScenePath = "Assets/Scenes/ActionArena.unity";
+        const string ActionNavMeshPath = "Assets/Scenes/ActionArenaNavMesh.asset";
+        const string ActionMinimapPath = "Assets/Textures/ActionArenaMinimap.png";
         const string Heroes = "Assets/ModularRPGHeroesPBR/Prefabs/BasicCharacters/";
         const string Weapons = "Assets/ModularRPGHeroesPBR/Prefabs/Weapons/";
         const string Arena = "Assets/Battle Arena - Cartoon Assets/Prefabs/";
@@ -150,6 +153,245 @@ namespace BrawlArena.EditorAutomation
             return Report.ToString();
         }
 
+        // ---------------- ActionArena (action-MMORPG experiment) ----------------
+
+        /// <summary>
+        /// Builds the 2x-linear action-MMORPG experiment map: same match
+        /// systems and roster as the classic arena, but on the Action layout
+        /// profile with a low third-person camera, three lanes, a doubled
+        /// cliff ring, and tall-grass concealment patches.
+        /// </summary>
+        public static string BuildActionArenaScene()
+        {
+            Report.Clear();
+            // Variant builders run before the active scene is replaced (see
+            // BuildArenaScene) and before the profile switch so their proof
+            // scenes never see Action-profile coordinates.
+            BrawlerDefinition[] roster = BuildRoster();
+            ArenaLayout.Profile = ArenaProfile.Action;
+            try
+            {
+                var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                var marker = new GameObject("ArenaProfileMarker").AddComponent<ArenaProfileMarker>();
+                marker.profile = ArenaProfile.Action;
+
+                var env = new GameObject("Environment");
+                BuildGround(env.transform);
+                BuildBoundary(env.transform);
+                BuildActionProps(env.transform);
+                BuildActionGrass(env.transform);
+                BuildLighting();
+                // Much lighter fog than the classic arena so the far cliff
+                // ring reads as a horizon instead of dissolving into haze.
+                RenderSettings.fogDensity = 0.0035f;
+                BuildSystems(roster);
+                BuildCamera();
+                var brawlCam = UnityEngine.Object.FindFirstObjectByType<BrawlCamera>();
+                if (brawlCam != null)
+                {
+                    brawlCam.style = BrawlCameraStyle.ActionThirdPerson;
+                    var cam = brawlCam.GetComponent<Camera>();
+                    cam.fieldOfView = 60f;
+                    cam.farClipPlane = 500f;
+                }
+                BakeNavMesh(env, ActionNavMeshPath);
+
+                Directory.CreateDirectory("Assets/Scenes");
+                EditorSceneManager.SaveScene(scene, ActionScenePath);
+                PortraitStudio.CaptureMinimap(ArenaLayout.MinimapHalfExtent, ActionMinimapPath);
+                // This scene keeps its own minimap sprite so rebuilding either
+                // arena never clobbers the other's HUD map.
+                var theme = UnityEngine.Object.FindFirstObjectByType<UiTheme>();
+                var actionMinimap = AssetDatabase.LoadAssetAtPath<Sprite>(ActionMinimapPath);
+                if (theme != null && actionMinimap != null)
+                {
+                    theme.minimapBackground = actionMinimap;
+                    EditorUtility.SetDirty(theme);
+                    EditorSceneManager.SaveScene(scene, ActionScenePath);
+                }
+                RegisterBuildScenes();
+                EnsureAlwaysIncludedShader("Universal Render Pipeline/Unlit");
+                TunePipelineAssets();
+                AssetDatabase.SaveAssets();
+
+                Report.AppendLine("Scene saved: " + ActionScenePath);
+                return Report.ToString();
+            }
+            finally
+            {
+                ArenaLayout.Profile = ArenaProfile.Classic;
+            }
+        }
+
+        /// <summary>
+        /// Cover for the 160m field: the classic plaza cover motif around the
+        /// zone, flank lanes marked by pillar rows, wall segments separating
+        /// lanes, and rock/crystal cover so ranged sightlines cap at ~25m.
+        /// All solid pieces are mirrored 180 degrees for competitive fairness.
+        /// </summary>
+        static void BuildActionProps(Transform parent)
+        {
+            var props = new GameObject("Props").transform;
+            props.SetParent(parent, false);
+
+            void Pair(string path, Vector3 pos, float rotY, float scale = 1f, bool collider = true, bool groundSnap = false)
+            {
+                Place(path, pos, rotY, props, scale, collider, groundSnap);
+                Vector3 mirror = new Vector3(-pos.x, pos.y, -pos.z);
+                Place(path, mirror, rotY + 180f, props, scale, collider, groundSnap);
+            }
+
+            // Zone plaza cover: two pillar pairs and crate clusters just
+            // outside the capture radius.
+            Pair(Arena + "Props/Pilar1.prefab", new Vector3(-10f, 0f, -10f), 0f, 1.15f, true, true);
+            Pair(Arena + "Props/Pilar2.prefab", new Vector3(10f, 0f, -10f), 90f, 1.15f, true, true);
+            Pair(Arena + "Props/Barrel01.prefab", new Vector3(-16f, 0f, -3f), 20f, 1f, true, true);
+            Pair(Arena + "Props/Box.prefab", new Vector3(-16f, 0f, 0.5f), 10f, 1f, true, true);
+
+            // Lane separators: mudwall segments between the center lane and
+            // each flank lane, with wide gaps for rotations.
+            for (int side = -1; side <= 1; side += 2)
+            {
+                foreach (float z in new[] { -28f, 0f, 28f })
+                    Pair(Arena + "Props/Mudwall01.prefab", new Vector3(20f * side, 0f, z), 90f, 1.4f, true, true);
+            }
+
+            // Flank-lane cover rows at x ~ +-34: pillars and chariots every
+            // ~16-20m so the long lanes never become one open sightline.
+            Pair(Arena + "Props/Pilar3.prefab", new Vector3(-34f, 0f, -18f), 0f, 1.2f, true, true);
+            Pair(Arena + "Props/Pilar4.prefab", new Vector3(34f, 0f, -18f), 90f, 1.2f, true, true);
+            Pair(Arena + "Props/Chariot.prefab", new Vector3(-34f, 0f, 2f), -35f, 1.1f, true, true);
+            Pair(Arena + "Props/Box02.prefab", new Vector3(34f, 0f, 2f), 12f, 1.2f, true, true);
+            Pair(Arena + "Props/Pilar1.prefab", new Vector3(-34f, 0f, 36f), 0f, 1.2f, true, true);
+            Pair(Arena + "Props/Pilar2.prefab", new Vector3(34f, 0f, 36f), 90f, 1.2f, true, true);
+
+            // Approach cover between spawns and midfield.
+            Pair(Arena + "Props/Barrel02.prefab", new Vector3(-8f, 0f, -34f), 65f, 1.1f, true, true);
+            Pair(Arena + "Props/Box02.prefab", new Vector3(10f, 0f, -38f), 12f, 1.1f, true, true);
+            Pair(Arena + "Props/Barrel01.prefab", new Vector3(24f, 0f, -46f), 105f, 1f, true, true);
+
+            // Crystal landmarks in the expanded corners double as outer cover.
+            Pair(Arena + "Rocks/Crystal1.prefab", new Vector3(-58f, 0f, 52f), 30f, 1.6f);
+            Pair(Arena + "Rocks/Crystal3.prefab", new Vector3(58f, 0f, 52f), 10f, 1.4f);
+
+            // Gem mine marker stays dead center for GemGrab compatibility.
+            Place(Arena + "Rocks/Crystal2.prefab", Vector3.zero, 15f, props, 0.55f, true, true);
+
+            // Scattered rock cover across the open midfield quadrants,
+            // mirrored, kept away from lanes and the zone plaza.
+            var rng = new System.Random(4242);
+            string[] rocks =
+            {
+                Arena + "Rocks/rock1.prefab", Arena + "Rocks/rock3.prefab", Arena + "Rocks/rock5.prefab",
+                Arena + "Rocks/Stone01.prefab", Arena + "Rocks/Stone03.prefab", Arena + "Rocks/Stone05.prefab",
+            };
+            int rockPairs = 0;
+            int attempts = 0;
+            while (rockPairs < 16 && attempts++ < 200)
+            {
+                float a = (float)(rng.NextDouble() * Math.PI);
+                float d = 40f + (float)rng.NextDouble() * 28f;
+                Vector3 pos = new Vector3(Mathf.Sin(a) * d, 0f, Mathf.Cos(a) * d);
+                if (Mathf.Abs(pos.x) > 70f || Mathf.Abs(pos.z) > 70f) continue;
+                // Keep the three lanes and both spawn fans clear.
+                if (Mathf.Abs(pos.x) < 8f) continue;
+                if (Mathf.Abs(pos.x - 34f) < 6f || Mathf.Abs(pos.x + 34f) < 6f) continue;
+                if (Mathf.Abs(pos.z) > 42f && Mathf.Abs(pos.x) < 22f) continue;
+                Pair(rocks[rng.Next(rocks.Length)], pos, rng.Next(360),
+                    1f + (float)rng.NextDouble() * 0.7f);
+                rockPairs++;
+            }
+
+            // Walkable decorative ground grass, denser than classic to sell
+            // the overgrown-field theme.
+            string[] grass = { Arena + "Floors/SolGrass01.prefab", Arena + "Floors/SolGrass02.prefab", Arena + "Floors/SolGrass03.prefab" };
+            for (int i = 0; i < 90; i++)
+            {
+                Vector3 pos = new Vector3(rng.Next(-72, 73), 0f, rng.Next(-72, 73));
+                Pair(grass[rng.Next(grass.Length)], pos, rng.Next(360), 1.2f, false);
+            }
+        }
+
+        /// <summary>
+        /// Tall-grass concealment patches: a GrassPatchVolume plus a jittered
+        /// cluster of vegetation scaled so the grass tops out around 2.3m —
+        /// taller than any brawler. Grass is walkable (no colliders), so it
+        /// affects neither the NavMesh nor camera obstruction.
+        /// </summary>
+        static void BuildActionGrass(Transform parent)
+        {
+            var grassRoot = new GameObject("TallGrass").transform;
+            grassRoot.SetParent(parent, false);
+
+            const float TargetGrassHeight = 2.3f;
+            string[] grassPrefabs =
+            {
+                Arena + "Vegetations/Grass01.prefab", Arena + "Vegetations/Grass02.prefab",
+                Arena + "Vegetations/Grass03.prefab", Arena + "Vegetations/Grass04.prefab",
+            };
+
+            // Measure each prefab's authored height once so every variant
+            // scales to the same canopy height regardless of source size.
+            var scales = new float[grassPrefabs.Length];
+            for (int i = 0; i < grassPrefabs.Length; i++)
+            {
+                var prefab = Load(grassPrefabs[i]);
+                if (prefab == null) { scales[i] = 1f; continue; }
+                var probe = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                var renderers = probe.GetComponentsInChildren<Renderer>();
+                float height = 1f;
+                if (renderers.Length > 0)
+                {
+                    var bounds = renderers[0].bounds;
+                    for (int r = 1; r < renderers.Length; r++) bounds.Encapsulate(renderers[r].bounds);
+                    height = Mathf.Max(0.2f, bounds.size.y);
+                }
+                UnityEngine.Object.DestroyImmediate(probe);
+                scales[i] = TargetGrassHeight / height;
+            }
+            Report.AppendLine("Tall grass scales: " + string.Join(", ",
+                scales.Select(s => s.ToString("0.00"))));
+
+            var rng = new System.Random(9001);
+            void PatchPair(Vector3 center, float radius)
+            {
+                PlaceGrassPatch(center, radius);
+                PlaceGrassPatch(new Vector3(-center.x, 0f, -center.z), radius);
+            }
+
+            void PlaceGrassPatch(Vector3 center, float radius)
+            {
+                var patchGo = new GameObject("GrassPatch");
+                patchGo.transform.SetParent(grassRoot, false);
+                patchGo.transform.position = center;
+                var volume = patchGo.AddComponent<GrassPatchVolume>();
+                volume.radius = radius;
+
+                int clumps = 12 + rng.Next(7);
+                for (int i = 0; i < clumps; i++)
+                {
+                    // Sqrt-distributed radius = uniform area coverage, with a
+                    // slight bias outward so patch edges read clearly.
+                    float t = Mathf.Sqrt((float)rng.NextDouble());
+                    float r = t * (radius - 0.6f);
+                    float angle = (float)(rng.NextDouble() * Math.PI * 2);
+                    Vector3 pos = center + new Vector3(Mathf.Sin(angle) * r, 0f, Mathf.Cos(angle) * r);
+                    int variant = rng.Next(grassPrefabs.Length);
+                    Place(grassPrefabs[variant], pos, rng.Next(360), grassRoot,
+                        scales[variant] * (0.85f + (float)rng.NextDouble() * 0.3f), false);
+                }
+            }
+
+            // Mirrored patch layout: zone flanks, flank-lane ambush spots,
+            // center-lane approaches, and near-spawn escape pockets.
+            PatchPair(new Vector3(15f, 0f, 4f), 7f);
+            PatchPair(new Vector3(-34f, 0f, -10f), 7f);
+            PatchPair(new Vector3(34f, 0f, 26f), 7f);
+            PatchPair(new Vector3(4f, 0f, -30f), 6f);
+            PatchPair(new Vector3(-14f, 0f, -42f), 6f);
+            Report.AppendLine("Tall grass patches: 10");
+        }
+
         /// <summary>MainMenu first (when built), then Arena.</summary>
         internal static void RegisterBuildScenes()
         {
@@ -158,6 +400,8 @@ namespace BrawlArena.EditorAutomation
             if (AssetDatabase.LoadAssetAtPath<SceneAsset>(menuPath) != null)
                 list.Add(new EditorBuildSettingsScene(menuPath, true));
             list.Add(new EditorBuildSettingsScene(ScenePath, true));
+            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(ActionScenePath) != null)
+                list.Add(new EditorBuildSettingsScene(ActionScenePath, true));
             EditorBuildSettings.scenes = list.ToArray();
         }
 
@@ -404,7 +648,12 @@ namespace BrawlArena.EditorAutomation
             };
             var rng = new System.Random(7);
             int n = 0;
-            for (float a = 0f; a < 360f; a += 12f)
+            // The action map's ring sits twice as far out: denser spacing and
+            // larger scale keep it reading as solid canyon walls, not islands.
+            bool actionRing = ArenaLayout.Profile == ArenaProfile.Action;
+            float step = actionRing ? 6f : 12f;
+            float baseScale = actionRing ? 1.8f : 1f;
+            for (float a = 0f; a < 360f; a += step)
             {
                 float rad = a * Mathf.Deg2Rad;
                 // Alternate a slight radius offset per placement so the ring
@@ -414,7 +663,8 @@ namespace BrawlArena.EditorAutomation
                 float dist = ArenaLayout.CliffMinRadius + ringOffset +
                              (float)rng.NextDouble() * ArenaLayout.CliffRadiusJitter;
                 Vector3 pos = new Vector3(Mathf.Sin(rad) * dist, 0f, Mathf.Cos(rad) * dist);
-                Place(cliffs[n % cliffs.Length], pos, a + 180f + rng.Next(-15, 15), boundary, 1f + (float)rng.NextDouble() * 0.25f);
+                Place(cliffs[n % cliffs.Length], pos, a + 180f + rng.Next(-15, 15), boundary,
+                    baseScale * (1f + (float)rng.NextDouble() * 0.25f));
                 n++;
             }
 
@@ -994,6 +1244,11 @@ namespace BrawlArena.EditorAutomation
 
         static void BakeNavMesh(GameObject env)
         {
+            BakeNavMesh(env, "Assets/Scenes/ArenaNavMesh.asset");
+        }
+
+        static void BakeNavMesh(GameObject env, string navPath)
+        {
             var surface = env.AddComponent<NavMeshSurface>();
             surface.collectObjects = CollectObjects.Children;
             surface.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
@@ -1001,7 +1256,6 @@ namespace BrawlArena.EditorAutomation
             if (surface.navMeshData != null)
             {
                 Directory.CreateDirectory("Assets/Scenes");
-                const string navPath = "Assets/Scenes/ArenaNavMesh.asset";
                 var old = AssetDatabase.LoadAssetAtPath<NavMeshData>(navPath);
                 if (old != null) AssetDatabase.DeleteAsset(navPath);
                 AssetDatabase.CreateAsset(surface.navMeshData, navPath);

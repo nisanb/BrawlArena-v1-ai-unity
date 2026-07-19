@@ -306,6 +306,35 @@ namespace BrawlArena.EditorAutomation
                     result.message = "entering fresh play mode with probe " + scenario;
                     break;
                 }
+                case "build_action_scene":
+                    result.message = ArenaSceneBuilder.BuildActionArenaScene();
+                    break;
+                case "mixamo_reimport":
+                    result.message = MixamoImportTools.ReimportAndValidateInternal();
+                    break;
+                case "camera_style":
+                {
+                    // arg: "action" => ActionThirdPerson, anything else => TopDownBrawl.
+                    if (!EditorApplication.isPlaying)
+                    {
+                        result.ok = false;
+                        result.message = "camera_style requires Play Mode";
+                        break;
+                    }
+                    var brawlCam = UnityEngine.Object.FindFirstObjectByType<BrawlCamera>();
+                    if (brawlCam == null)
+                    {
+                        result.ok = false;
+                        result.message = "no BrawlCamera in scene";
+                        break;
+                    }
+                    var style = string.Equals(cmd.arg, "action", StringComparison.OrdinalIgnoreCase)
+                        ? BrawlCameraStyle.ActionThirdPerson
+                        : BrawlCameraStyle.TopDownBrawl;
+                    brawlCam.SetStyle(style);
+                    result.message = "camera style => " + style;
+                    break;
+                }
                 case "game_screenshot":
                 {
                     string file = Path.Combine(Dir, string.IsNullOrEmpty(cmd.arg) ? "game.png" : cmd.arg);
@@ -556,10 +585,13 @@ namespace BrawlArena.EditorAutomation
                     }
                 }
                 Vector3 p = b.transform.position;
+                string grass = b.Concealment != null && b.Concealment.InGrass
+                    ? (b.Concealment.SelfConcealed ? " grass=HIDDEN" : " grass=revealed")
+                    : "";
                 sb.AppendLine(
                     $"{b.displayName} [{b.team}]{(b.IsPlayer ? " PLAYER" : "")} hp={b.Health.Current:0}/{b.Health.Max:0} " +
                     $"stam={b.Stamina:0} super={b.SuperCharge:0}/{b.maxSuperCharge:0} uses={b.SupersUsed} " +
-                    $"pos=({p.x:0.0},{p.z:0.0}) anim={clip} dead={b.IsDead}");
+                    $"pos=({p.x:0.0},{p.z:0.0}) anim={clip} dead={b.IsDead}{grass}");
             }
             return sb.ToString();
         }

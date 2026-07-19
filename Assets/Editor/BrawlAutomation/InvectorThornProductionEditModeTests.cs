@@ -518,7 +518,9 @@ namespace BrawlArena.EditorAutomation.Tests
             controller.GetOverrides(overrides);
             KeyValuePair<AnimationClip, AnimationClip>[] active = overrides
                 .Where(value => value.Key != null && value.Value != null &&
-                                value.Key != value.Value)
+                                value.Key != value.Value &&
+                                !InvectorMigrationPilotBuilder.IsLocomotionOverrideSource(
+                                    value.Key.name))
                 .ToArray();
             Assert.That(active, Has.Length.EqualTo(2));
             KeyValuePair<AnimationClip, AnimationClip> basic = active.Single(value =>

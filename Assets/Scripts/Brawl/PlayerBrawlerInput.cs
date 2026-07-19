@@ -87,7 +87,7 @@ namespace BrawlArena
                         if (TryResolveAttackAim(releasedDrag, out Vector3 releasedDirection))
                             self.TryAttackDirection(releasedDirection);
                         else
-                            self.TryAttackAuto();
+                            AttackAutoWithActionFallback();
                     }
                     ResetAttackGesture();
                 }
@@ -104,7 +104,21 @@ namespace BrawlArena
             if (!self.CanAct && attackGestureActive) ResetAttackGesture();
 
             if (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.jKey.wasPressedThisFrame))
-                self.TryAttackAuto();
+                AttackAutoWithActionFallback();
+        }
+
+        /// <summary>
+        /// Auto-aim first; in the action camera style an on-cooldown-free miss
+        /// (no target in range) fires toward planar camera-forward instead, so
+        /// attacking always does something in third person.
+        /// </summary>
+        void AttackAutoWithActionFallback()
+        {
+            if (self.TryAttackAuto()) return;
+            if (BrawlCamera.ActiveStyle != BrawlCameraStyle.ActionThirdPerson) return;
+            if (!self.BasicAttackReady) return;
+            GetCurrentCameraBasis(out Vector3 forward, out _);
+            self.TryAttackDirection(forward);
         }
 
         void UpdateWardStep(BrawlHUD hud, Keyboard kb)

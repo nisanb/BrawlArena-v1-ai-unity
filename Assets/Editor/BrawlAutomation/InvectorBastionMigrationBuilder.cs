@@ -49,18 +49,21 @@ namespace BrawlArena.EditorAutomation
         public const string BasicAttackOverrideSourceName = "WeakAttack_UnarmedA";
         public const string SuperAttackOverrideSourceName = "StrongAttack_PunchA";
         public const string CarryPoseOverrideSourceName = "Idle@Pistol";
+        // Mixamo sword-and-shield set (action-MMO experiment); the previous
+        // ModularRPGHeroes SwordShield clips remain in the project if a
+        // rollback is ever needed.
         public const string BasicAttackClipPath =
-            "Assets/ModularRPGHeroesPBR/Animations/SwordShield/NormalAttack01_SwordShield.fbx";
-        public const string BasicAttackClipGuid = "e160663af1b56d44e94a7ceb3007c110";
-        public const string BasicAttackClipName = "NormalAttack01_SwordShield";
+            "Assets/ThirdParty/Mixamo/Bastion/Mixamo_Bastion_Slash.fbx";
+        public const string BasicAttackClipGuid = "a34ddb6e6818254438faefa37fb05e5c";
+        public const string BasicAttackClipName = "Mixamo_Bastion_Slash";
         public const string SuperAttackClipPath =
-            "Assets/ModularRPGHeroesPBR/Animations/SwordShield/NormalAttack02_SwordShield.fbx";
-        public const string SuperAttackClipGuid = "dfbba31277e926e44b3def7cde351a13";
-        public const string SuperAttackClipName = "NormalAttack02_SwordShield";
+            "Assets/ThirdParty/Mixamo/Bastion/Mixamo_Bastion_Power.fbx";
+        public const string SuperAttackClipGuid = "0eaae47a889889f46867ed44e485183f";
+        public const string SuperAttackClipName = "Mixamo_Bastion_Power";
         public const string CarryPoseClipPath =
-            "Assets/ModularRPGHeroesPBR/Animations/SwordShield/Idle_SwordShield.fbx";
-        public const string CarryPoseClipGuid = "6383a08b0ddb19543948954c6e075143";
-        public const string CarryPoseClipName = "Idle_SwordShield";
+            "Assets/ThirdParty/Mixamo/Bastion/Mixamo_Bastion_Idle.fbx";
+        public const string CarryPoseClipGuid = "2c68f709f34982a4db4da544ac129a69";
+        public const string CarryPoseClipName = "Mixamo_Bastion_Idle";
 
         static readonly Color BastionMuzzleColor = new Color(0xC9 / 255f, 0xD8 / 255f, 0xE6 / 255f, 1f);
 
@@ -165,9 +168,9 @@ namespace BrawlArena.EditorAutomation
         public static void ValidatePrerequisites()
         {
             InvectorMigrationPilotBuilder.ValidatePrerequisites();
-            RequireGuid(BasicAttackClipPath, BasicAttackClipGuid, "NormalAttack01_SwordShield clip");
-            RequireGuid(SuperAttackClipPath, SuperAttackClipGuid, "NormalAttack02_SwordShield clip");
-            RequireGuid(CarryPoseClipPath, CarryPoseClipGuid, "Idle_SwordShield clip");
+            RequireGuid(BasicAttackClipPath, BasicAttackClipGuid, "Mixamo_Bastion_Slash clip");
+            RequireGuid(SuperAttackClipPath, SuperAttackClipGuid, "Mixamo_Bastion_Power clip");
+            RequireGuid(CarryPoseClipPath, CarryPoseClipGuid, "Mixamo_Bastion_Idle clip");
 
             GameObject bastion = AssetDatabase.LoadAssetAtPath<GameObject>(BastionPath);
             Animator animator = bastion != null ? bastion.GetComponent<Animator>() : null;
@@ -337,6 +340,7 @@ namespace BrawlArena.EditorAutomation
                     SuperAttackClipName,
                     CarryPoseClipName,
                 });
+            InvectorMigrationPilotBuilder.ConfigureLocomotionOverrides(controller);
             ValidateAttackOverrides(controller);
         }
 
@@ -350,7 +354,9 @@ namespace BrawlArena.EditorAutomation
             controller.GetOverrides(overrides);
             KeyValuePair<AnimationClip, AnimationClip>[] active = overrides
                 .Where(value => value.Key != null && value.Value != null &&
-                                value.Value != value.Key)
+                                value.Value != value.Key &&
+                                !InvectorMigrationPilotBuilder.IsLocomotionOverrideSource(
+                                    value.Key.name))
                 .ToArray();
             KeyValuePair<AnimationClip, AnimationClip>[] basic = active
                 .Where(value => string.Equals(
@@ -385,8 +391,9 @@ namespace BrawlArena.EditorAutomation
                     carry[0].Value.name, CarryPoseClipName, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
-                    "The Bastion AOC must contain only WeakAttack_UnarmedA -> NormalAttack01_SwordShield, " +
-                    "StrongAttack_PunchA -> NormalAttack02_SwordShield, and Idle@Pistol -> Idle_SwordShield.");
+                    "The Bastion AOC must contain only WeakAttack_UnarmedA -> " + BasicAttackClipName +
+                    ", StrongAttack_PunchA -> " + SuperAttackClipName +
+                    ", and Idle@Pistol -> " + CarryPoseClipName + ".");
             }
         }
 

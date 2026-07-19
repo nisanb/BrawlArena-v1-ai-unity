@@ -197,6 +197,11 @@ namespace BrawlArena
                 nextThink = Time.time + thinkInterval;
             }
 
+            // A tracked target that slipped into grass is lost, not chased.
+            if (target != null && target.Concealment != null &&
+                target.Concealment.IsHiddenFrom(self))
+                target = null;
+
             bool engaging = false;
             float distToTarget = float.MaxValue;
             if (target != null && !target.IsDead)
@@ -469,6 +474,8 @@ namespace BrawlArena
             foreach (var b in MatchManager.Instance.GetBrawlers())
             {
                 if (b == null || b == self || b.team == self.team || b.IsDead) continue;
+                // Bots cannot target what grass concealment hides from them.
+                if (b.Concealment != null && b.Concealment.IsHiddenFrom(self)) continue;
                 float d = PlanarDistance(transform.position, b.transform.position);
                 float score = -d;
                 // Archers finish low-health targets fastest since they can

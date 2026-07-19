@@ -908,12 +908,15 @@ namespace BrawlArena.EditorAutomation
         public const string WizardBasicAttackOverrideSourceName = "WeakAttack_UnarmedA";
         public const string WizardSuperAttackOverrideSourceName = "StrongAttack_PunchA";
         public const string CarryPoseOverrideSourceName = "Idle@Pistol";
+        // Mixamo two-hand casts (action-MMO experiment); the carry pose stays
+        // on the MagicWand idle because the staff support-hand IK was tuned
+        // against it.
         public const string WizardBasicAttackClipPath =
-            "Assets/ModularRPGHeroesPBR/Animations/MagicWand/Attack01_MagicWand.fbx";
-        public const string WizardBasicAttackClipName = "Attack01_MagicWand";
+            "Assets/ThirdParty/Mixamo/Frost/Mixamo_Frost_Cast1.fbx";
+        public const string WizardBasicAttackClipName = "Mixamo_Frost_Cast1";
         public const string WizardSuperAttackClipPath =
-            "Assets/ModularRPGHeroesPBR/Animations/MagicWand/Attack02_MagicWand.fbx";
-        public const string WizardSuperAttackClipName = "Attack02_MagicWand";
+            "Assets/ThirdParty/Mixamo/Frost/Mixamo_Frost_Cast2.fbx";
+        public const string WizardSuperAttackClipName = "Mixamo_Frost_Cast2";
         public const string WizardCarryPoseClipPath =
             "Assets/ModularRPGHeroesPBR/Animations/MagicWand/Idle_MagicWand.fbx";
         public const string WizardCarryPoseClipName = "Idle_MagicWand";
@@ -946,6 +949,74 @@ namespace BrawlArena.EditorAutomation
                     WizardSuperAttackClipName,
                     WizardCarryPoseClipName,
                 });
+        }
+
+        // ---------------- Mixamo locomotion/reaction overrides ----------------
+
+        const string MixamoRoot = "Assets/ThirdParty/Mixamo/";
+
+        // Vendor source clip name -> Mixamo replacement. Unlike the attack
+        // slots these sources may appear in several layers/blend trees of the
+        // shared graph, so they are overridden per-occurrence rather than
+        // through the exactly-one guard in ConfigurePresentationOverrides.
+        static readonly (string Source, string Path, string Clip)[] LocomotionOverrideMap =
+        {
+            ("Idle", MixamoRoot + "Locomotion/Mixamo_Idle.fbx", "Mixamo_Idle"),
+            ("Walk", MixamoRoot + "Locomotion/Mixamo_Walk.fbx", "Mixamo_Walk"),
+            ("Run", MixamoRoot + "Locomotion/Mixamo_Run.fbx", "Mixamo_Run"),
+            ("Sprint", MixamoRoot + "Locomotion/Mixamo_Sprint.fbx", "Mixamo_Sprint"),
+            ("NewRollv2", MixamoRoot + "Locomotion/Mixamo_Roll.fbx", "Mixamo_Roll"),
+            ("Hit Small Front", MixamoRoot + "Reactions/Mixamo_HitSmall.fbx", "Mixamo_HitSmall"),
+            ("Hit Big Front", MixamoRoot + "Reactions/Mixamo_HitBig.fbx", "Mixamo_HitBig"),
+            ("Recoil_Low", MixamoRoot + "Reactions/Mixamo_HitSmall.fbx", "Mixamo_HitSmall"),
+            ("Recoil_Hard", MixamoRoot + "Reactions/Mixamo_HitBig.fbx", "Mixamo_HitBig"),
+        };
+
+        /// <summary>True for vendor sources owned by the shared Mixamo locomotion pass — hero attack validators ignore these pairs.</summary>
+        internal static bool IsLocomotionOverrideSource(string sourceName)
+        {
+            for (int i = 0; i < LocomotionOverrideMap.Length; i++)
+                if (string.Equals(LocomotionOverrideMap[i].Source, sourceName, StringComparison.Ordinal))
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Replaces the vendor locomotion, roll, and hit-reaction clips with
+        /// the retargeted Mixamo set on every hero's override controller.
+        /// </summary>
+        internal static void ConfigureLocomotionOverrides(AnimatorOverrideController controller)
+        {
+            if (controller == null)
+                throw new ArgumentNullException(nameof(controller));
+
+            var overrides = new List<KeyValuePair<AnimationClip, AnimationClip>>(
+                controller.overridesCount);
+            controller.GetOverrides(overrides);
+
+            for (int m = 0; m < LocomotionOverrideMap.Length; m++)
+            {
+                var entry = LocomotionOverrideMap[m];
+                AnimationClip replacement = RequirePresentationClip(entry.Path, entry.Clip);
+                int matched = 0;
+                for (int i = 0; i < overrides.Count; i++)
+                {
+                    AnimationClip source = overrides[i].Key;
+                    if (source == null ||
+                        !string.Equals(source.name, entry.Source, StringComparison.Ordinal))
+                        continue;
+                    overrides[i] = new KeyValuePair<AnimationClip, AnimationClip>(
+                        source, replacement);
+                    matched++;
+                }
+                if (matched == 0)
+                    throw new InvalidOperationException(
+                        "The shared lifecycle graph exposes no '" + entry.Source +
+                        "' locomotion source clip.");
+            }
+
+            controller.ApplyOverrides(overrides);
+            EditorUtility.SetDirty(controller);
         }
 
         internal static void ConfigurePresentationOverrides(
