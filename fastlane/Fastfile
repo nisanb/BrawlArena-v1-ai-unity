@@ -21,8 +21,9 @@ platform :ios do
       readonly: false
     )
 
-    xcodeproj = Dir["build/**/Unity-iPhone.xcodeproj"].first
-    UI.user_error!("Unity-iPhone.xcodeproj not found under build/") unless xcodeproj
+    root = ENV["GITHUB_WORKSPACE"] || File.expand_path("..", __dir__)
+    xcodeproj = Dir[File.join(root, "build/**/Unity-iPhone.xcodeproj")].first
+    UI.user_error!("Unity-iPhone.xcodeproj not found under #{root}/build/") unless xcodeproj
 
     profile_name = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING][app_id]
     team_id = ENV["APPLE_TEAM_ID"].to_s
