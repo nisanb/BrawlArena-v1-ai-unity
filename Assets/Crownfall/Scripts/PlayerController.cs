@@ -6,6 +6,7 @@ namespace Crownfall
     /// Reads mouse/keyboard through the Input System and feeds the CombatMotor.
     /// Hold LMB for a heavy; tap for a light. RMB blocks (Knight) or heavies.
     [RequireComponent(typeof(CombatMotor))]
+    [DefaultExecutionOrder(-5)] // drivers act before the motor consumes buffers
     public class PlayerController : MonoBehaviour
     {
         public CombatMotor Motor { get; private set; }

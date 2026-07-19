@@ -44,25 +44,25 @@ namespace Crownfall
         static readonly ClassKit[] kits =
         {
             new ClassKit { id = ClassId.Knight, displayName = "Knight", blurb = "Sword & shield. The only class that can block.",
-                canBlock = true, maxHealth = 175, maxStamina = 110, runSpeed = 5.0f,
+                canBlock = true, maxHealth = 175, maxStamina = 110, runSpeed = 4.3f,
                 lightDamage = 14, heavyDamage = 27, lightPoiseDamage = 12, heavyPoiseDamage = 27, maxPoise = 46,
                 attackRange = 1.35f, attackRadius = 0.95f, lightLunge = 1.0f, heavyLunge = 1.7f,
                 blockDamageFactor = 0.22f },
 
             new ClassKit { id = ClassId.Greatsword, displayName = "Warbrand", blurb = "Colossal sword. Slow, staggering blows.",
-                maxHealth = 165, maxStamina = 105, runSpeed = 4.7f,
+                maxHealth = 165, maxStamina = 105, runSpeed = 4.0f,
                 lightDamage = 20, heavyDamage = 37, lightPoiseDamage = 17, heavyPoiseDamage = 34, maxPoise = 52,
                 attackRange = 1.6f, attackRadius = 1.15f, lightLunge = 1.2f, heavyLunge = 2.1f,
                 staminaLight = 19f, staminaHeavy = 34f },
 
             new ClassKit { id = ClassId.Duelist, displayName = "Duelist", blurb = "Twin blades. Fast combos, fast feet.",
-                maxHealth = 135, maxStamina = 118, runSpeed = 5.5f,
+                maxHealth = 135, maxStamina = 118, runSpeed = 4.7f,
                 lightDamage = 11, heavyDamage = 23, lightPoiseDamage = 9, heavyPoiseDamage = 20, maxPoise = 30,
                 attackRange = 1.25f, attackRadius = 0.9f, lightLunge = 1.1f, heavyLunge = 1.9f,
                 staminaLight = 12f, staminaRoll = 19f },
 
             new ClassKit { id = ClassId.Mage, displayName = "Mage", blurb = "Bolts at range, a nova when cornered.",
-                isRanged = true, maxHealth = 115, maxStamina = 100, runSpeed = 5.0f,
+                isRanged = true, maxHealth = 115, maxStamina = 100, runSpeed = 4.3f,
                 lightDamage = 16, heavyDamage = 30, lightPoiseDamage = 10, heavyPoiseDamage = 26, maxPoise = 24,
                 attackRange = 1.2f, attackRadius = 0.9f, lightLunge = 0f, heavyLunge = 0f,
                 novaRadius = 4.0f, staminaLight = 14f, staminaHeavy = 32f },
@@ -92,14 +92,14 @@ namespace Crownfall
     {
         public const float InputBufferSeconds = 0.35f;
         public const float RollIFrameStart = 0.05f;
-        public const float RollIFrameEnd = 0.58f;
-        public const float RollSpeedStart = 8.2f;
-        public const float RollSpeedEnd = 2.2f;
-        public const float ComboWindowOpen = 0.55f;
-        public const float StrikeMoment = 0.40f;
-        public const float RollCancelPoint = 0.62f;
-        public const float LungeStart = 0.20f;
-        public const float LungeEnd = 0.48f;
+        public const float RollIFrameEnd = 0.62f;
+        public const float RollSpeedStart = 7.2f;
+        public const float RollSpeedEnd = 2.6f;
+        public const float ComboWindowOpen = 0.5f;
+        public const float StrikeMoment = 0.38f;
+        public const float RollCancelPoint = 0.55f;
+        public const float LungeStart = 0.12f;
+        public const float LungeEnd = 0.42f;
         public const float StaggerDuration = 1.55f;
         public const float RespawnSeconds = 5f;
         public const float SpawnProtection = 1.5f;

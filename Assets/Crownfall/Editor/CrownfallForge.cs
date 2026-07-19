@@ -69,6 +69,8 @@ namespace Crownfall.EditorTools
 
         static Dictionary<string, AnimationClip> LoadClips(string folder)
         {
+            // keyed by FILE name: the packs' internal clip names are unreliable
+            // (abbreviated suffixes, even duplicated names across files)
             var dict = new Dictionary<string, AnimationClip>(System.StringComparer.OrdinalIgnoreCase);
             foreach (var file in Directory.GetFiles(folder, "*.fbx"))
             {
@@ -76,7 +78,7 @@ namespace Crownfall.EditorTools
                 foreach (var obj in AssetDatabase.LoadAllAssetsAtPath(path))
                 {
                     if (obj is AnimationClip clip && !clip.name.StartsWith("__preview"))
-                        dict[clip.name] = clip;
+                        dict[Path.GetFileNameWithoutExtension(path)] = clip;
                 }
             }
             return dict;
@@ -96,6 +98,13 @@ namespace Crownfall.EditorTools
             ctrl.AddParameter("MoveZ", AnimatorControllerParameterType.Float);
             ctrl.AddParameter("RollX", AnimatorControllerParameterType.Float);
             ctrl.AddParameter("RollZ", AnimatorControllerParameterType.Float);
+            var locoRateParam = new AnimatorControllerParameter
+            {
+                name = "LocoRate",
+                type = AnimatorControllerParameterType.Float,
+                defaultFloat = 1f,
+            };
+            ctrl.AddParameter(locoRateParam);
             ctrl.AddParameter("Locked", AnimatorControllerParameterType.Bool);
             ctrl.AddParameter("Blocking", AnimatorControllerParameterType.Bool);
             foreach (var t in new[] { "AttackL", "AttackH", "Roll", "Hit", "Stagger", "Recover", "Die", "Respawn", "Victory", "BlockImpact" })
@@ -122,6 +131,8 @@ namespace Crownfall.EditorTools
             locoChildren[7].timeScale = 1.7f;
             locoChildren[8].timeScale = 1.7f;
             locoTree.children = locoChildren;
+            loco.speedParameter = "LocoRate";
+            loco.speedParameterActive = true;
             sm.defaultState = loco;
 
             // --- roll blend tree
@@ -134,7 +145,7 @@ namespace Crownfall.EditorTools
             rollTree.AddChild(C("RollLeft"), new Vector2(-1f, 0f));
             rollTree.AddChild(C("RollRight"), new Vector2(1f, 0f));
             roll.tag = "Roll";
-            roll.speed = 1.12f;
+            roll.speed = 1.3f;
 
             AnimatorState S(string name, string stem, string tag, float speed = 1f)
             {
@@ -145,10 +156,11 @@ namespace Crownfall.EditorTools
                 return st;
             }
 
-            var l1 = S("AttackL1", "NormalAttack01", "Attack", 1.12f);
-            var l2 = S("AttackL2", "NormalAttack02", "Attack", 1.12f);
-            var l3 = S("AttackL3", "Combo01", "Attack", 1.05f);
-            var heavy = S("Heavy", "Combo03", "Attack", 1f);
+            // light chain uses the short snappy clips; the heavy gets the big slow swing
+            var l1 = S("AttackL1", "NormalAttack01", "Attack", 1.2f);
+            var l2 = S("AttackL2", "Combo01", "Attack", 1.15f);
+            var l3 = S("AttackL3", "Combo02", "Attack", 1.15f);
+            var heavy = S("Heavy", "NormalAttack02", "Attack", 1.12f);
             var getHit = S("GetHit", "GetHit", "Hit", 1.1f);
             var dizzy = S("Dizzy", "Dizzy", "Stagger");
             var die = S("Die", "Die", "Die");
@@ -171,9 +183,9 @@ namespace Crownfall.EditorTools
             }
 
             // locomotion & block entries
-            T(loco, l1, "AttackL", duration: 0.08f);
-            T(loco, heavy, "AttackH", duration: 0.1f);
-            T(loco, roll, "Roll", duration: 0.07f);
+            T(loco, l1, "AttackL", duration: 0.045f);
+            T(loco, heavy, "AttackH", duration: 0.06f);
+            T(loco, roll, "Roll", duration: 0.05f);
             var toBlock = loco.AddTransition(block);
             toBlock.hasExitTime = false; toBlock.hasFixedDuration = true; toBlock.duration = 0.14f;
             toBlock.AddCondition(AnimatorConditionMode.If, 0f, "Blocking");
@@ -187,15 +199,17 @@ namespace Crownfall.EditorTools
             T(block, roll, "Roll", duration: 0.07f);
 
             // combo chain + returns
-            T(l1, l2, "AttackL", duration: 0.09f);
-            T(l2, l3, "AttackL", duration: 0.09f);
+            T(l1, l2, "AttackL", duration: 0.06f);
+            T(l2, l3, "AttackL", duration: 0.06f);
             foreach (var atk in new[] { l1, l2, l3, heavy })
             {
-                T(atk, loco, null, hasExit: true, exitTime: 0.9f, duration: 0.2f);
-                T(atk, roll, "Roll", duration: 0.07f);
+                // late exit so buffered combo presses win the race against the
+                // return-to-locomotion transition (motor hard-breaks at 0.92 anyway)
+                T(atk, loco, null, hasExit: true, exitTime: 0.92f, duration: 0.14f);
+                T(atk, roll, "Roll", duration: 0.06f);
             }
 
-            T(roll, loco, null, hasExit: true, exitTime: 0.86f, duration: 0.16f);
+            T(roll, loco, null, hasExit: true, exitTime: 0.8f, duration: 0.12f);
             T(getHit, loco, null, hasExit: true, exitTime: 0.78f, duration: 0.15f);
             T(dizzy, loco, "Recover", duration: 0.2f);
             T(die, loco, "Respawn", duration: 0.05f);
@@ -213,7 +227,7 @@ namespace Crownfall.EditorTools
                 tr.AddCondition(AnimatorConditionMode.If, 0f, trigger);
                 return tr;
             }
-            Any(getHit, "Hit", 0.08f);
+            Any(getHit, "Hit", 0.06f);
             Any(dizzy, "Stagger", 0.1f);
             Any(die, "Die", 0.08f);
             Any(victory, "Victory", 0.2f);
@@ -238,8 +252,8 @@ namespace Crownfall.EditorTools
             };
             var mageMap = new Dictionary<string, string>
             {
-                { "NormalAttack01", "Attack01" }, { "NormalAttack02", "Attack01" },
-                { "Combo01", "Attack01" }, { "Combo03", "Attack02" },
+                { "NormalAttack01", "Attack01" }, { "Combo01", "Attack01" },
+                { "Combo02", "Attack01" }, { "NormalAttack02", "Attack02" },
                 { "Defend", "Idle" }, { "DefendHit", "GetHit" },
             };
             var noShieldMap = new Dictionary<string, string>
@@ -266,9 +280,9 @@ namespace Crownfall.EditorTools
                     string targetName = stem + "_" + suffix;
                     if (!clips.TryGetValue(targetName, out var replacement))
                     {
-                        // packs abbreviate some suffixes (e.g. RollBack_THS) — match by stem
-                        replacement = clips.Values.FirstOrDefault(c =>
-                            c.name.StartsWith(stem + "_", System.StringComparison.OrdinalIgnoreCase));
+                        // fall back to matching the file-name stem
+                        replacement = clips.FirstOrDefault(kv =>
+                            kv.Key.StartsWith(stem + "_", System.StringComparison.OrdinalIgnoreCase)).Value;
                     }
                     if (replacement != null)
                         pairs[i] = new KeyValuePair<AnimationClip, AnimationClip>(baseClip, replacement);

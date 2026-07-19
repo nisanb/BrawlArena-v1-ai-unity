@@ -13,6 +13,7 @@ namespace Crownfall
     ///  - buttons: ATTACK (tap light / hold heavy), DODGE (tap roll / hold sprint),
     ///    BLOCK hold (Knight) or HEAVY, LOCK toggle, AUTO demo toggle.
     /// Feeds the same CombatMotor API as PlayerController.
+    [DefaultExecutionOrder(-5)] // drivers act before the motor consumes buffers
     public class TouchController : MonoBehaviour
     {
         [Header("Wired by forge")]

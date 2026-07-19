@@ -7,6 +7,7 @@ namespace Crownfall
     /// Combat brain. Uses a NavMeshAgent purely as a path planner; all actual
     /// movement flows through the CombatMotor so AI and player share one feel.
     [RequireComponent(typeof(CombatMotor))]
+    [DefaultExecutionOrder(-5)] // drivers act before the motor consumes buffers
     public class AIController : MonoBehaviour
     {
         [Range(0f, 1f)] public float aggression = 0.6f;

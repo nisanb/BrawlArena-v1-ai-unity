@@ -32,6 +32,7 @@ namespace Crownfall
 
         static readonly int HashMoveX = Animator.StringToHash("MoveX");
         static readonly int HashMoveZ = Animator.StringToHash("MoveZ");
+        static readonly int HashLocoRate = Animator.StringToHash("LocoRate");
         static readonly int HashRollX = Animator.StringToHash("RollX");
         static readonly int HashRollZ = Animator.StringToHash("RollZ");
         static readonly int HashLocked = Animator.StringToHash("Locked");
@@ -61,6 +62,7 @@ namespace Crownfall
         bool comboWindowOpen;
         Coroutine actionRoutine;
         float animMoveX, animMoveZ;
+        CombatMotor attackAim;
 
         void Awake()
         {
@@ -171,7 +173,7 @@ namespace Crownfall
             if (IsBlockingHeld) speed *= 0.42f;
 
             Vector3 desired = moveInput * speed;
-            float rate = desired.sqrMagnitude > velocity.sqrMagnitude ? 30f : 34f;
+            float rate = desired.sqrMagnitude > velocity.sqrMagnitude ? 40f : 46f;
             velocity = Vector3.MoveTowards(velocity, desired, rate * Time.deltaTime);
 
             ApplyGravity();
@@ -184,12 +186,12 @@ namespace Crownfall
                 to.y = 0f;
                 if (to.sqrMagnitude > 0.05f)
                     transform.rotation = Quaternion.RotateTowards(transform.rotation,
-                        Quaternion.LookRotation(to), 540f * Time.deltaTime);
+                        Quaternion.LookRotation(to), 720f * Time.deltaTime);
             }
-            else if (PlanarVelocity.sqrMagnitude > 0.3f)
+            else if (moveInput.sqrMagnitude > 0.04f)
             {
                 transform.rotation = Quaternion.RotateTowards(transform.rotation,
-                    Quaternion.LookRotation(PlanarVelocity), 680f * Time.deltaTime);
+                    Quaternion.LookRotation(moveInput), 950f * Time.deltaTime);
             }
         }
 
@@ -218,12 +220,17 @@ namespace Crownfall
                 targetZ = Mathf.Clamp(IsSprinting ? s * 1.38f : s, 0f, 2f);
             }
 
-            animMoveX = Mathf.Lerp(animMoveX, targetX, 12f * Time.deltaTime);
-            animMoveZ = Mathf.Lerp(animMoveZ, targetZ, 12f * Time.deltaTime);
+            animMoveX = Mathf.Lerp(animMoveX, targetX, 16f * Time.deltaTime);
+            animMoveZ = Mathf.Lerp(animMoveZ, targetZ, 16f * Time.deltaTime);
             Anim.SetFloat(HashMoveX, animMoveX);
             Anim.SetFloat(HashMoveZ, animMoveZ);
             Anim.SetBool(HashLocked, locked);
             Anim.SetBool(HashBlocking, IsBlockingHeld);
+
+            // sync locomotion cycle rate to actual ground speed so feet do not slide
+            float speed01 = planarVel.magnitude / Mathf.Max(0.01f, Kit.runSpeed);
+            float locoRate = IsSprinting ? 1.15f : Mathf.Lerp(0.95f, 1.4f, Mathf.Clamp01(speed01));
+            Anim.SetFloat(HashLocoRate, locoRate);
         }
 
         // ------------------------------------------------------------------ attacks
@@ -233,10 +240,36 @@ namespace Crownfall
             State = MotorState.Attacking;
             comboIndex = 1;
             comboWindowOpen = false;
+
+            // attack magnetism: face the stick first, then glue onto the best target
+            if (moveInput.sqrMagnitude > 0.04f && (LockTarget == null || LockTarget.IsDead))
+                transform.rotation = Quaternion.LookRotation(moveInput);
+            attackAim = AcquireAttackAim();
+
             if (actionRoutine != null) StopCoroutine(actionRoutine);
             Anim.ResetTrigger(HashRoll);
             Anim.SetTrigger(heavy ? HashAttackH : HashAttackL);
             actionRoutine = StartCoroutine(AttackRoutine(heavy));
+        }
+
+        CombatMotor AcquireAttackAim()
+        {
+            if (LockTarget != null && !LockTarget.IsDead) return LockTarget;
+            if (MatchManager.I == null || Identity == null) return null;
+            CombatMotor best = null;
+            float bestScore = float.MinValue;
+            foreach (var e in MatchManager.I.AliveEnemiesOf(Identity.team))
+            {
+                Vector3 to = e.transform.position - transform.position;
+                to.y = 0f;
+                float dist = to.magnitude;
+                if (dist > 7.5f) continue;
+                float ang = Vector3.Angle(transform.forward, to);
+                if (ang > 110f) continue;
+                float score = -dist - ang * 0.05f;
+                if (score > bestScore) { bestScore = score; best = e; }
+            }
+            return best;
         }
 
         IEnumerator AttackRoutine(bool heavy)
@@ -271,14 +304,14 @@ namespace Crownfall
                     if (cur.shortNameHash == prevHash) t = cur.normalizedTime;
                     else t += Time.deltaTime / len; // transitioning frames
 
-                    // steer toward lock target before the strike lands
-                    if (t < Tuning.StrikeMoment && LockTarget != null && !LockTarget.IsDead)
+                    // magnetize toward the attack target before the strike lands
+                    if (t < Tuning.StrikeMoment && attackAim != null && !attackAim.IsDead)
                     {
-                        Vector3 to = LockTarget.transform.position - transform.position;
+                        Vector3 to = attackAim.transform.position - transform.position;
                         to.y = 0f;
                         if (to.sqrMagnitude > 0.04f)
                             transform.rotation = Quaternion.RotateTowards(transform.rotation,
-                                Quaternion.LookRotation(to), 260f * Time.deltaTime);
+                                Quaternion.LookRotation(to), 420f * Time.deltaTime);
                     }
 
                     // forward lunge through the swing
@@ -312,6 +345,7 @@ namespace Crownfall
                     {
                         bufferedLightUntil = 0f;
                         comboIndex++;
+                        attackAim = AcquireAttackAim();
                         Anim.SetTrigger(HashAttackL);
                         chained = true;
                         break;
@@ -407,7 +441,8 @@ namespace Crownfall
         void DoBolt()
         {
             Vector3 origin = weaponTip != null ? weaponTip.position : AimPoint + transform.forward * 0.5f;
-            CombatMotor homing = LockTarget != null && !LockTarget.IsDead ? LockTarget : null;
+            CombatMotor homing = attackAim != null && !attackAim.IsDead ? attackAim
+                : (LockTarget != null && !LockTarget.IsDead ? LockTarget : null);
             Vector3 aim = homing != null ? homing.AimPoint : AimPoint + transform.forward * 14f;
             GameEffects.I?.Muzzle(Identity.element, origin, transform.rotation);
             GameEffects.I?.PlayCast(Identity.element, origin);
