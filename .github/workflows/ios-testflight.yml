@@ -1,0 +1,100 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Unity iOS export (Xcode project)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (without LFS smudge)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: List LFS objects for cache key
+        run: git lfs ls-files -l | cut -d' ' -f1 | sort > .lfs-assets-id
+
+      - name: Cache LFS objects
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+          restore-keys: lfs-
+
+      - name: Pull LFS files
+        run: git lfs pull
+
+      - name: Free runner disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-iOS-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-iOS-
+
+      - name: Unity build (export Xcode project)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: iOS
+
+      - name: Tar Xcode project (preserve file permissions)
+        run: sudo tar -C build -czf ios-project.tgz iOS
+
+      - name: Upload Xcode project artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcode-project
+          path: ios-project.tgz
+          retention-days: 3
+
+  release:
+    name: Sign and upload to TestFlight
+    needs: export
+    runs-on: macos-15
+    steps:
+      - name: Checkout (fastlane config only)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Download Xcode project artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-xcode-project
+
+      - name: Extract Xcode project
+        run: mkdir -p build && tar -C build -xzf ios-project.tgz
+
+      - name: Install fastlane
+        run: brew install fastlane
+
+      - name: Build, sign, upload to TestFlight
+        run: fastlane ios beta
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTH: ${{ secrets.MATCH_GIT_BASIC_AUTH }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}

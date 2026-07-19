@@ -113,3 +113,9 @@ InitTestScene*.unity*
 # Local scene safety backups created by editor automation
 /Assets/Scenes/*.CodexUnsavedBackup.unity*
 /Assets/Scenes/*.CodexFailedBuildBackup.unity*
+
+# fastlane / iOS CI artifacts
+fastlane/report.xml
+fastlane/README.md
+*.ipa
+*.dSYM.zip
