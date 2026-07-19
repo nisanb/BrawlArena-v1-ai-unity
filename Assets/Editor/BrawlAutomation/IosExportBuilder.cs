@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 
-namespace BrawlAutomation
+namespace BrawlArena.EditorAutomation
 {
     /// Exports the iOS Xcode project locally so CI only needs a Mac for
     /// compile/sign/upload (no Unity license required in CI).
