@@ -85,6 +85,12 @@ jobs:
       - name: Extract Xcode project
         run: mkdir -p build && tar -C build -xzf ios-project.tgz
 
+      - name: Select newest Xcode (App Store requires iOS 26 SDK)
+        run: |
+          ls -d /Applications/Xcode_*.app
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+
       - name: Install fastlane
         run: brew install fastlane
 
