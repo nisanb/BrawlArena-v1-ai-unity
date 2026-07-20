@@ -113,7 +113,10 @@ namespace Crownfall
                     ic.sizeDelta = new Vector2(size * 0.52f, size * 0.52f);
                     iconImg = ic.gameObject.AddComponent<Image>();
                     iconImg.sprite = icon;
-                    iconImg.preserveAspect = true;
+                    // preserveAspect=true renders these sprites white on Metal/iOS
+                    // and blanks the canvas on D3D12; the touch picto icons are
+                    // square (128x128) so a plain quad is already correct
+                    iconImg.preserveAspect = false;
                     iconImg.raycastTarget = false;
                 }
                 if (!string.IsNullOrEmpty(label))

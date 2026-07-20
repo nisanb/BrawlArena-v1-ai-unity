@@ -236,7 +236,11 @@ namespace BrawlArena
 
             public void Vibrate(CombatFeedbackEvent feedbackEvent)
             {
+                // Handheld only exists on mobile player builds; guard so desktop
+                // builds of this (dead) code still compile
+#if UNITY_IOS || UNITY_ANDROID
                 if (Application.isMobilePlatform) Handheld.Vibrate();
+#endif
             }
         }
     }

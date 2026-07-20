@@ -225,7 +225,19 @@ namespace Crownfall
         {
             var img = Img(name, parent, anchorMin, anchorMax, pivot, pos, size, sprite, color);
             img.type = Image.Type.Simple;
-            img.preserveAspect = true;
+            // Image.preserveAspect=true generates degenerate geometry for these
+            // sprites: it renders white on Metal/iOS and blanks the whole UGUI
+            // canvas on D3D12. Fit the aspect ourselves by shrinking the rect
+            // (safe for the centered icons, which is nearly all of them).
+            img.preserveAspect = false;
+            if (sprite != null && size.x > 0f && size.y > 0f && pivot == new Vector2(0.5f, 0.5f))
+            {
+                float spriteAspect = sprite.rect.width / sprite.rect.height;
+                float boxAspect = size.x / size.y;
+                img.rectTransform.sizeDelta = spriteAspect > boxAspect
+                    ? new Vector2(size.x, size.x / spriteAspect)
+                    : new Vector2(size.y * spriteAspect, size.y);
+            }
             return img;
         }
 
