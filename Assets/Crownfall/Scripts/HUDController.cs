@@ -219,16 +219,15 @@ namespace Crownfall
             return img;
         }
 
-        // pack icons and circular frames must never be 9-sliced
         Image Icon(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
             Vector2 pos, Vector2 size, Sprite sprite, Color color)
         {
             var img = Img(name, parent, anchorMin, anchorMax, pivot, pos, size, sprite, color);
-            img.type = Image.Type.Simple;
-            // Image.preserveAspect=true generates degenerate geometry for these
-            // sprites: it renders white on Metal/iOS and blanks the whole UGUI
-            // canvas on D3D12. Fit the aspect ourselves by shrinking the rect
-            // (safe for the centered icons, which is nearly all of them).
+            // Image.Type.Simple renders these icons as solid WHITE on iOS/Metal
+            // (only Sliced images render there — every plate uses Sliced). And
+            // preserveAspect breaks the geometry. So draw icons as Sliced and fit
+            // the aspect by sizing the rect instead (Sliced ignores preserveAspect).
+            img.type = Image.Type.Sliced;
             img.preserveAspect = false;
             if (sprite != null && size.x > 0f && size.y > 0f && pivot == new Vector2(0.5f, 0.5f))
             {

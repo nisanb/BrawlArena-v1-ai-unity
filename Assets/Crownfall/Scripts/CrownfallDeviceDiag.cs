@@ -87,6 +87,33 @@ namespace Crownfall
             style.normal.textColor = errorCount > 0 ? Color.red : new Color(1f, 1f, 1f, 0.5f);
             GUI.Label(new Rect(14, 6, Screen.width - 28, 46), beat, style);
 
+            // Draw a few icon textures via IMGUI (a render path completely
+            // separate from UGUI). If these show but the UGUI icons are white,
+            // the textures are fine and it's the Image render path; if these are
+            // white too, it's the texture data itself.
+            var hud = FindFirstObjectByType<HUDController>();
+            if (hud != null)
+            {
+                var samples = new (string, Sprite)[]
+                {
+                    ("shop", hud.menuShop), ("inbox", hud.menuInbox), ("crown", hud.iconCrown),
+                    ("gear", hud.icoGear), ("coin", hud.iconCoinBar), ("gem", hud.iconGemBar),
+                };
+                float x = 14f, y = Screen.height - 116f;
+                var lbl = new GUIStyle(style) { fontSize = Mathf.Max(11, Screen.height / 80) };
+                lbl.normal.textColor = Color.yellow;
+                foreach (var (nm, sp) in samples)
+                {
+                    if (sp != null && sp.texture != null)
+                    {
+                        GUI.DrawTexture(new Rect(x, y, 84f, 84f), sp.texture, ScaleMode.ScaleToFit);
+                        GUI.Label(new Rect(x, y + 84f, 100f, 22f), $"{nm} {sp.texture.width}", lbl);
+                    }
+                    else GUI.Label(new Rect(x, y, 100f, 84f), $"{nm} NULL", lbl);
+                    x += 96f;
+                }
+            }
+
             if (errors.Count == 0) return;
             var errStyle = new GUIStyle(style) { fontSize = Mathf.Max(12, Screen.height / 70) };
             errStyle.normal.textColor = new Color(1f, 0.35f, 0.3f);
