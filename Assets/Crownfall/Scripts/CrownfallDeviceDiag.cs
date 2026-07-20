@@ -99,18 +99,18 @@ namespace Crownfall
                     ("shop", hud.menuShop), ("inbox", hud.menuInbox), ("crown", hud.iconCrown),
                     ("gear", hud.icoGear), ("coin", hud.iconCoinBar), ("gem", hud.iconGemBar),
                 };
-                float x = 14f, y = Screen.height - 116f;
+                float ix = 14f, iy = Screen.height - 116f;
                 var lbl = new GUIStyle(style) { fontSize = Mathf.Max(11, Screen.height / 80) };
                 lbl.normal.textColor = Color.yellow;
                 foreach (var (nm, sp) in samples)
                 {
                     if (sp != null && sp.texture != null)
                     {
-                        GUI.DrawTexture(new Rect(x, y, 84f, 84f), sp.texture, ScaleMode.ScaleToFit);
-                        GUI.Label(new Rect(x, y + 84f, 100f, 22f), $"{nm} {sp.texture.width}", lbl);
+                        GUI.DrawTexture(new Rect(ix, iy, 84f, 84f), sp.texture, ScaleMode.ScaleToFit);
+                        GUI.Label(new Rect(ix, iy + 84f, 100f, 22f), $"{nm} {sp.texture.width}", lbl);
                     }
-                    else GUI.Label(new Rect(x, y, 100f, 84f), $"{nm} NULL", lbl);
-                    x += 96f;
+                    else GUI.Label(new Rect(ix, iy, 100f, 84f), $"{nm} NULL", lbl);
+                    ix += 96f;
                 }
             }
 
