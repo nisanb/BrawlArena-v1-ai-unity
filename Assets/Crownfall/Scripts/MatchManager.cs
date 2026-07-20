@@ -29,6 +29,9 @@ namespace Crownfall
         public CombatMotor PlayerMotor { get; private set; }
         public int ScoreAzure { get; private set; }
         public int ScoreCrimson { get; private set; }
+        /// True for exhibition matches (no progression rewards).
+        public bool IsDemo { get; private set; }
+        public MatchRewards LastRewards { get; private set; }
 
         public event Action<MatchState> StateChanged;
         public event Action<bool> PausedChanged;
@@ -48,6 +51,8 @@ namespace Crownfall
         readonly List<CombatMotor> all = new List<CombatMotor>();
         readonly Dictionary<CombatMotor, int> spawnSlot = new Dictionary<CombatMotor, int>();
         readonly List<CombatMotor> aliveScratch = new List<CombatMotor>();
+        readonly List<GameObject> aiRigs = new List<GameObject>();
+        Light podiumLight;
 
         void Awake()
         {
@@ -72,11 +77,13 @@ namespace Crownfall
                     else spawnSlot[motor] = crimsonIdx++;
                 }
                 h.Died += killer => OnCombatantDied(motor, killer);
+                if (id != null && !id.isPlayer) aiRigs.Add(motor.gameObject);
             }
 
             CrownfallSettings.Load();
             SetCursorFree(true);
             SetState(MatchState.Menu);
+            ShowcaseChampion(CrownfallMeta.SelectedClass);
         }
 
         public void OpenClassSelect()
@@ -89,10 +96,58 @@ namespace Crownfall
             if (State == MatchState.ClassSelect) SetState(MatchState.Menu);
         }
 
+        /// Home-hub PLAY: fight with the persisted champion pick.
+        public void StartMatch()
+        {
+            IsDemo = false;
+            SelectClass(CrownfallMeta.SelectedClass);
+        }
+
+        /// Champions screen pick: persist + pose the new champion on the
+        /// menu podium, but stay in the menus.
+        public void SelectChampion(int classIndex)
+        {
+            if (State != MatchState.Menu && State != MatchState.ClassSelect) return;
+            CrownfallMeta.SelectedClass = classIndex;
+            ShowcaseChampion(classIndex);
+        }
+
+        /// Activate exactly one player variant so the menu camera has a
+        /// champion to orbit; park the AI cast offstage and light the podium.
+        void ShowcaseChampion(int classIndex)
+        {
+            classIndex = Mathf.Clamp(classIndex, 0, playerVariants.Length - 1);
+            for (int i = 0; i < playerVariants.Length; i++)
+                if (playerVariants[i] != null) playerVariants[i].SetActive(i == classIndex);
+            foreach (var rig in aiRigs)
+                if (rig != null) rig.SetActive(false);
+
+            var chosen = playerVariants[classIndex];
+            if (OrbitCamera.I != null) OrbitCamera.I.menuFocus = chosen != null ? chosen.transform : null;
+
+            if (chosen != null)
+            {
+                if (podiumLight == null)
+                {
+                    var go = new GameObject("PodiumLight");
+                    podiumLight = go.AddComponent<Light>();
+                    podiumLight.type = LightType.Directional;
+                    podiumLight.intensity = 1.05f;
+                    podiumLight.color = new Color(1f, 0.95f, 0.85f);
+                    podiumLight.shadows = LightShadows.None;
+                }
+                // aim down the champion's facing so their front is lit
+                podiumLight.transform.rotation =
+                    Quaternion.LookRotation(-chosen.transform.forward + Vector3.down * 0.7f);
+                podiumLight.gameObject.SetActive(true);
+            }
+        }
+
         /// Autopilot exhibition match with a random champion.
         public void StartDemo()
         {
             if (State != MatchState.Menu && State != MatchState.ClassSelect) return;
+            IsDemo = true;
             Autopilot = true;
             SelectClass(UnityEngine.Random.Range(0, playerVariants.Length));
         }
@@ -142,6 +197,12 @@ namespace Crownfall
         {
             if (State != MatchState.ClassSelect && State != MatchState.Menu) return;
             classIndex = Mathf.Clamp(classIndex, 0, playerVariants.Length - 1);
+
+            // the menu showcase benched the AI cast — bring everyone back
+            foreach (var rig in aiRigs)
+                if (rig != null) rig.SetActive(true);
+            if (podiumLight != null) podiumLight.gameObject.SetActive(false);
+            if (OrbitCamera.I != null) OrbitCamera.I.menuFocus = null;
 
             for (int i = 0; i < playerVariants.Length; i++)
                 if (playerVariants[i] != null) playerVariants[i].SetActive(i == classIndex);
@@ -209,6 +270,7 @@ namespace Crownfall
         {
             if (State == MatchState.Ended) return;
             SetState(MatchState.Ended);
+            LastRewards = IsDemo ? default : CrownfallMeta.GrantMatchRewards(winner == Team.Azure);
             MatchEndedEvent?.Invoke(winner);
 
             bool playerWon = winner == Team.Azure;
@@ -293,8 +355,10 @@ namespace Crownfall
         }
 
         /// Headless testing entry: pick a class and optionally enable autopilot.
+        /// Autopilot runs count as demos so playtests don't inflate progression.
         public void AutoStart(int classIndex, bool enableAutopilot)
         {
+            IsDemo = enableAutopilot;
             Autopilot = enableAutopilot;
             SelectClass(classIndex);
         }

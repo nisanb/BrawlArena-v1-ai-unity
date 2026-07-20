@@ -34,11 +34,15 @@ namespace Crownfall
 
             if (group != null)
             {
-                bool matchOver = MatchManager.I != null && MatchManager.I.State == MatchState.Ended;
+                // bars belong to combat only — the menu podium champion must stay clean
+                bool inCombat = MatchManager.I != null &&
+                                (MatchManager.I.State == MatchState.Countdown ||
+                                 MatchManager.I.State == MatchState.Fighting);
                 bool concealed = health.Motor != null && MatchManager.I != null &&
                                  health.Motor.IsConcealedFrom(MatchManager.I.PlayerMotor);
-                float want = health.IsDead || isActivePlayer || matchOver || concealed ? 0f : 1f;
+                float want = !inCombat || health.IsDead || isActivePlayer || concealed ? 0f : 1f;
                 group.alpha = Mathf.MoveTowards(group.alpha, want, 4f * Time.unscaledDeltaTime);
+                if (!inCombat) group.alpha = 0f;
             }
         }
     }

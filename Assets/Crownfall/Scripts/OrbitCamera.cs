@@ -13,6 +13,10 @@ namespace Crownfall
         public float distance = 4.4f;
         public float mouseSensitivity = 0.13f;
 
+        /// Home-hub champion podium: when set (and no fight target), the menu
+        /// camera does a close hero orbit instead of the wide arena sweep.
+        [System.NonSerialized] public Transform menuFocus;
+
         public Vector3 PlanarForward => Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
         public Vector3 PlanarRight => Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
 
@@ -53,16 +57,31 @@ namespace Crownfall
 
             if (target == null)
             {
-                // cinematic slow orbit around the arena behind the menus
                 if (mm != null && (mm.State == MatchState.Menu || mm.State == MatchState.ClassSelect))
                 {
-                    menuYaw += 3.5f * Time.deltaTime;
-                    Vector3 pivot = new Vector3(0f, 1.2f, 0f);
-                    Vector3 wanted = pivot + Quaternion.Euler(0f, menuYaw, 0f) * new Vector3(0f, 0f, -17.5f);
-                    wanted.y = 7.4f;
-                    transform.position = Vector3.Lerp(transform.position, wanted, 1.6f * Time.deltaTime);
-                    var look = Quaternion.LookRotation(pivot + Vector3.up * 0.4f - transform.position);
-                    transform.rotation = Quaternion.Slerp(transform.rotation, look, 1.6f * Time.deltaTime);
+                    if (menuFocus != null && menuFocus.gameObject.activeInHierarchy)
+                    {
+                        // hero showcase: face the champion head-on with a slow sway
+                        float sway = Mathf.Sin(Time.time * 0.45f) * 24f;
+                        Vector3 pivot = menuFocus.position + Vector3.up * 1.1f;
+                        Vector3 dir = Quaternion.Euler(0f, menuFocus.eulerAngles.y + sway, 0f) * Vector3.forward;
+                        Vector3 wanted = pivot + dir * 3.6f;
+                        wanted.y = pivot.y + 0.5f;
+                        transform.position = Vector3.Lerp(transform.position, wanted, 3.2f * Time.deltaTime);
+                        var look = Quaternion.LookRotation(pivot + Vector3.up * 0.05f - transform.position);
+                        transform.rotation = Quaternion.Slerp(transform.rotation, look, 3.2f * Time.deltaTime);
+                    }
+                    else
+                    {
+                        // cinematic slow orbit around the arena behind the menus
+                        menuYaw += 3.5f * Time.deltaTime;
+                        Vector3 pivot = new Vector3(0f, 1.2f, 0f);
+                        Vector3 wanted = pivot + Quaternion.Euler(0f, menuYaw, 0f) * new Vector3(0f, 0f, -17.5f);
+                        wanted.y = 7.4f;
+                        transform.position = Vector3.Lerp(transform.position, wanted, 1.6f * Time.deltaTime);
+                        var look = Quaternion.LookRotation(pivot + Vector3.up * 0.4f - transform.position);
+                        transform.rotation = Quaternion.Slerp(transform.rotation, look, 1.6f * Time.deltaTime);
+                    }
                 }
                 return;
             }

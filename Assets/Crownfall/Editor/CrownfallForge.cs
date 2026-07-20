@@ -985,20 +985,93 @@ namespace Crownfall.EditorTools
 
         static void WireHud(HUDController hud)
         {
-            hud.fontBig = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular Outline_Extended ASCII_210 SDF.asset");
+            // the "Outline" variants have hollow glyph faces — unreadable at title
+            // sizes; the plain SDF is the filled face
+            hud.fontBig = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular SDF.asset");
             hud.fontMid = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular Outline_Extended ASCII_72 SDF.asset");
             hud.fontSmall = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular Outline_Extended ASCII_40 SDF.asset");
             if (hud.fontBig == null) hud.fontBig = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular Outline 210 SDF.asset");
             if (hud.fontMid == null) hud.fontMid = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular Outline 72 SDF.asset");
             if (hud.fontSmall == null) hud.fontSmall = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular Outline 40 SDF.asset");
 
-            hud.barBgTrapezoid = LoadSprite($"{LayerLabSprites}/Slider/Slider_BasicTrapezoid01_Bg.png");
-            hud.barFillTrapezoid = LoadSprite($"{LayerLabSprites}/Slider/Slider_BasicTrapezoid01_Fill_White.png");
             hud.barBgBasic = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic01_Bg.png");
             hud.barFillBasic = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic01_Fill_White.png");
+            hud.bar4Bg = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_Bg.png");
+            hud.bar4FillRed = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_Fill_Red.png");
+            hud.bar4FillWhite = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_Fill_White.png");
+            hud.bar4Divider = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_DividerLine.png");
+            hud.bar4Gloss = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_Fill_Highlight.png");
+
             hud.frameRound = LoadSprite($"{LayerLabSprites}/Frame/BasicFrame_Round12.png");
             hud.frameCircle = LoadSprite($"{LayerLabSprites}/Frame/BasicFrame_Circle77.png");
             hud.bannerNavy = LoadSprite($"{LayerLabSprites}/Frame/BannerFrame01_Single_Navy.png");
+            hud.plateRound = LoadSprite($"{LayerLabSprites}/Label/Label_Round01_White.png");
+            hud.popupNavy = LoadSprite($"{LayerLabSprites}/Popup/Popup01_Single_Navy.png");
+            hud.ribbonBlue = LoadSprite($"{LayerLabSprites}/Label/Title_Ribbon_Bg_Blue.png");
+            hud.ribbonOrange = LoadSprite($"{LayerLabSprites}/Label/Title_Ribbon_Bg_Orange.png");
+            hud.ribbonYellow = LoadSprite($"{LayerLabSprites}/Label/Title_Ribbon_Bg_Yellow.png");
+            hud.cardKnight = LoadSprite($"{LayerLabSprites}/Frame/StageFrame_Single_Bg_n_Blue.png");
+            hud.cardWarbrand = LoadSprite($"{LayerLabSprites}/Frame/StageFrame_Single_Bg_n_Yellow.png");
+            hud.cardDuelist = LoadSprite($"{LayerLabSprites}/Frame/StageFrame_Single_Bg_n.png");
+            hud.cardMage = LoadSprite($"{LayerLabSprites}/Frame/StageFrame_Single_Bg_n_Purple.png");
+            hud.profileRing = LoadSprite($"{LayerLabSprites}/Frame/ProfileFrame01_Border.png");
+            hud.profileInner = LoadSprite($"{LayerLabSprites}/Frame/ProfileFrame01_Inner_Blue.png");
+            hud.trapBlue = LoadSprite($"{LayerLabSprites}/Label/Label_Trapezoid_Single_Blue.png");
+            hud.trapOrange = LoadSprite($"{LayerLabSprites}/Label/Label_Trapezoid_Single_Orange.png");
+
+            hud.resourcePill = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Bg.png");
+            hud.resourceBtnGreen = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Btn_Single_Green.png");
+            hud.resourceAdd = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Btn_Icon_Add.png");
+            hud.iconCoinBar = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Icon_Coin.png");
+            hud.iconGemBar = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Icon_Gem_Blue.png");
+            hud.alertDot = LoadSprite($"{LayerLabSprites}/UI_Etc/Alert_Dot_Bg.png");
+            hud.squareBlue = LoadSprite($"{LayerLabSprites}/Button/Button_Square05_Blue.png");
+            hud.menuShop = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon02_Shop.Png");
+            hud.menuCards = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon02_Cards.Png");
+            hud.menuInbox = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Inbox.Png");
+            hud.menuGift = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Reward.Png");
+            hud.menuTrophy = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Trophy.Png");
+            hud.iconChestGold = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ChestIcon_Gold01_l.png");
+            hud.iconCoinBig = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Coin01_l.png");
+            hud.iconPouch = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_GoldPouch.png");
+            hud.levelBadge = LoadSprite($"{LayerLabSprites}/Slider/Slider_Level02_Badge.png");
+            hud.focusFrame = LoadSprite($"{LayerLabSprites}/Frame/StageFrame_Single_Focus.png");
+
+            hud.btnGreen = LoadSprite($"{LayerLabSprites}/Button/Button01_225_Green.png");
+            hud.btnBlue = LoadSprite($"{LayerLabSprites}/Button/Button01_225_Blue.png");
+            hud.btnYellow = LoadSprite($"{LayerLabSprites}/Button/Button01_225_Yellow.png");
+            hud.btnRed = LoadSprite($"{LayerLabSprites}/Button/Button01_225_Red.png");
+            hud.btnGray = LoadSprite($"{LayerLabSprites}/Button/Button01_225_BlueGray.png");
+            hud.btnCircle = LoadSprite($"{LayerLabSprites}/Button/Button_Circle147_Navy.png");
+
+            hud.switchOn = LoadSprite($"{LayerLabSprites}/UI_Etc/Switch_Bg_On.png");
+            hud.switchOff = LoadSprite($"{LayerLabSprites}/UI_Etc/Switch_Bg_Off.png");
+            hud.knobOn = LoadSprite($"{LayerLabSprites}/UI_Etc/Switch_Handle_On.png");
+            hud.knobOff = LoadSprite($"{LayerLabSprites}/UI_Etc/Switch_Handle_Off.png");
+            hud.knobWhite = LoadSprite($"{LayerLabSprites}/UI_Etc/Switch_Handle_White.png");
+
+            const string Picto = LayerLabSprites + "/Icon_PictoIcons/128";
+            hud.iconCrown = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Crown_Gold.Png");
+            hud.icoShield = LoadSprite($"{Picto}/Pictoicon_Shield.Png");
+            hud.icoAxe = LoadSprite($"{Picto}/Pictoicon_Axe.Png");
+            hud.icoSword = LoadSprite($"{Picto}/Pictoicon_Sword.Png");
+            hud.icoWand = LoadSprite($"{Picto}/Pictoicon_Wand_0.Png");
+            hud.icoPlay = LoadSprite($"{Picto}/Pictoicon_Control_Play.Png");
+            hud.icoMovie = LoadSprite($"{Picto}/Pictoicon_Movie.Png");
+            hud.icoGear = LoadSprite($"{Picto}/Pictoicon_Setting.Png");
+            hud.icoPower = LoadSprite($"{Picto}/Pictoicon_Poweroff.Png");
+            hud.icoPause = LoadSprite($"{Picto}/Pictoicon_Control_Pause.Png");
+            hud.icoHome = LoadSprite($"{Picto}/Pictoicon_Home_0.Png");
+            hud.icoRefresh = LoadSprite($"{Picto}/Pictoicon_Refresh.Png");
+            hud.icoTarget = LoadSprite($"{Picto}/Pictoicon_Target.Png");
+            hud.icoSkull = LoadSprite($"{Picto}/Pictoicon_Skull.Png");
+            hud.icoTimer = LoadSprite($"{Picto}/Pictoicon_Time.Png");
+            hud.icoVolume = LoadSprite($"{Picto}/Pictoicon_Volume.Png");
+            hud.icoCamera = LoadSprite($"{Picto}/Pictoicon_Camera.Png");
+            hud.icoShake = LoadSprite($"{Picto}/Pictoicon_Haptic.Png");
+            hud.icoClose = LoadSprite($"{Picto}/PictoIcon_Close.Png");
+            hud.icoCheck = LoadSprite($"{Picto}/PictoIcon_Check.Png");
+            hud.icoBack = LoadSprite($"{Picto}/Pictoicon_Arrow_Backward.Png");
             EditorUtility.SetDirty(hud);
         }
 
