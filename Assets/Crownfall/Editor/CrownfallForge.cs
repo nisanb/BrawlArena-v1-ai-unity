@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -351,11 +351,11 @@ namespace Crownfall.EditorTools
             touch.btnRound = LoadSprite($"{LayerLabSprites}/Button/Button_Circle147_White.png");
             touch.joyRing = LoadSprite($"{LayerLabSprites}/Frame/BorderFrame_Circle81.png");
             const string TPicto = LayerLabSprites + "/Icon_PictoIcons/128";
-            touch.iconAttack = LoadSprite($"{TPicto}/Pictoicon_Sword.Png");
-            touch.iconDodge = LoadSprite($"{TPicto}/Pictoicon_Boot_Fly.Png");
-            touch.iconBlock = LoadSprite($"{TPicto}/Pictoicon_Shield.Png");
-            touch.iconLock = LoadSprite($"{TPicto}/Pictoicon_Target.Png");
-            touch.iconAuto = LoadSprite($"{TPicto}/Pictoicon_Control_Play.Png");
+            touch.iconAttack = LoadSprite($"{TPicto}/Pictoicon_Sword.png");
+            touch.iconDodge = LoadSprite($"{TPicto}/Pictoicon_Boot_Fly.png");
+            touch.iconBlock = LoadSprite($"{TPicto}/Pictoicon_Shield.png");
+            touch.iconLock = LoadSprite($"{TPicto}/Pictoicon_Target.png");
+            touch.iconAuto = LoadSprite($"{TPicto}/Pictoicon_Control_Play.png");
             touch.font = hud.fontSmall;
             EditorUtility.SetDirty(touch);
 
@@ -693,7 +693,7 @@ namespace Crownfall.EditorTools
                 new Vector2(-14f, 8f),    new Vector2(14f, -8f),
             };
             const float patchRadius = 3.3f;
-            // SolGrass are the fat leafy tufts — best "bush" read; a few tall
+            // SolGrass are the fat leafy tufts â€” best "bush" read; a few tall
             // blades mixed in break up the silhouette
             string[] bushKinds = { "SolGrass01", "SolGrass02", "SolGrass03", "SolGrass01", "Grass02" };
             var patchList = new List<Vector4>();
@@ -1001,7 +1001,7 @@ namespace Crownfall.EditorTools
 
         static void WireHud(HUDController hud)
         {
-            // the "Outline" variants have hollow glyph faces — unreadable at title
+            // the "Outline" variants have hollow glyph faces â€” unreadable at title
             // sizes; the plain SDF is the filled face
             hud.fontBig = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular SDF.asset");
             hud.fontMid = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{LayerLabFonts}/LilitaOne-Regular Outline_Extended ASCII_72 SDF.asset");
@@ -1042,11 +1042,11 @@ namespace Crownfall.EditorTools
             hud.iconGemBar = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Icon_Gem_Blue.png");
             hud.alertDot = LoadSprite($"{LayerLabSprites}/UI_Etc/Alert_Dot_Bg.png");
             hud.squareBlue = LoadSprite($"{LayerLabSprites}/Button/Button_Square05_Blue.png");
-            hud.menuShop = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon02_Shop.Png");
-            hud.menuCards = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon02_Cards.Png");
-            hud.menuInbox = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Inbox.Png");
-            hud.menuGift = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Reward.Png");
-            hud.menuTrophy = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Trophy.Png");
+            hud.menuShop = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon02_Shop.png");
+            hud.menuCards = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon02_Cards.png");
+            hud.menuInbox = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Inbox.png");
+            hud.menuGift = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Reward.png");
+            hud.menuTrophy = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_MenuIcon04_Trophy.png");
             hud.iconChestGold = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ChestIcon_Gold01_l.png");
             hud.iconCoinBig = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Coin01_l.png");
             hud.iconPouch = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_GoldPouch.png");
@@ -1067,27 +1067,27 @@ namespace Crownfall.EditorTools
             hud.knobWhite = LoadSprite($"{LayerLabSprites}/UI_Etc/Switch_Handle_White.png");
 
             const string Picto = LayerLabSprites + "/Icon_PictoIcons/128";
-            hud.iconCrown = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Crown_Gold.Png");
-            hud.icoShield = LoadSprite($"{Picto}/Pictoicon_Shield.Png");
-            hud.icoAxe = LoadSprite($"{Picto}/Pictoicon_Axe.Png");
-            hud.icoSword = LoadSprite($"{Picto}/Pictoicon_Sword.Png");
-            hud.icoWand = LoadSprite($"{Picto}/Pictoicon_Wand_0.Png");
-            hud.icoPlay = LoadSprite($"{Picto}/Pictoicon_Control_Play.Png");
-            hud.icoMovie = LoadSprite($"{Picto}/Pictoicon_Movie.Png");
-            hud.icoGear = LoadSprite($"{Picto}/Pictoicon_Setting.Png");
-            hud.icoPower = LoadSprite($"{Picto}/Pictoicon_Poweroff.Png");
-            hud.icoPause = LoadSprite($"{Picto}/Pictoicon_Control_Pause.Png");
-            hud.icoHome = LoadSprite($"{Picto}/Pictoicon_Home_0.Png");
-            hud.icoRefresh = LoadSprite($"{Picto}/Pictoicon_Refresh.Png");
-            hud.icoTarget = LoadSprite($"{Picto}/Pictoicon_Target.Png");
-            hud.icoSkull = LoadSprite($"{Picto}/Pictoicon_Skull.Png");
-            hud.icoTimer = LoadSprite($"{Picto}/Pictoicon_Time.Png");
-            hud.icoVolume = LoadSprite($"{Picto}/Pictoicon_Volume.Png");
-            hud.icoCamera = LoadSprite($"{Picto}/Pictoicon_Camera.Png");
-            hud.icoShake = LoadSprite($"{Picto}/Pictoicon_Haptic.Png");
-            hud.icoClose = LoadSprite($"{Picto}/PictoIcon_Close.Png");
-            hud.icoCheck = LoadSprite($"{Picto}/PictoIcon_Check.Png");
-            hud.icoBack = LoadSprite($"{Picto}/Pictoicon_Arrow_Backward.Png");
+            hud.iconCrown = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Crown_Gold.png");
+            hud.icoShield = LoadSprite($"{Picto}/Pictoicon_Shield.png");
+            hud.icoAxe = LoadSprite($"{Picto}/Pictoicon_Axe.png");
+            hud.icoSword = LoadSprite($"{Picto}/Pictoicon_Sword.png");
+            hud.icoWand = LoadSprite($"{Picto}/Pictoicon_Wand_0.png");
+            hud.icoPlay = LoadSprite($"{Picto}/Pictoicon_Control_Play.png");
+            hud.icoMovie = LoadSprite($"{Picto}/Pictoicon_Movie.png");
+            hud.icoGear = LoadSprite($"{Picto}/Pictoicon_Setting.png");
+            hud.icoPower = LoadSprite($"{Picto}/Pictoicon_Poweroff.png");
+            hud.icoPause = LoadSprite($"{Picto}/Pictoicon_Control_Pause.png");
+            hud.icoHome = LoadSprite($"{Picto}/Pictoicon_Home_0.png");
+            hud.icoRefresh = LoadSprite($"{Picto}/Pictoicon_Refresh.png");
+            hud.icoTarget = LoadSprite($"{Picto}/Pictoicon_Target.png");
+            hud.icoSkull = LoadSprite($"{Picto}/Pictoicon_Skull.png");
+            hud.icoTimer = LoadSprite($"{Picto}/Pictoicon_Time.png");
+            hud.icoVolume = LoadSprite($"{Picto}/Pictoicon_Volume.png");
+            hud.icoCamera = LoadSprite($"{Picto}/Pictoicon_Camera.png");
+            hud.icoShake = LoadSprite($"{Picto}/Pictoicon_Haptic.png");
+            hud.icoClose = LoadSprite($"{Picto}/PictoIcon_Close.png");
+            hud.icoCheck = LoadSprite($"{Picto}/PictoIcon_Check.png");
+            hud.icoBack = LoadSprite($"{Picto}/Pictoicon_Arrow_Backward.png");
             EditorUtility.SetDirty(hud);
         }
 
@@ -1186,7 +1186,7 @@ namespace Crownfall.EditorTools
             }
             else
             {
-                // decoration (grass, bushes, flames) must never block movement —
+                // decoration (grass, bushes, flames) must never block movement â€”
                 // several Battle Arena prefabs ship with their own colliders
                 foreach (var col in go.GetComponentsInChildren<Collider>())
                     Object.DestroyImmediate(col);
