@@ -183,6 +183,11 @@ namespace Crownfall
         {
             UpdateConcealment();
 
+            // the ranged cast plays at a deliberate speed (set in StartAttack);
+            // make sure nothing leaves the animator stuck slow after an interrupt
+            if (Anim != null && State != MotorState.Attacking && Anim.speed != 1f)
+                Anim.speed = 1f;
+
             if (State == MotorState.Dead || State == MotorState.Victory)
             {
                 ApplyGravity();
@@ -329,6 +334,10 @@ namespace Crownfall
 
             if (actionRoutine != null) StopCoroutine(actionRoutine);
             Anim.ResetTrigger(HashRoll);
+            // a wand cast should read as a spell, not a frantic melee flail: the
+            // base attack states run hot (tuned for sword clips) so ranged casters
+            // play them back slower and more deliberately
+            Anim.speed = Kit.isRanged ? 0.8f : 1f;
             Anim.SetTrigger(heavy ? HashAttackH : HashAttackL);
             actionRoutine = StartCoroutine(AttackRoutine(heavy));
         }
@@ -434,8 +443,9 @@ namespace Crownfall
 
                     if (t >= Tuning.ComboWindowOpen) comboWindowOpen = true;
 
-                    // combo chaining: light chain up to 3, from heavy no chain
-                    if (comboWindowOpen && !heavy && comboIndex < 3 &&
+                    // combo chaining: melee light chains up to 3; a ranged caster
+                    // fires one clean cast per press (no 3x wand flail), heavy never chains
+                    if (comboWindowOpen && !heavy && !Kit.isRanged && comboIndex < 3 &&
                         bufferedLightUntil > Time.time && Stamina.TrySpend(Kit.staminaLight))
                     {
                         bufferedLightUntil = 0f;

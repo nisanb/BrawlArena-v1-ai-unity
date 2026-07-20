@@ -348,6 +348,14 @@ namespace Crownfall.EditorTools
             WireEffects(fx);
             WireHud(hud);
             touch.circleSprite = hud.frameCircle;
+            touch.btnRound = LoadSprite($"{LayerLabSprites}/Button/Button_Circle147_White.png");
+            touch.joyRing = LoadSprite($"{LayerLabSprites}/Frame/BorderFrame_Circle81.png");
+            const string TPicto = LayerLabSprites + "/Icon_PictoIcons/128";
+            touch.iconAttack = LoadSprite($"{TPicto}/Pictoicon_Sword.Png");
+            touch.iconDodge = LoadSprite($"{TPicto}/Pictoicon_Boot_Fly.Png");
+            touch.iconBlock = LoadSprite($"{TPicto}/Pictoicon_Shield.Png");
+            touch.iconLock = LoadSprite($"{TPicto}/Pictoicon_Target.Png");
+            touch.iconAuto = LoadSprite($"{TPicto}/Pictoicon_Control_Play.Png");
             touch.font = hud.fontSmall;
             EditorUtility.SetDirty(touch);
 
@@ -673,28 +681,36 @@ namespace Crownfall.EditorTools
                 }
             }
 
-            // concealment bush patches: tall grass clusters players can hide in
+            // concealment bush chunks: big dense clumps of tall grass you can
+            // walk right into and disappear (Brawl-Stars style). Fewer, bigger
+            // and much denser than scattered dressing so they read as real cover.
             var bushField = new GameObject("BushField").AddComponent<BushField>();
             bushField.transform.SetParent(root.transform);
             Vector2[] patchCenters =
             {
-                new Vector2(-13f, -5f), new Vector2(13f, 5f),
-                new Vector2(-7f, 12f), new Vector2(7f, -12f),
-                new Vector2(-15f, 9f), new Vector2(15f, -9f),
+                new Vector2(-12.5f, -6f), new Vector2(12.5f, 6f),
+                new Vector2(0f, 13.5f),   new Vector2(0f, -13.5f),
+                new Vector2(-14f, 8f),    new Vector2(14f, -8f),
             };
-            const float patchRadius = 2.4f;
-            string[] bushKinds = { "SolGrass01", "SolGrass02", "SolGrass03", "Grass02", "Grass01" };
+            const float patchRadius = 3.3f;
+            // SolGrass are the fat leafy tufts — best "bush" read; a few tall
+            // blades mixed in break up the silhouette
+            string[] bushKinds = { "SolGrass01", "SolGrass02", "SolGrass03", "SolGrass01", "Grass02" };
             var patchList = new List<Vector4>();
             foreach (var c in patchCenters)
             {
                 patchList.Add(new Vector4(c.x, 0f, c.y, patchRadius));
-                for (int i = 0; i < 9; i++)
+                // dense fill: rings of tufts from center out to the rim so the
+                // whole disc is solid green with no bald patches
+                int clumps = 34;
+                for (int i = 0; i < clumps; i++)
                 {
                     float a = (float)rand.NextDouble() * Mathf.PI * 2f;
-                    float r2 = Mathf.Sqrt((float)rand.NextDouble()) * (patchRadius - 0.3f);
+                    // bias toward the rim a touch so the edge reads as a wall of green
+                    float r2 = Mathf.Pow((float)rand.NextDouble(), 0.7f) * (patchRadius - 0.15f);
                     Vector3 pos = new Vector3(c.x + Mathf.Cos(a) * r2, 0f, c.y + Mathf.Sin(a) * r2);
                     Place(FindPrefab("Battle Arena", bushKinds[i % bushKinds.Length]),
-                        pos, R(0f, 360f), R(1.9f, 2.5f), false);
+                        pos, R(0f, 360f), R(2.3f, 3.1f), false);
                 }
             }
             bushField.patches = patchList.ToArray();
@@ -1114,18 +1130,40 @@ namespace Crownfall.EditorTools
         static Sprite LoadSprite(string path)
         {
             var s = AssetDatabase.LoadAssetAtPath<Sprite>(path);
-            if (s == null)
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            bool needsReimport = false;
+            if (importer != null)
             {
-                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
-                if (importer != null && importer.textureType != TextureImporterType.Sprite)
+                if (importer.textureType != TextureImporterType.Sprite)
                 {
                     importer.textureType = TextureImporterType.Sprite;
+                    needsReimport = true;
+                }
+                // UI sprites must render pixel-exact on mobile: compressed formats
+                // (ASTC/PVRTC) can decode to white/garbage on some GPUs, which is
+                // exactly the "white box" menu-icon bug. Pin iOS + Android to
+                // uncompressed RGBA32 so every hub icon is guaranteed to show.
+                needsReimport |= ForceUncompressed(importer, "iPhone");
+                needsReimport |= ForceUncompressed(importer, "Android");
+                if (needsReimport)
+                {
                     importer.SaveAndReimport();
                     s = AssetDatabase.LoadAssetAtPath<Sprite>(path);
                 }
             }
             if (s == null) Debug.LogWarning("[CrownfallForge] Sprite not found: " + path);
             return s;
+        }
+
+        static bool ForceUncompressed(TextureImporter importer, string platform)
+        {
+            var ps = importer.GetPlatformTextureSettings(platform);
+            if (ps.overridden && ps.format == TextureImporterFormat.RGBA32) return false;
+            ps.overridden = true;
+            ps.format = TextureImporterFormat.RGBA32;
+            ps.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.SetPlatformTextureSettings(ps);
+            return true;
         }
 
         static GameObject Place(GameObject prefab, Vector3 pos, float yaw, float scale, bool ensureCollider)
@@ -1136,14 +1174,22 @@ namespace Crownfall.EditorTools
             go.transform.position = pos;
             go.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
             go.transform.localScale = Vector3.one * scale;
-            if (ensureCollider && go.GetComponentInChildren<Collider>() == null)
+            if (ensureCollider)
             {
-                foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
-                {
-                    if (mf.sharedMesh == null) continue;
-                    var mc = mf.gameObject.AddComponent<MeshCollider>();
-                    mc.sharedMesh = mf.sharedMesh;
-                }
+                if (go.GetComponentInChildren<Collider>() == null)
+                    foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
+                    {
+                        if (mf.sharedMesh == null) continue;
+                        var mc = mf.gameObject.AddComponent<MeshCollider>();
+                        mc.sharedMesh = mf.sharedMesh;
+                    }
+            }
+            else
+            {
+                // decoration (grass, bushes, flames) must never block movement —
+                // several Battle Arena prefabs ship with their own colliders
+                foreach (var col in go.GetComponentsInChildren<Collider>())
+                    Object.DestroyImmediate(col);
             }
             return go;
         }
