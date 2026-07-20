@@ -78,7 +78,15 @@ namespace Crownfall
                 if (res.landed)
                 {
                     GameEffects.I?.ShowDamage(victim.AimPoint, res.damageDealt, res.blocked);
-                    if (victim.Identity.isPlayer) OrbitCamera.I?.Shake(0.3f);
+                    // a bolt that connects should freeze and kick like a melee hit —
+                    // landing one gave the caster nothing back before
+                    bool playerInvolved = victim.Identity.isPlayer ||
+                                          (owner.Identity != null && owner.Identity.isPlayer);
+                    if (playerInvolved)
+                    {
+                        GameEffects.I?.Hitstop(res.killed ? Tuning.HitstopHeavy : Tuning.HitstopLight);
+                        OrbitCamera.I?.Shake(res.killed ? 0.42f : 0.24f);
+                    }
                 }
                 Explode(transform.position);
                 return;

@@ -250,10 +250,14 @@ namespace Crownfall.EditorTools
                 { ClassId.Duelist, $"{AnimRoot}/DoubleSwords" },
                 { ClassId.Mage, $"{AnimRoot}/MagicWand" },
             };
+            // Attack02_MagicWand is a forward point/thrust -> the bolt (light).
+            // Attack01_MagicWand is an overhead raise-and-slam -> the nova (heavy),
+            // which reads as "raise the staff, slam, AoE erupts". Combo01/02 are unused
+            // (ranged skips the melee chain) but map to the bolt clip for safety.
             var mageMap = new Dictionary<string, string>
             {
-                { "NormalAttack01", "Attack01" }, { "Combo01", "Attack01" },
-                { "Combo02", "Attack01" }, { "NormalAttack02", "Attack02" },
+                { "NormalAttack01", "Attack02" }, { "Combo01", "Attack02" },
+                { "Combo02", "Attack02" }, { "NormalAttack02", "Attack01" },
                 { "Defend", "Idle" }, { "DefendHit", "GetHit" },
             };
             var noShieldMap = new Dictionary<string, string>
@@ -968,10 +972,15 @@ namespace Crownfall.EditorTools
                     id = (ElementId)i,
                     slashHit = FindPrefab("MagicArsenal", el + "SlashHit"),
                     missile = FindPrefab("MagicArsenal", el + "MissileNormal"),
-                    explosion = FindPrefab("MagicArsenal", el + "ExplosionSmall"),
-                    muzzle = FindPrefab("MagicArsenal", el + "MuzzleNormal"),
+                    explosion = FindPrefab("MagicArsenal", el + "ExplosionNormal"),
+                    muzzle = FindPrefab("MagicArsenal", el + "MuzzleBig"),
                     nova = FindPrefab("MagicArsenal", "Nova" + el),
                     enchant = FindPrefab("MagicArsenal", el + "Enchant"),
+                    charge = FindPrefab("MagicArsenal", el + "Charge"),
+                    slash = FindPrefab("MagicArsenal", el + "Slash"),
+                    cleave = FindPrefab("MagicArsenal", el + "Cleave"),
+                    sphereBlast = FindPrefab("MagicArsenal", el + "SphereBlast"),
+                    pillar = FindPrefab("MagicArsenal", el + "PillarBlast"),
                     castSound = FindClip("magic_cast_" + el.ToLowerInvariant()),
                     impactSound = FindClip(el.ToLowerInvariant() + "impact"),
                 });

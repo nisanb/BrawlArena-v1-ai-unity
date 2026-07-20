@@ -57,12 +57,23 @@ namespace Crownfall
 
         float bufferedLightUntil, bufferedHeavyUntil, bufferedRollUntil;
         Vector3 bufferedRollDir;
+        float flinchImmuneUntil;   // brief flinch immunity so focus-fire can't chain-stun you
 
         int comboIndex;
         bool comboWindowOpen;
         Coroutine actionRoutine;
         float animMoveX, animMoveZ;
         CombatMotor attackAim;
+
+        // Ranged cast timing, in normalized clip time. Casters do not use the melee
+        // strike/lunge/trail pipeline: the bolt leaves the wand at the forward-point
+        // apex, the nova erupts at the overhead slam's contact. Kept as fields so the
+        // motion-review loop can retune them without touching the routine.
+        const float BoltReleaseNt = 0.32f;   // let the forward wind-up read before the bolt leaves
+        const float BoltCutNt     = 0.54f;   // blend back to locomotion (still a snappy bolt)
+        const float NovaReleaseNt = 0.46f;   // staff slams down -> AoE
+        const float NovaCutNt     = 0.82f;   // longer follow-through for the big cast
+        Vector3 enchantBaseScale;             // rest scale of the wand aura (forge-set)
 
         public CombatMotor LastEngagedEnemy { get; private set; }
         public float LastEngagedAt { get; private set; } = -99f;
@@ -107,6 +118,8 @@ namespace Crownfall
                     if (ringMat != null) ringBaseColor = ringMat.color;
                 }
             }
+
+            if (enchantFx != null) enchantBaseScale = enchantFx.transform.localScale;
         }
 
         // ------------------------------------------------------------------ concealment
@@ -183,10 +196,16 @@ namespace Crownfall
         {
             UpdateConcealment();
 
-            // the ranged cast plays at a deliberate speed (set in StartAttack);
-            // make sure nothing leaves the animator stuck slow after an interrupt
-            if (Anim != null && State != MotorState.Attacking && Anim.speed != 1f)
-                Anim.speed = 1f;
+            // the ranged cast drives animator speed and the wand-aura charge pulse;
+            // if a cast is interrupted (hit/stagger/death) make sure neither is left
+            // stuck away from its rest value
+            if (State != MotorState.Attacking)
+            {
+                if (Anim != null && Anim.speed != 1f) Anim.speed = 1f;
+                if (enchantFx != null && enchantBaseScale != Vector3.zero &&
+                    enchantFx.transform.localScale != enchantBaseScale)
+                    enchantFx.transform.localScale = enchantBaseScale;
+            }
 
             if (State == MotorState.Dead || State == MotorState.Victory)
             {
@@ -334,12 +353,11 @@ namespace Crownfall
 
             if (actionRoutine != null) StopCoroutine(actionRoutine);
             Anim.ResetTrigger(HashRoll);
-            // a wand cast should read as a spell, not a frantic melee flail: the
-            // base attack states run hot (tuned for sword clips) so ranged casters
-            // play them back slower and more deliberately
-            Anim.speed = Kit.isRanged ? 0.8f : 1f;
+            Anim.speed = 1f;
             Anim.SetTrigger(heavy ? HashAttackH : HashAttackL);
-            actionRoutine = StartCoroutine(AttackRoutine(heavy));
+            // ranged casters run a dedicated spell routine (charge -> release-timed
+            // bolt/nova -> snappy recovery); melee keeps the strike/lunge/combo flow
+            actionRoutine = StartCoroutine(Kit.isRanged ? CastRoutine(heavy) : AttackRoutine(heavy));
         }
 
         CombatMotor AcquireAttackAim()
@@ -431,6 +449,10 @@ namespace Crownfall
                         swung = true;
                         SetTrail(true);
                         GameEffects.I?.PlaySwing(transform.position, heavy);
+                        // elemental arc thrown along the swing (cleave for heavies)
+                        GameEffects.I?.SlashArc(Identity.element,
+                            transform.position + transform.forward * 0.9f + Vector3.up * 1.1f,
+                            transform.rotation, heavy);
                     }
 
                     if (!struck && t >= Tuning.StrikeMoment)
@@ -475,6 +497,98 @@ namespace Crownfall
 
             SetTrail(false);
             if (State == MotorState.Attacking) State = MotorState.Locomotion;
+        }
+
+        // Ranged cast: a caster plants and channels rather than swinging. No weapon
+        // trail, no melee whoosh, no lunge. The wand aura swells through the windup as
+        // a charge tell, the projectile/nova leaves at the gesture's release apex, then
+        // a short snappy recovery blends straight back to locomotion (roll-cancelable).
+        IEnumerator CastRoutine(bool heavy)
+        {
+            SetTrail(false);
+
+            // wait for the cast state to actually begin
+            float waited = 0f;
+            AnimatorStateInfo st = default;
+            while (waited < 0.5f)
+            {
+                st = CurrentOrNextState();
+                if (st.IsTag("Attack")) break;
+                waited += Time.deltaTime;
+                yield return null;
+            }
+            if (State != MotorState.Attacking) yield break;
+
+            float len = Mathf.Max(0.3f, st.length);
+            float release = heavy ? NovaReleaseNt : BoltReleaseNt;
+            float cut = heavy ? NovaCutNt : BoltCutNt;
+            float chargePeak = heavy ? 3.2f : 2.6f;   // the tell must read at chase-cam distance
+
+            GameEffects.I?.PlayCast(Identity.element, weaponTip != null ? weaponTip.position : AimPoint);
+            Anim.speed = 0.9f;   // deliberate wind-up so the charge is legible; snaps on release
+            GameObject castChargeFx = weaponTip != null
+                ? GameEffects.I?.SpawnCharge(Identity.element, weaponTip, heavy ? 1.5f : 1.1f) : null;
+
+            bool released = false;
+            float t = 0f;
+            while (State == MotorState.Attacking)
+            {
+                var cur = Anim.GetCurrentAnimatorStateInfo(0);
+                t = cur.IsTag("Attack") ? cur.normalizedTime : t + Time.deltaTime / len;
+
+                // charge tell: the wand aura grows into the release, then eases back
+                if (enchantFx != null && enchantBaseScale != Vector3.zero)
+                {
+                    float mul = !released
+                        ? Mathf.Lerp(1f, chargePeak, Mathf.Clamp01(t / Mathf.Max(0.01f, release)))
+                        : Mathf.Lerp(chargePeak, 1f, Mathf.Clamp01((t - release) / 0.28f));
+                    enchantFx.transform.localScale = enchantBaseScale * mul;
+                }
+
+                // hold the aim on the target through the windup (no melee lunge/magnet)
+                if (!released && attackAim != null && !attackAim.IsDead)
+                {
+                    Vector3 to = attackAim.transform.position - transform.position;
+                    to.y = 0f;
+                    if (to.sqrMagnitude > 0.04f)
+                        transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                            Quaternion.LookRotation(to), 620f * Time.deltaTime);
+                }
+
+                if (!released && t >= release)
+                {
+                    released = true;
+                    Anim.speed = 1.3f;        // snap the release/recoil
+                    if (castChargeFx != null) { Destroy(castChargeFx); castChargeFx = null; }
+                    DoStrike(heavy);          // fires bolt or nova (+ muzzle/nova vfx, cast sfx)
+                }
+
+                // roll-cancel out of the recovery
+                if (released && bufferedRollUntil > Time.time && Stamina.TrySpend(Kit.staminaRoll))
+                {
+                    bufferedRollUntil = 0f;
+                    Anim.speed = 1f;
+                    if (castChargeFx != null) Destroy(castChargeFx);
+                    if (enchantFx != null && enchantBaseScale != Vector3.zero)
+                        enchantFx.transform.localScale = enchantBaseScale;
+                    StartRoll(bufferedRollDir);
+                    yield break;
+                }
+
+                if (t >= cut) break;
+                yield return null;
+            }
+
+            if (castChargeFx != null) Destroy(castChargeFx);
+            if (!released) DoStrike(heavy);   // safety: a cast never fizzles
+            Anim.speed = 1f;
+            if (enchantFx != null && enchantBaseScale != Vector3.zero)
+                enchantFx.transform.localScale = enchantBaseScale;
+            if (State == MotorState.Attacking)
+            {
+                State = MotorState.Locomotion;
+                if (Anim != null) Anim.CrossFadeInFixedTime("Locomotion", 0.14f);
+            }
         }
 
         AnimatorStateInfo CurrentOrNextState()
@@ -586,6 +700,7 @@ namespace Crownfall
                 }
             }
             OrbitCamera.I?.ShakeIfNear(transform.position, 8f, 0.6f);
+            if (Identity != null && Identity.isPlayer) GameEffects.I?.Hitstop(Tuning.HitstopHeavy);
         }
 
         // ------------------------------------------------------------------ roll
@@ -661,12 +776,26 @@ namespace Crownfall
 
         public void NotifyHitReact(HitInfo hit)
         {
+            if (IsDead || State == MotorState.Staggered || State == MotorState.Rolling) return;
+
+            // Hyperarmor: a light hit no longer yanks you out of your own committed
+            // attack/cast — poise still accrues (a heavy hit or a poise-break can
+            // still interrupt), but chip damage stops cancelling every swing/bolt.
+            if (State == MotorState.Attacking && !hit.heavy) { flinchImmuneUntil = Time.time + 0.25f; return; }
+
+            // Flinch budget: after a flinch you get brief flinch immunity, so a
+            // focus-firing squad can't chain-stun you locked-in-place (the "every
+            // hit knocks me and I can't move" feel). The hit still deals damage and
+            // spawns its impact vfx/number — you just keep control.
+            if (Time.time < flinchImmuneUntil) return;
             if (State != MotorState.Locomotion && State != MotorState.Hit) return;
+
             if (actionRoutine != null) StopCoroutine(actionRoutine);
             State = MotorState.Hit;
             Anim.SetTrigger(HashHit);
-            cc.Move(hit.direction * 0.28f);
-            actionRoutine = StartCoroutine(HitRecover(0.55f));
+            cc.Move(hit.direction * (hit.heavy ? 0.28f : 0.16f));
+            flinchImmuneUntil = Time.time + (hit.heavy ? 0.5f : 0.65f);
+            actionRoutine = StartCoroutine(HitRecover(hit.heavy ? 0.4f : 0.24f));
         }
 
         IEnumerator HitRecover(float dur)
@@ -700,6 +829,8 @@ namespace Crownfall
                 Anim.SetTrigger(HashRecover);
                 yield return new WaitForSeconds(0.15f);
                 if (State == MotorState.Staggered) State = MotorState.Locomotion;
+                // a breather after being stunned so you aren't instantly re-chained
+                flinchImmuneUntil = Time.time + 0.85f;
             }
         }
 

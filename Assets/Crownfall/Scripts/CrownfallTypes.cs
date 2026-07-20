@@ -62,8 +62,8 @@ namespace Crownfall
                 staminaLight = 12f, staminaRoll = 19f },
 
             new ClassKit { id = ClassId.Mage, displayName = "Mage", blurb = "Bolts at range, a nova when cornered.",
-                isRanged = true, maxHealth = 115, maxStamina = 100, runSpeed = 4.3f,
-                lightDamage = 16, heavyDamage = 30, lightPoiseDamage = 10, heavyPoiseDamage = 26, maxPoise = 24,
+                isRanged = true, maxHealth = 125, maxStamina = 100, runSpeed = 4.45f,
+                lightDamage = 16, heavyDamage = 30, lightPoiseDamage = 10, heavyPoiseDamage = 26, maxPoise = 42,
                 attackRange = 1.2f, attackRadius = 0.9f, lightLunge = 0f, heavyLunge = 0f,
                 novaRadius = 4.0f, staminaLight = 14f, staminaHeavy = 32f },
         };

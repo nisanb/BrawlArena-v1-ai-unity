@@ -18,6 +18,11 @@ namespace Crownfall
             public GameObject muzzle;
             public GameObject nova;
             public GameObject enchant;
+            public GameObject charge;       // cast wind-up glow at the wand tip
+            public GameObject slash;        // melee light swing arc
+            public GameObject cleave;       // melee heavy swing arc
+            public GameObject sphereBlast;  // nova radial burst
+            public GameObject pillar;       // nova ground pillar
             public AudioClip castSound;
             public AudioClip impactSound;
         }
@@ -77,11 +82,38 @@ namespace Crownfall
             SpawnTemp(Set(el)?.muzzle, pos, rot, 0.9f);
         }
 
+        /// Cast wind-up VFX at the wand tip; returns a handle the caster destroys on
+        /// release. Self-destructs after 2s as a safety net if the cast is interrupted.
+        public GameObject SpawnCharge(ElementId el, Transform at, float scale)
+        {
+            if (at == null) return null;
+            var set = Set(el);
+            var prefab = set != null && set.charge != null ? set.charge : set?.muzzle;
+            if (prefab == null) return null;
+            var go = Instantiate(prefab, at.position, at.rotation, at);
+            go.transform.localPosition = Vector3.zero;
+            if (!Mathf.Approximately(scale, 1f)) go.transform.localScale *= scale;
+            Destroy(go, 2f);
+            return go;
+        }
+
+        /// Elemental slash/cleave arc thrown along a melee swing.
+        public void SlashArc(ElementId el, Vector3 pos, Quaternion rot, bool heavy)
+        {
+            var set = Set(el);
+            var prefab = heavy && set != null && set.cleave != null ? set.cleave : set?.slash;
+            SpawnTemp(prefab, pos, rot, heavy ? 1.35f : 1f);
+        }
+
         public void Nova(ElementId el, Vector3 pos)
         {
             var set = Set(el);
-            SpawnTemp(set?.nova, pos + Vector3.up * 0.1f, Quaternion.identity, 1f);
-            if (set != null) PlayAt(set.impactSound, pos, 0.95f, 0.85f);
+            // a "get off me" panic burst should read BIG: core nova + a radial sphere
+            // shockwave + a ground pillar erupting through the caster
+            SpawnTemp(set?.nova, pos + Vector3.up * 0.1f, Quaternion.identity, 1.15f);
+            SpawnTemp(set?.sphereBlast, pos + Vector3.up * 0.5f, Quaternion.identity, 1.2f);
+            SpawnTemp(set?.pillar, pos, Quaternion.identity, 1f);
+            if (set != null) PlayAt(set.impactSound, pos, 1f, 0.8f);
         }
 
         public void RespawnFlash(Vector3 pos)
@@ -140,11 +172,19 @@ namespace Crownfall
 
         // ------------------------------------------------------------------ numbers
 
+        int dmgPopCount;
         public void ShowDamage(Vector3 pos, float amount, bool blocked)
         {
             var prefab = blocked && blockedNumberPrefab != null ? blockedNumberPrefab : damageNumberPrefab;
             if (prefab == null) return;
-            prefab.Spawn(pos + Vector3.up * 0.55f, Mathf.Max(1f, Mathf.Round(amount)));
+            // Fan simultaneous popups apart on a golden-angle spiral plus a vertical
+            // stagger so a flurry of hits never fuses into an unreadable stack of
+            // digits (the "-2320" / "1601" soup reviewers flagged).
+            int n = dmgPopCount++;
+            float ang = n * 2.39996323f;
+            Vector3 offset = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * 0.72f
+                             + Vector3.up * (0.5f + (n % 5) * 0.34f);
+            prefab.Spawn(pos + offset, Mathf.Max(1f, Mathf.Round(amount)));
         }
 
         // ------------------------------------------------------------------ audio
