@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace Crownfall
 {
@@ -21,6 +22,20 @@ namespace Crownfall
 
         readonly List<string> errors = new List<string>();
         int errorCount;
+
+        // "pa" = active UI Images still using preserveAspect (the white-icon bug):
+        // 0 means this build has the icon fix, >0 means it does not. Recomputed
+        // periodically since FindObjects is not free.
+        int preserveAspectImages = -1;
+        int lastPaFrame = -999;
+
+        int CountPreserveAspect()
+        {
+            int n = 0;
+            foreach (var img in FindObjectsByType<Image>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                if (img.preserveAspect) n++;
+            return n;
+        }
 
         void OnEnable() { Application.logMessageReceived += OnLog; }
         void OnDisable() { Application.logMessageReceived -= OnLog; }
@@ -59,9 +74,15 @@ namespace Crownfall
                 if (nearest != null)
                     foe = $"  foe:{nearest.Identity.displayName} {nearest.Health.Current:0}/{nearest.Health.Max:0}";
             }
-            string beat = $"Crownfall f{Time.frameCount}  {SceneManager.GetActiveScene().name}" +
+            if (Time.frameCount - lastPaFrame > 30)
+            {
+                preserveAspectImages = CountPreserveAspect();
+                lastPaFrame = Time.frameCount;
+            }
+            string beat = $"Crownfall v{Application.version}  {SceneManager.GetActiveScene().name}" +
                           $"  cam:{(Camera.main != null ? "ok" : "MISSING")}" +
-                          $"  match:{(mm != null ? mm.State.ToString() : "MISSING")}" + foe +
+                          $"  match:{(mm != null ? mm.State.ToString() : "MISSING")}" +
+                          $"  pa:{preserveAspectImages}" + foe +
                           (errorCount > 0 ? $"  ERRORS:{errorCount}" : "");
             style.normal.textColor = errorCount > 0 ? Color.red : new Color(1f, 1f, 1f, 0.5f);
             GUI.Label(new Rect(14, 6, Screen.width - 28, 46), beat, style);
