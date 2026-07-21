@@ -161,6 +161,14 @@ namespace BrawlArena.EditorAutomation
                     result.message = $"probe armed class={cls} dir={dir}";
                     break;
                 }
+                case "crownfall_deathprobe":
+                {
+                    string dir = string.IsNullOrEmpty(cmd.arg)
+                        ? Path.Combine(Dir, "death-probe") : cmd.arg;
+                    BrawlAutomation.CrownfallProbeBoot.Arm(dir, 2, "death");
+                    result.message = $"death probe armed dir={dir}";
+                    break;
+                }
                 case "urp_convert":
                     result.message = ArenaSceneBuilder.ConvertMaterialsToUrp();
                     break;

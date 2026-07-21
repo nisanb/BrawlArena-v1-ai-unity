@@ -1175,6 +1175,13 @@ namespace Crownfall
             blockHeld = false;
             moveInput = Vector3.zero;
             velocity = Vector3.zero;
+            // stale triggers (Respawn especially) yank the corpse straight out of
+            // the Die state into idle — clear everything that could exit it
+            Anim.ResetTrigger(HashHit);
+            Anim.ResetTrigger(HashRespawn);
+            Anim.ResetTrigger(HashAttackL);
+            Anim.ResetTrigger(HashAttackH);
+            Anim.ResetTrigger(HashSkill);
             Anim.SetTrigger(HashDie);
             GameEffects.I?.PlayDeath(transform.position);
         }
@@ -1197,7 +1204,9 @@ namespace Crownfall
             Stamina.RefillFull();
             State = MotorState.Locomotion;
             Anim.ResetTrigger(HashDie);
-            Anim.SetTrigger(HashRespawn);
+            // NOTE: no SetTrigger(Respawn) here — Play() jumps past every transition,
+            // so the trigger would never be consumed and the armed leftover used to
+            // eject the NEXT death straight from Die back into idle locomotion.
             Anim.Play("Locomotion", 0, 0f);
             StartCoroutine(SpawnProtection());
         }

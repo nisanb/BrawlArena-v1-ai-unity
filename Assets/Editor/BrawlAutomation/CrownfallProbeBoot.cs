@@ -11,16 +11,18 @@ namespace BrawlAutomation
     {
         const string DirKey = "crownfall.probe.dir";
         const string ClassKey = "crownfall.probe.class";
+        const string KindKey = "crownfall.probe.kind";
 
         static CrownfallProbeBoot()
         {
             EditorApplication.update += Tick;
         }
 
-        public static void Arm(string dir, int classIndex)
+        public static void Arm(string dir, int classIndex, string kind = "skill")
         {
             SessionState.SetString(DirKey, dir);
             SessionState.SetInt(ClassKey, classIndex);
+            SessionState.SetString(KindKey, kind);
             if (!EditorApplication.isPlaying) EditorApplication.EnterPlaymode();
         }
 
@@ -36,10 +38,13 @@ namespace BrawlAutomation
             SessionState.EraseString(DirKey);
             int classIndex = SessionState.GetInt(ClassKey, 2);
             SessionState.EraseInt(ClassKey);
+            string kind = SessionState.GetString(KindKey, "skill");
+            SessionState.EraseString(KindKey);
 
             mm.AutoStart(classIndex, true);
-            Crownfall.SkillProbe.Begin(dir);
-            Debug.Log($"[CrownfallProbeBoot] probe armed: class={classIndex} dir={dir}");
+            if (kind == "death") Crownfall.DeathPoseProbe.Begin(dir);
+            else Crownfall.SkillProbe.Begin(dir);
+            Debug.Log($"[CrownfallProbeBoot] probe armed: kind={kind} class={classIndex} dir={dir}");
         }
     }
 }
