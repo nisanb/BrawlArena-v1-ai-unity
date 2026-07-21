@@ -37,35 +37,51 @@ namespace Crownfall
         public float staminaLight = 16f;
         public float staminaHeavy = 30f;
         public float staminaRoll = 22f;
+
+        // class skill (E / touch SKILL button)
+        public string skillName;
+        public float skillCooldown = 9f;
+        public float staminaSkill = 34f;
+        public float skillDamage;       // per hit / pulse / bolt
+        public float skillPoiseDamage;  // per hit / pulse / bolt
+        public float skillRadius;       // AoE reach for slam / whirl
     }
 
     public static class ClassKits
     {
         static readonly ClassKit[] kits =
         {
-            new ClassKit { id = ClassId.Knight, displayName = "Knight", blurb = "Sword & shield. The only class that can block.",
+            new ClassKit { id = ClassId.Knight, displayName = "Knight", blurb = "Sword & shield. The only class that can block. Skill: Aegis Slam.",
                 canBlock = true, maxHealth = 175, maxStamina = 110, runSpeed = 4.3f,
                 lightDamage = 14, heavyDamage = 27, lightPoiseDamage = 12, heavyPoiseDamage = 27, maxPoise = 46,
                 attackRange = 1.35f, attackRadius = 0.95f, lightLunge = 1.0f, heavyLunge = 1.7f,
-                blockDamageFactor = 0.22f },
+                blockDamageFactor = 0.22f,
+                skillName = "Aegis Slam", skillCooldown = 10f, staminaSkill = 36f,
+                skillDamage = 26, skillPoiseDamage = 42, skillRadius = 3.2f },
 
-            new ClassKit { id = ClassId.Greatsword, displayName = "Warbrand", blurb = "Colossal sword. Slow, staggering blows.",
+            new ClassKit { id = ClassId.Greatsword, displayName = "Warbrand", blurb = "Colossal sword. Slow, staggering blows. Skill: Sundering Whirl.",
                 maxHealth = 165, maxStamina = 105, runSpeed = 4.0f,
                 lightDamage = 20, heavyDamage = 37, lightPoiseDamage = 17, heavyPoiseDamage = 34, maxPoise = 52,
                 attackRange = 1.6f, attackRadius = 1.15f, lightLunge = 1.2f, heavyLunge = 2.1f,
-                staminaLight = 19f, staminaHeavy = 34f },
+                staminaLight = 19f, staminaHeavy = 34f,
+                skillName = "Sundering Whirl", skillCooldown = 10f, staminaSkill = 38f,
+                skillDamage = 16, skillPoiseDamage = 20, skillRadius = 3.0f },
 
-            new ClassKit { id = ClassId.Duelist, displayName = "Duelist", blurb = "Twin blades. Fast combos, fast feet.",
+            new ClassKit { id = ClassId.Duelist, displayName = "Duelist", blurb = "Twin blades. Fast combos, fast feet. Skill: Blade Dance.",
                 maxHealth = 135, maxStamina = 118, runSpeed = 4.7f,
                 lightDamage = 11, heavyDamage = 23, lightPoiseDamage = 9, heavyPoiseDamage = 20, maxPoise = 30,
                 attackRange = 1.25f, attackRadius = 0.9f, lightLunge = 1.1f, heavyLunge = 1.9f,
-                staminaLight = 12f, staminaRoll = 19f },
+                staminaLight = 12f, staminaRoll = 19f,
+                skillName = "Blade Dance", skillCooldown = 8f, staminaSkill = 32f,
+                skillDamage = 9, skillPoiseDamage = 8, skillRadius = 0f },
 
-            new ClassKit { id = ClassId.Mage, displayName = "Mage", blurb = "Bolts at range, a nova when cornered.",
+            new ClassKit { id = ClassId.Mage, displayName = "Mage", blurb = "Bolts at range, a nova when cornered. Skill: Arcane Barrage.",
                 isRanged = true, maxHealth = 125, maxStamina = 100, runSpeed = 4.45f,
                 lightDamage = 16, heavyDamage = 30, lightPoiseDamage = 10, heavyPoiseDamage = 26, maxPoise = 42,
                 attackRange = 1.2f, attackRadius = 0.9f, lightLunge = 0f, heavyLunge = 0f,
-                novaRadius = 4.0f, staminaLight = 14f, staminaHeavy = 32f },
+                novaRadius = 4.0f, staminaLight = 14f, staminaHeavy = 32f,
+                skillName = "Arcane Barrage", skillCooldown = 9f, staminaSkill = 34f,
+                skillDamage = 8, skillPoiseDamage = 6, skillRadius = 0f },
         };
 
         public static ClassKit Get(ClassId id) => kits[(int)id];
@@ -106,6 +122,9 @@ namespace Crownfall
         public const float HitstopLight = 0.05f;
         public const float HitstopHeavy = 0.09f;
         public const float ComboFinisherMult = 1.5f;
+        public const int MeleeComboLength = 4;
+        public const float MageCastComboWindow = 2.0f;  // consecutive casts inside this chain
+        public const float MageSurgeMult = 1.45f;       // 3rd chained bolt hits harder
         public const float StaminaRegenPerSec = 24f;
         public const float StaminaRegenDelay = 0.75f;
         public const float SprintStaminaPerSec = 9f;

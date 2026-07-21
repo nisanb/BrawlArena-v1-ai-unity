@@ -84,6 +84,10 @@ namespace Crownfall
                 if (mouse.rightButton.wasPressedThisFrame) Motor.RequestHeavy();
             }
 
+            // --- class skill
+            if (kb.eKey.wasPressedThisFrame)
+                Motor.RequestSkill();
+
             // --- roll
             if (kb.spaceKey.wasPressedThisFrame)
                 Motor.RequestRoll(move.sqrMagnitude > 0.01f ? move : -transform.forward);

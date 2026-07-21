@@ -14,10 +14,12 @@ namespace Crownfall
         float dieAt;
 
         public static void Fire(CombatMotor owner, ElementId element, Vector3 origin, Vector3 aimPoint,
-            CombatMotor homingTarget, float damage, float poiseDamage, float speed)
+            CombatMotor homingTarget, float damage, float poiseDamage, float speed,
+            float visualScale = 1f)
         {
             var go = new GameObject("Bolt_" + element);
             go.transform.position = origin;
+            if (visualScale != 1f) go.transform.localScale = Vector3.one * visualScale;
             Vector3 dir = aimPoint - origin;
             go.transform.rotation = dir.sqrMagnitude > 0.001f ? Quaternion.LookRotation(dir) : owner.transform.rotation;
 

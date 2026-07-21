@@ -25,6 +25,7 @@ namespace Crownfall
         public Sprite iconBlock;
         public Sprite iconLock;
         public Sprite iconAuto;
+        public Sprite iconSkill;
         public TMP_FontAsset font;
 
         public static bool forceEnableForTesting;
@@ -38,11 +39,12 @@ namespace Crownfall
         static readonly Color BlockCol = new Color(0.72f, 0.78f, 0.9f);
         static readonly Color LockCol = new Color(1f, 0.82f, 0.35f);
         static readonly Color AutoCol = new Color(0.45f, 0.85f, 0.45f);
+        static readonly Color SkillCol = new Color(0.72f, 0.48f, 1f);
 
         Canvas canvas;
         RectTransform joyBase, joyKnob;
-        RectTransform attackBtn, dodgeBtn, blockBtn, lockBtn, autoBtn;
-        Image attackImg, dodgeImg, blockImg, lockImg;
+        RectTransform attackBtn, dodgeBtn, blockBtn, lockBtn, autoBtn, skillBtn;
+        Image attackImg, dodgeImg, blockImg, lockImg, skillImg, skillCover;
         Image blockIconImg;
         TMP_Text blockLabel;
         Vector2 joyRestPos;
@@ -150,7 +152,24 @@ namespace Crownfall
             blockBtn = Btn("Block", new Vector2(1f, 0f), new Vector2(-210f, 480f), 158f, btnRound,
                 BlockCol, iconBlock, "BLOCK", 24f, out blockImg, out blockIconImg);
             blockLabel = blockBtn.GetComponentInChildren<TMP_Text>();
-            lockBtn = Btn("Lock", new Vector2(1f, 0f), new Vector2(-445f, 420f), 124f, btnRound,
+            skillBtn = Btn("Skill", new Vector2(1f, 0f), new Vector2(-448f, 400f), 158f, btnRound,
+                SkillCol, iconSkill, "SKILL", 22f, out skillImg, out _);
+            // radial cooldown shade that sweeps away as the skill recharges
+            var cover = new GameObject("Cooldown", typeof(RectTransform)).GetComponent<RectTransform>();
+            cover.SetParent(skillBtn, false);
+            cover.anchorMin = Vector2.zero; cover.anchorMax = Vector2.one;
+            cover.offsetMin = cover.offsetMax = Vector2.zero;
+            skillCover = cover.gameObject.AddComponent<Image>();
+            skillCover.sprite = btnRound;
+            skillCover.type = Image.Type.Filled;
+            skillCover.fillMethod = Image.FillMethod.Radial360;
+            skillCover.fillOrigin = (int)Image.Origin360.Top;
+            skillCover.fillClockwise = false;
+            skillCover.color = new Color(0.05f, 0.05f, 0.1f, 0.6f);
+            skillCover.raycastTarget = false;
+            skillCover.fillAmount = 0f;
+
+            lockBtn = Btn("Lock", new Vector2(1f, 0f), new Vector2(-655f, 300f), 116f, btnRound,
                 LockCol, iconLock, null, 0f, out lockImg, out _);
             autoBtn = Btn("Auto", new Vector2(0f, 1f), new Vector2(126f, -172f), 116f, btnRound,
                 AutoCol, iconAuto, "AUTO", 20f, out _, out _);
@@ -180,6 +199,12 @@ namespace Crownfall
             dodgeImg.color = Fade(DodgeCol, clusterAlpha);
             blockImg.color = Fade(BlockCol, clusterAlpha);
             lockImg.color = Fade(LockCol, clusterAlpha);
+            if (motor != null)
+            {
+                bool ready = motor.SkillReady;
+                skillImg.color = Fade(ready ? SkillCol : new Color(0.5f, 0.45f, 0.6f), clusterAlpha);
+                skillCover.fillAmount = 1f - motor.SkillReadiness;
+            }
             if (motor != null && blockLabel != null)
             {
                 blockLabel.text = motor.Kit.canBlock ? "BLOCK" : "HEAVY";
@@ -243,6 +268,7 @@ namespace Crownfall
                         blockTouchId = id;
                         if (!motor.Kit.canBlock) motor.RequestHeavy();
                     }
+                    else if (Hit(skillBtn, pos)) { motor.RequestSkill(); }
                     else if (Hit(lockBtn, pos))
                     {
                         var pc = motor.GetComponent<PlayerController>();

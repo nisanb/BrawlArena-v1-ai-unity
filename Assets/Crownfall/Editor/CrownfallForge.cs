@@ -107,7 +107,7 @@ namespace Crownfall.EditorTools
             ctrl.AddParameter(locoRateParam);
             ctrl.AddParameter("Locked", AnimatorControllerParameterType.Bool);
             ctrl.AddParameter("Blocking", AnimatorControllerParameterType.Bool);
-            foreach (var t in new[] { "AttackL", "AttackH", "Roll", "Hit", "Stagger", "Recover", "Die", "Respawn", "Victory", "BlockImpact" })
+            foreach (var t in new[] { "AttackL", "AttackH", "Skill", "Roll", "Hit", "Stagger", "Recover", "Die", "Respawn", "Victory", "BlockImpact" })
                 ctrl.AddParameter(t, AnimatorControllerParameterType.Trigger);
 
             var sm = ctrl.layers[0].stateMachine;
@@ -160,7 +160,11 @@ namespace Crownfall.EditorTools
             var l1 = S("AttackL1", "NormalAttack01", "Attack", 1.2f);
             var l2 = S("AttackL2", "Combo01", "Attack", 1.15f);
             var l3 = S("AttackL3", "Combo02", "Attack", 1.15f);
+            var l4 = S("AttackL4", "Combo03", "Attack", 1.15f);
             var heavy = S("Heavy", "NormalAttack02", "Attack", 1.12f);
+            // class skill: the flashiest chain clip per weapon (mage overrides to the
+            // channel/maintain pose and drives its exit from code)
+            var skill = S("Skill", "Combo05", "Skill", 1.05f);
             var getHit = S("GetHit", "GetHit", "Hit", 1.1f);
             var dizzy = S("Dizzy", "Dizzy", "Stagger");
             var die = S("Die", "Die", "Die");
@@ -185,6 +189,7 @@ namespace Crownfall.EditorTools
             // locomotion & block entries
             T(loco, l1, "AttackL", duration: 0.045f);
             T(loco, heavy, "AttackH", duration: 0.06f);
+            T(loco, skill, "Skill", duration: 0.05f);
             T(loco, roll, "Roll", duration: 0.05f);
             var toBlock = loco.AddTransition(block);
             toBlock.hasExitTime = false; toBlock.hasFixedDuration = true; toBlock.duration = 0.14f;
@@ -196,12 +201,14 @@ namespace Crownfall.EditorTools
             T(blockHit, block, null, hasExit: true, exitTime: 0.8f, duration: 0.12f);
             T(block, l1, "AttackL", duration: 0.08f);
             T(block, heavy, "AttackH", duration: 0.1f);
+            T(block, skill, "Skill", duration: 0.08f);
             T(block, roll, "Roll", duration: 0.07f);
 
             // combo chain + returns
             T(l1, l2, "AttackL", duration: 0.06f);
             T(l2, l3, "AttackL", duration: 0.06f);
-            foreach (var atk in new[] { l1, l2, l3, heavy })
+            T(l3, l4, "AttackL", duration: 0.06f);
+            foreach (var atk in new[] { l1, l2, l3, l4, heavy, skill })
             {
                 // late exit so buffered combo presses win the race against the
                 // return-to-locomotion transition (motor hard-breaks at 0.92 anyway)
@@ -257,7 +264,9 @@ namespace Crownfall.EditorTools
             var mageMap = new Dictionary<string, string>
             {
                 { "NormalAttack01", "Attack02" }, { "Combo01", "Attack02" },
-                { "Combo02", "Attack02" }, { "NormalAttack02", "Attack01" },
+                { "Combo02", "Attack02" }, { "Combo03", "Attack02" },
+                { "NormalAttack02", "Attack01" },
+                { "Combo05", "Attack02Maintain" }, // Arcane Barrage channel pose
                 { "Defend", "Idle" }, { "DefendHit", "GetHit" },
             };
             var noShieldMap = new Dictionary<string, string>
@@ -360,6 +369,7 @@ namespace Crownfall.EditorTools
             touch.iconBlock = LoadSprite($"{TPicto}/Pictoicon_Shield.png");
             touch.iconLock = LoadSprite($"{TPicto}/Pictoicon_Target.png");
             touch.iconAuto = LoadSprite($"{TPicto}/Pictoicon_Control_Play.png");
+            touch.iconSkill = LoadSprite($"{TPicto}/Pictoicon_Magic.png");
             touch.font = hud.fontSmall;
             EditorUtility.SetDirty(touch);
 
@@ -1081,6 +1091,7 @@ namespace Crownfall.EditorTools
             hud.icoAxe = LoadSprite($"{Picto}/Pictoicon_Axe.png");
             hud.icoSword = LoadSprite($"{Picto}/Pictoicon_Sword.png");
             hud.icoWand = LoadSprite($"{Picto}/Pictoicon_Wand_0.png");
+            hud.icoSkill = LoadSprite($"{Picto}/Pictoicon_Magic.png");
             hud.icoPlay = LoadSprite($"{Picto}/Pictoicon_Control_Play.png");
             hud.icoMovie = LoadSprite($"{Picto}/Pictoicon_Movie.png");
             hud.icoGear = LoadSprite($"{Picto}/Pictoicon_Setting.png");

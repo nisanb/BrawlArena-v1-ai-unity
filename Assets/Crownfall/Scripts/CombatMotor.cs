@@ -39,6 +39,7 @@ namespace Crownfall
         static readonly int HashBlocking = Animator.StringToHash("Blocking");
         static readonly int HashAttackL = Animator.StringToHash("AttackL");
         static readonly int HashAttackH = Animator.StringToHash("AttackH");
+        static readonly int HashSkill = Animator.StringToHash("Skill");
         static readonly int HashRoll = Animator.StringToHash("Roll");
         static readonly int HashHit = Animator.StringToHash("Hit");
         static readonly int HashStagger = Animator.StringToHash("Stagger");
@@ -55,9 +56,12 @@ namespace Crownfall
         bool sprintHeld;
         bool blockHeld;
 
-        float bufferedLightUntil, bufferedHeavyUntil, bufferedRollUntil;
+        float bufferedLightUntil, bufferedHeavyUntil, bufferedRollUntil, bufferedSkillUntil;
         Vector3 bufferedRollDir;
         float flinchImmuneUntil;   // brief flinch immunity so focus-fire can't chain-stun you
+        float skillReadyAt;
+        int castComboIndex;        // consecutive mage bolts; the 3rd is a surge
+        float lastCastAt = -99f;
 
         int comboIndex;
         bool comboWindowOpen;
@@ -181,6 +185,12 @@ namespace Crownfall
 
         public void RequestLight() { bufferedLightUntil = Time.time + Tuning.InputBufferSeconds; }
         public void RequestHeavy() { bufferedHeavyUntil = Time.time + Tuning.InputBufferSeconds; }
+        public void RequestSkill() { bufferedSkillUntil = Time.time + Tuning.InputBufferSeconds; }
+
+        public bool SkillReady => Time.time >= skillReadyAt;
+        /// 0 = just used, 1 = ready. Drives the HUD / touch cooldown sweep.
+        public float SkillReadiness =>
+            Mathf.Clamp01(1f - (skillReadyAt - Time.time) / Mathf.Max(0.01f, Kit.skillCooldown));
 
         public void RequestRoll(Vector3 worldDir)
         {
@@ -236,6 +246,7 @@ namespace Crownfall
             bool wantLight = bufferedLightUntil > now;
             bool wantHeavy = bufferedHeavyUntil > now;
             bool wantRoll = bufferedRollUntil > now;
+            bool wantSkill = bufferedSkillUntil > now;
 
             if (State == MotorState.Locomotion)
             {
@@ -243,6 +254,12 @@ namespace Crownfall
                 {
                     bufferedRollUntil = 0f;
                     StartRoll(bufferedRollDir);
+                    return;
+                }
+                if (wantSkill && SkillReady && Stamina.TrySpend(Kit.staminaSkill))
+                {
+                    bufferedSkillUntil = 0f;
+                    StartSkill();
                     return;
                 }
                 if (wantHeavy && Stamina.TrySpend(Kit.staminaHeavy))
@@ -465,9 +482,9 @@ namespace Crownfall
 
                     if (t >= Tuning.ComboWindowOpen) comboWindowOpen = true;
 
-                    // combo chaining: melee light chains up to 3; a ranged caster
+                    // combo chaining: melee light chains up to 4; a ranged caster
                     // fires one clean cast per press (no 3x wand flail), heavy never chains
-                    if (comboWindowOpen && !heavy && !Kit.isRanged && comboIndex < 3 &&
+                    if (comboWindowOpen && !heavy && !Kit.isRanged && comboIndex < Tuning.MeleeComboLength &&
                         bufferedLightUntil > Time.time && Stamina.TrySpend(Kit.staminaLight))
                     {
                         bufferedLightUntil = 0f;
@@ -608,13 +625,23 @@ namespace Crownfall
 
             float dmg = heavy ? Kit.heavyDamage : Kit.lightDamage;
             float poise = heavy ? Kit.heavyPoiseDamage : Kit.lightPoiseDamage;
-            if (!heavy && comboIndex == 3) { dmg *= Tuning.ComboFinisherMult; poise *= 1.3f; }
+            if (!heavy && comboIndex == Tuning.MeleeComboLength) { dmg *= Tuning.ComboFinisherMult; poise *= 1.3f; }
+            else if (!heavy && comboIndex == 3) dmg *= 1.1f;
             else if (!heavy && comboIndex == 2) dmg *= 1.05f;
 
             Vector3 origin = transform.position + transform.forward * Kit.attackRange + Vector3.up * 1.05f;
-            var cols = Physics.OverlapSphere(origin, Kit.attackRadius);
+            StrikeArea(origin, Kit.attackRadius, Tuning.MeleeHitAngle, dmg, poise, heavy);
+        }
+
+        /// Shared melee/skill hit resolution: overlap, team filter, facing cone
+        /// (maxAngle >= 180 = full circle), damage, impact feedback. Returns hits.
+        int StrikeArea(Vector3 origin, float radius, float maxAngle, float dmg, float poise,
+            bool heavy, bool unblockable = false)
+        {
+            var cols = Physics.OverlapSphere(origin, radius);
             var seen = new HashSet<Health>();
             bool anyHit = false, anyKill = false;
+            int hits = 0;
 
             foreach (var col in cols)
             {
@@ -626,7 +653,7 @@ namespace Crownfall
 
                 Vector3 to = victim.transform.position - transform.position;
                 to.y = 0f;
-                if (Vector3.Angle(transform.forward, to) > Tuning.MeleeHitAngle) continue;
+                if (maxAngle < 180f && Vector3.Angle(transform.forward, to) > maxAngle) continue;
 
                 var hit = new HitInfo
                 {
@@ -638,10 +665,12 @@ namespace Crownfall
                                                  : victim.transform.position + Vector3.up,
                     element = Identity.element,
                     heavy = heavy,
+                    unblockable = unblockable,
                 };
                 var res = victim.TakeHit(hit);
                 if (!res.landed) continue;
                 anyHit = true;
+                hits++;
                 anyKill |= res.killed;
                 if (victim.Motor != null) { LastEngagedEnemy = victim.Motor; LastEngagedAt = Time.time; }
 
@@ -657,10 +686,18 @@ namespace Crownfall
                 GameEffects.I?.Hitstop(anyKill || heavy ? Tuning.HitstopHeavy : Tuning.HitstopLight);
                 if (playerInvolved) OrbitCamera.I?.Shake(heavy ? 0.5f : 0.25f);
             }
+            return hits;
         }
 
         void DoBolt()
         {
+            // cast combo: bolts chained inside the window ramp to a surge on the 3rd —
+            // the mage's answer to the melee combo finisher
+            castComboIndex = Time.time - lastCastAt < Tuning.MageCastComboWindow ? castComboIndex + 1 : 1;
+            lastCastAt = Time.time;
+            bool surge = castComboIndex >= 3;
+            if (surge) castComboIndex = 0;
+
             Vector3 origin = weaponTip != null ? weaponTip.position : AimPoint + transform.forward * 0.5f;
             CombatMotor homing = attackAim != null && !attackAim.IsDead ? attackAim
                 : (LockTarget != null && !LockTarget.IsDead ? LockTarget : null);
@@ -669,7 +706,10 @@ namespace Crownfall
             GameEffects.I?.PlayCast(Identity.element, origin);
             if (homing != null) { LastEngagedEnemy = homing; LastEngagedAt = Time.time; }
             Projectile.Fire(this, Identity.element, origin, aim, homing,
-                Kit.lightDamage, Kit.lightPoiseDamage, Kit.projectileSpeed);
+                Kit.lightDamage * (surge ? Tuning.MageSurgeMult : 1f),
+                Kit.lightPoiseDamage * (surge ? 1.6f : 1f),
+                Kit.projectileSpeed * (surge ? 1.15f : 1f),
+                surge ? 1.7f : 1f);
         }
 
         void DoNova()
@@ -701,6 +741,287 @@ namespace Crownfall
             }
             OrbitCamera.I?.ShakeIfNear(transform.position, 8f, 0.6f);
             if (Identity != null && Identity.isPlayer) GameEffects.I?.Hitstop(Tuning.HitstopHeavy);
+        }
+
+        // ------------------------------------------------------------------ skills
+
+        void StartSkill()
+        {
+            State = MotorState.Attacking;
+            comboIndex = 0;
+            comboWindowOpen = false;
+            skillReadyAt = Time.time + Kit.skillCooldown;
+            MarkRevealed(1.6f);
+
+            if (moveInput.sqrMagnitude > 0.04f && (LockTarget == null || LockTarget.IsDead))
+                transform.rotation = Quaternion.LookRotation(moveInput);
+            attackAim = AcquireAttackAim();
+            if (attackAim != null)
+            {
+                Vector3 toAim = attackAim.transform.position - transform.position;
+                toAim.y = 0f;
+                if (toAim.sqrMagnitude > 0.04f)
+                    transform.rotation = Quaternion.LookRotation(toAim);
+            }
+
+            if (actionRoutine != null) StopCoroutine(actionRoutine);
+            Anim.ResetTrigger(HashRoll);
+            Anim.speed = 1f;
+            Anim.SetTrigger(HashSkill);
+            switch (Kit.id)
+            {
+                case ClassId.Knight:     actionRoutine = StartCoroutine(SlamSkillRoutine()); break;
+                case ClassId.Greatsword: actionRoutine = StartCoroutine(WhirlSkillRoutine()); break;
+                case ClassId.Duelist:    actionRoutine = StartCoroutine(FlurrySkillRoutine()); break;
+                default:                 actionRoutine = StartCoroutine(BarrageSkillRoutine()); break;
+            }
+        }
+
+        /// Waits for the animator's Skill state, then hands back its length via
+        /// the shared skillStateLen field. Returns false-equivalent by leaving
+        /// skillStateLen at 0 when the state never arrived.
+        float skillStateLen;
+        IEnumerator WaitForSkillState()
+        {
+            skillStateLen = 0f;
+            float waited = 0f;
+            while (waited < 0.6f)
+            {
+                var st = CurrentOrNextState();
+                if (st.IsTag("Skill")) { skillStateLen = Mathf.Max(0.4f, st.length); yield break; }
+                waited += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        float SkillTime(float prev, float len)
+        {
+            var cur = Anim.GetCurrentAnimatorStateInfo(0);
+            return cur.IsTag("Skill") ? cur.normalizedTime : prev + Time.deltaTime / len;
+        }
+
+        // Knight: leap into a shield-first ground slam — a 360 shockwave that
+        // staggers everything close. Reuses the nova pillar/sphere burst VFX.
+        IEnumerator SlamSkillRoutine()
+        {
+            yield return WaitForSkillState();
+            if (State != MotorState.Attacking || skillStateLen <= 0f) { EndSkill(); yield break; }
+            float len = skillStateLen;
+
+            bool struck = false;
+            float t = 0f;
+            while (State == MotorState.Attacking)
+            {
+                t = SkillTime(t, len);
+
+                // short hop toward the aim before impact
+                if (t >= 0.14f && t < 0.4f)
+                    cc.Move(transform.forward * (1.1f / (0.26f * len)) * Time.deltaTime);
+
+                if (!struck && t >= 0.45f)
+                {
+                    struck = true;
+                    GameEffects.I?.Nova(Identity.element, transform.position);
+                    GameEffects.I?.PlaySwing(transform.position, true);
+                    StrikeArea(transform.position, Kit.skillRadius, 360f,
+                        Kit.skillDamage, Kit.skillPoiseDamage, heavy: true, unblockable: true);
+                }
+
+                if (struck && bufferedRollUntil > Time.time && Stamina.TrySpend(Kit.staminaRoll))
+                {
+                    bufferedRollUntil = 0f;
+                    StartRoll(bufferedRollDir);
+                    yield break;
+                }
+                if (t >= 0.92f) break;
+                yield return null;
+            }
+            EndSkill();
+        }
+
+        // Warbrand: two full spins, each a 360 cleave pulse around the blade.
+        IEnumerator WhirlSkillRoutine()
+        {
+            yield return WaitForSkillState();
+            if (State != MotorState.Attacking || skillStateLen <= 0f) { EndSkill(); yield break; }
+            float len = skillStateLen;
+
+            int pulsesDone = 0;
+            float[] pulseAt = { 0.30f, 0.62f };
+            SetTrail(true);
+            float t = 0f;
+            while (State == MotorState.Attacking)
+            {
+                t = SkillTime(t, len);
+
+                if (pulsesDone < pulseAt.Length && t >= pulseAt[pulsesDone])
+                {
+                    pulsesDone++;
+                    GameEffects.I?.PlaySwing(transform.position, true);
+                    Vector3 arcPos = transform.position + Vector3.up * 1.1f;
+                    for (int i = 0; i < 3; i++)
+                        GameEffects.I?.SlashArc(Identity.element, arcPos,
+                            transform.rotation * Quaternion.Euler(0f, i * 120f, 0f), true);
+                    StrikeArea(transform.position, Kit.skillRadius, 360f,
+                        Kit.skillDamage, Kit.skillPoiseDamage, heavy: true);
+                }
+
+                if (t >= 0.8f) SetTrail(false);
+                if (pulsesDone >= pulseAt.Length && bufferedRollUntil > Time.time &&
+                    Stamina.TrySpend(Kit.staminaRoll))
+                {
+                    bufferedRollUntil = 0f;
+                    SetTrail(false);
+                    StartRoll(bufferedRollDir);
+                    yield break;
+                }
+                if (t >= 0.92f) break;
+                yield return null;
+            }
+            SetTrail(false);
+            EndSkill();
+        }
+
+        // Duelist: three lunging cuts in one breath; the last cut hits hardest.
+        IEnumerator FlurrySkillRoutine()
+        {
+            yield return WaitForSkillState();
+            if (State != MotorState.Attacking || skillStateLen <= 0f) { EndSkill(); yield break; }
+            float len = skillStateLen;
+
+            int cutsDone = 0;
+            float[] cutAt = { 0.22f, 0.46f, 0.70f };
+            SetTrail(true);
+            float t = 0f;
+            while (State == MotorState.Attacking)
+            {
+                t = SkillTime(t, len);
+
+                // steer at the victim between cuts so the flurry tracks
+                if (cutsDone < cutAt.Length && attackAim != null && !attackAim.IsDead)
+                {
+                    Vector3 to = attackAim.transform.position - transform.position;
+                    to.y = 0f;
+                    if (to.sqrMagnitude > 0.04f)
+                        transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                            Quaternion.LookRotation(to), 640f * Time.deltaTime);
+                    if (to.magnitude > Kit.attackRange * 0.8f)
+                        cc.Move(transform.forward * 3.4f * Time.deltaTime);
+                }
+
+                if (cutsDone < cutAt.Length && t >= cutAt[cutsDone])
+                {
+                    cutsDone++;
+                    bool last = cutsDone == cutAt.Length;
+                    GameEffects.I?.PlaySwing(transform.position, last);
+                    GameEffects.I?.SlashArc(Identity.element,
+                        transform.position + transform.forward * 0.9f + Vector3.up * 1.1f,
+                        transform.rotation, last);
+                    Vector3 origin = transform.position + transform.forward * Kit.attackRange + Vector3.up * 1.05f;
+                    StrikeArea(origin, Kit.attackRadius + 0.15f, 110f,
+                        Kit.skillDamage * (last ? 1.6f : 1f), Kit.skillPoiseDamage * (last ? 1.5f : 1f),
+                        heavy: last);
+                }
+
+                if (t >= 0.82f) SetTrail(false);
+                if (cutsDone >= cutAt.Length && bufferedRollUntil > Time.time &&
+                    Stamina.TrySpend(Kit.staminaRoll))
+                {
+                    bufferedRollUntil = 0f;
+                    SetTrail(false);
+                    StartRoll(bufferedRollDir);
+                    yield break;
+                }
+                if (t >= 0.92f) break;
+                yield return null;
+            }
+            SetTrail(false);
+            EndSkill();
+        }
+
+        // Mage: plants and channels, then rakes the target with four homing bolts.
+        // The maintain clip loops, so this routine runs on real time and cross-fades
+        // itself out rather than waiting for a clip exit.
+        IEnumerator BarrageSkillRoutine()
+        {
+            SetTrail(false);
+            GameEffects.I?.PlayCast(Identity.element, weaponTip != null ? weaponTip.position : AimPoint);
+            GameObject chargeFx = weaponTip != null
+                ? GameEffects.I?.SpawnCharge(Identity.element, weaponTip, 1.5f) : null;
+
+            const float Windup = 0.5f;
+            const int Bolts = 4;
+            const float BoltGap = 0.17f;
+
+            float start = Time.time;
+            int fired = 0;
+            float nextBoltAt = start + Windup;
+
+            while (State == MotorState.Attacking)
+            {
+                float elapsed = Time.time - start;
+
+                // charge tell swells through the windup like the normal cast
+                if (enchantFx != null && enchantBaseScale != Vector3.zero && fired == 0)
+                    enchantFx.transform.localScale = enchantBaseScale *
+                        Mathf.Lerp(1f, 2.6f, Mathf.Clamp01(elapsed / Windup));
+
+                // track the victim the whole channel
+                if (attackAim == null || attackAim.IsDead) attackAim = AcquireAttackAim();
+                if (attackAim != null && !attackAim.IsDead)
+                {
+                    Vector3 to = attackAim.transform.position - transform.position;
+                    to.y = 0f;
+                    if (to.sqrMagnitude > 0.04f)
+                        transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                            Quaternion.LookRotation(to), 620f * Time.deltaTime);
+                }
+
+                if (fired < Bolts && Time.time >= nextBoltAt)
+                {
+                    fired++;
+                    nextBoltAt = Time.time + BoltGap;
+                    Vector3 origin = weaponTip != null ? weaponTip.position
+                        : AimPoint + transform.forward * 0.5f;
+                    CombatMotor homing = attackAim != null && !attackAim.IsDead ? attackAim : null;
+                    Vector3 aim = homing != null
+                        ? homing.AimPoint + Random.insideUnitSphere * 0.35f
+                        : AimPoint + transform.forward * 14f;
+                    GameEffects.I?.Muzzle(Identity.element, origin, transform.rotation);
+                    if (homing != null) { LastEngagedEnemy = homing; LastEngagedAt = Time.time; }
+                    Projectile.Fire(this, Identity.element, origin, aim, homing,
+                        Kit.skillDamage, Kit.skillPoiseDamage, Kit.projectileSpeed * 1.1f);
+                }
+
+                // roll-cancel once at least one bolt is away
+                if (fired > 0 && bufferedRollUntil > Time.time && Stamina.TrySpend(Kit.staminaRoll))
+                {
+                    bufferedRollUntil = 0f;
+                    if (chargeFx != null) Destroy(chargeFx);
+                    if (enchantFx != null && enchantBaseScale != Vector3.zero)
+                        enchantFx.transform.localScale = enchantBaseScale;
+                    StartRoll(bufferedRollDir);
+                    yield break;
+                }
+
+                if (fired >= Bolts && elapsed >= Windup + Bolts * BoltGap + 0.25f) break;
+                yield return null;
+            }
+
+            if (chargeFx != null) Destroy(chargeFx);
+            if (enchantFx != null && enchantBaseScale != Vector3.zero)
+                enchantFx.transform.localScale = enchantBaseScale;
+            EndSkill(crossFade: true);
+        }
+
+        void EndSkill(bool crossFade = false)
+        {
+            SetTrail(false);
+            if (State == MotorState.Attacking)
+            {
+                State = MotorState.Locomotion;
+                if (crossFade && Anim != null) Anim.CrossFadeInFixedTime("Locomotion", 0.14f);
+            }
         }
 
         // ------------------------------------------------------------------ roll
@@ -869,6 +1190,8 @@ namespace Crownfall
             yVel = 0f;
             moveInput = Vector3.zero;
             comboIndex = 0;
+            castComboIndex = 0;
+            skillReadyAt = 0f; // respawn with the skill up so you re-enter swinging
             LockTarget = null;
             Health.ReviveFull();
             Stamina.RefillFull();

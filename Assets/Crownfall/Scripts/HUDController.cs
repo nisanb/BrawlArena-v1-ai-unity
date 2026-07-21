@@ -64,6 +64,7 @@ namespace Crownfall
         public Sprite icoAxe;
         public Sprite icoSword;
         public Sprite icoWand;
+        public Sprite icoSkill;
         public Sprite icoPlay;
         public Sprite icoMovie;
         public Sprite icoGear;
@@ -111,6 +112,7 @@ namespace Crownfall
         float targetShown = 1f, targetGhostShown = 1f;
         CombatMotor shownTarget;
         Image hpFill, hpGhost, stFill;
+        Image skillPipIcon, skillPipCover;
         Image damageFlash;
         RectTransform lockOnMarker;
         RectTransform feedContainer;
@@ -377,6 +379,24 @@ namespace Crownfall
                 new Color(0.42f, 0.88f, 0.34f), out hpGhost);
             stFill = Bar("Stamina", panel, new Vector2(116, 36), new Vector2(360, 24),
                 barBgBasic, barFillBasic, new Color(1f, 0.8f, 0.25f), out _);
+
+            // -- class skill pip: gold when ready, radial shade sweeps off as it recharges
+            var skillPlate = Img("SkillPip", panel, Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(492, 8), new Vector2(60, 60), frameCircle, new Color(0.08f, 0.09f, 0.16f, 0.92f));
+            skillPlate.type = Image.Type.Simple;
+            skillPipIcon = Icon("SkillIco", skillPlate.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(0, 1), new Vector2(32, 32), icoSkill, Gold);
+            skillPipCover = Img("SkillCd", skillPlate.transform, Vector2.zero, Vector2.one,
+                new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, frameCircle,
+                new Color(0.03f, 0.03f, 0.07f, 0.72f));
+            skillPipCover.type = Image.Type.Filled;
+            skillPipCover.fillMethod = Image.FillMethod.Radial360;
+            skillPipCover.fillOrigin = (int)Image.Origin360.Top;
+            skillPipCover.fillClockwise = false;
+            skillPipCover.fillAmount = 0f;
+            Txt("SkillKey", skillPlate.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 1f), new Vector2(0, 2), new Vector2(40, 20), "E", fontSmall, 15,
+                new Color(1f, 1f, 1f, 0.75f));
 
             // -- ally rows with mini class icons
             for (int i = 0; i < 2; i++)
@@ -778,6 +798,10 @@ namespace Crownfall
                 hpFill.fillAmount = hpShown;
                 hpGhost.fillAmount = Mathf.Max(ghostShown, hpShown);
                 stFill.fillAmount = stShown;
+
+                bool skillUp = pm.SkillReady;
+                skillPipCover.fillAmount = 1f - pm.SkillReadiness;
+                skillPipIcon.color = skillUp ? Gold : new Color(0.6f, 0.6f, 0.68f);
             }
 
             foreach (var row in allyRows)

@@ -165,6 +165,14 @@ namespace Crownfall
         {
             if (Time.time >= burstEndsAt && Time.time >= nextAttackAt && dist <= engage + 0.6f)
             {
+                // open with the class skill sometimes — always when punishing a stagger
+                if (motor.SkillReady && motor.Stamina.CanAfford(motor.Kit.staminaSkill) &&
+                    (target.State == MotorState.Staggered || Random.value < 0.3f + aggression * 0.2f))
+                {
+                    nextAttackAt = Time.time + Mathf.Lerp(2.8f, 1.4f, aggression) + Random.Range(0f, 0.6f);
+                    motor.RequestSkill();
+                    return;
+                }
                 int swings = Random.value < 0.35f + aggression * 0.3f ? Random.Range(2, 4) : 1;
                 bool heavy = Random.value < 0.22f + (target.State == MotorState.Attacking ? 0.15f : 0f);
                 if (heavy) swings = 1;
@@ -259,7 +267,12 @@ namespace Crownfall
             if (los && Time.time >= nextAttackAt)
             {
                 nextAttackAt = Time.time + Mathf.Lerp(3f, 1.9f, aggression) + Random.Range(0f, 0.5f);
-                motor.RequestLight();
+                // the barrage is the mage's damage spike — use it when it's up
+                if (motor.SkillReady && motor.Stamina.CanAfford(motor.Kit.staminaSkill) &&
+                    Random.value < 0.45f)
+                    motor.RequestSkill();
+                else
+                    motor.RequestLight();
             }
             else if (!los)
             {

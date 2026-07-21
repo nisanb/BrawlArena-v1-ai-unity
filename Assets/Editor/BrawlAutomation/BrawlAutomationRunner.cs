@@ -140,6 +140,27 @@ namespace BrawlArena.EditorAutomation
                     lock (LogBuffer) LogBuffer.Clear();
                     result.message = "cleared";
                     break;
+                case "refresh":
+                    // dependable recompile trigger while the editor is unfocused
+                    // (replaces the plan-gated MCP RunCommand path)
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+                    result.message = "refresh requested";
+                    break;
+                case "crownfall_build":
+                    Crownfall.EditorTools.CrownfallForge.BuildAll();
+                    result.message = "Crownfall BuildAll complete";
+                    break;
+                case "crownfall_probe":
+                {
+                    // arg = "<classIndex>|<outDir>" (both optional)
+                    var parts = (cmd.arg ?? "").Split('|');
+                    int cls = parts.Length > 0 && int.TryParse(parts[0], out int c) ? c : 2;
+                    string dir = parts.Length > 1 && !string.IsNullOrEmpty(parts[1])
+                        ? parts[1] : Path.Combine(Dir, "skill-probe");
+                    BrawlAutomation.CrownfallProbeBoot.Arm(dir, cls);
+                    result.message = $"probe armed class={cls} dir={dir}";
+                    break;
+                }
                 case "urp_convert":
                     result.message = ArenaSceneBuilder.ConvertMaterialsToUrp();
                     break;
