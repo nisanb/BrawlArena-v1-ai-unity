@@ -329,8 +329,8 @@ namespace Crownfall
             }
 
             Txt("Hint", frame, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0, 20), new Vector2(700, 28), "quests reset at midnight UTC  ·  demo matches don't count",
-                fontSmall, 15, new Color(1f, 1f, 1f, 0.5f));
+                new Vector2(0, 20), new Vector2(720, 30), "new quests every day  ·  demo matches don't count",
+                fontSmall, 17, new Color(1f, 1f, 1f, 0.65f));
 
             questModal.OnShow += RefreshQuests;
         }

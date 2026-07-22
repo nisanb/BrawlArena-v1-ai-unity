@@ -45,7 +45,9 @@ namespace Crownfall.EditorTools
             { ClassId.Greatsword, "Assets/Mini Legion Grunt PBR HP Polyart/Prefab/GruntPBR.prefab" },
             { ClassId.Duelist,    "Assets/RPG Tiny Hero Duo/Prefab/MaleCharacterPBR.prefab" },
             { ClassId.Mage,       "Assets/WizardPBR/Prefabs/WizardStandardMaterial.prefab" },
-            { ClassId.Warhammer,  "Assets/Mini Legion Rock Golem PBR HP Polyart/Prefabs/PBR_Golem.prefab" },
+            // Polyart golem: the PBR one read as a gritty outsider next to the
+            // chibi cast (persona review night1 art-coherence finding)
+            { ClassId.Warhammer,  "Assets/Mini Legion Rock Golem PBR HP Polyart/Prefabs/Polyart_Golem.prefab" },
         };
 
         internal static readonly Dictionary<ClassId, string> HeroSkinsAlt = new Dictionary<ClassId, string>
@@ -844,8 +846,10 @@ namespace Crownfall.EditorTools
                     // bias toward the rim a touch so the edge reads as a wall of green
                     float r2 = Mathf.Pow((float)rand.NextDouble(), 0.7f) * (patchRadius - 0.15f);
                     Vector3 pos = new Vector3(c.x + Mathf.Cos(a) * r2, 0f, c.y + Mathf.Sin(a) * r2);
+                    // capped near character height — the 2.3-3.1x giants ate the
+                    // camera whole (persona review night1: 2 of 8 frames blocked)
                     Place(FindPrefab("Battle Arena", bushKinds[i % bushKinds.Length]),
-                        pos, R(0f, 360f), R(2.3f, 3.1f), false);
+                        pos, R(0f, 360f), R(1.45f, 1.85f), false);
                 }
             }
             bushField.patches = patchList.ToArray();

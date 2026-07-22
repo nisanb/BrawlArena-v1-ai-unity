@@ -99,11 +99,11 @@ namespace Crownfall
                 blurb.maxVisibleLines = 2;
 
                 StatBar(card.transform, new Vector2(0, -128), icoStatHp, Mathf.Clamp01(kit.maxHealth / 190f),
-                    bar4FillGreen, Color.white);
+                    bar4FillGreen, Color.white, ((int)kit.maxHealth).ToString());
                 StatBar(card.transform, new Vector2(0, -152), icoStatDmg, Mathf.Clamp01(kit.lightDamage / 30f),
-                    bar4FillRed, Color.white);
+                    bar4FillRed, Color.white, ((int)kit.lightDamage).ToString());
                 StatBar(card.transform, new Vector2(0, -176), icoStatSpd, Mathf.Clamp01((kit.runSpeed - 3f) / 2.5f),
-                    bar4FillWhite, AzureCol);
+                    bar4FillWhite, AzureCol, kit.runSpeed.ToString("0.0"));
 
                 Txt("SK", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                     new Vector2(0, -196), new Vector2(240, 18), "SKILL: " + kit.skillName, fontSmall, 14, Gold);
@@ -139,15 +139,20 @@ namespace Crownfall
         /// One icon + mini fill bar row on a champion card. Basic04 family
         /// throughout: designed dark tube + matching pre-colored fills (the
         /// speed row tints the family's white fill — team-color coding).
-        void StatBar(Transform parent, Vector2 pos, Sprite icon, float frac, Sprite fillSprite, Color fillTint)
+        void StatBar(Transform parent, Vector2 pos, Sprite icon, float frac, Sprite fillSprite, Color fillTint,
+            string valueText)
         {
             Icon("SI", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 pos + new Vector2(-108, 0), new Vector2(26, 26), icon, Color.white);
             var bg = Img("SB", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                pos + new Vector2(14, 0), new Vector2(190, 18), bar4Bg, Color.white);
+                pos + new Vector2(2, 0), new Vector2(164, 18), bar4Bg, Color.white);
             var fill = MakeFill(bg.rectTransform, fillSprite != null ? fillSprite : bar4FillWhite, fillTint,
-                new Vector2(190, 18));
+                new Vector2(164, 18));
             fill.fillAmount = Mathf.Max(0.08f, frac);
+            // numeric value so picks are informed reads, not guesses (Riley)
+            Txt("V", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                pos + new Vector2(104, 0), new Vector2(50, 20), valueText, fontSmall, 14,
+                new Color(1f, 1f, 1f, 0.9f), TextAlignmentOptions.Right);
         }
 
         void RefreshChampFocus()

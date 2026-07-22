@@ -119,18 +119,19 @@ namespace Crownfall
             levelUpRoot.gameObject.SetActive(r.leveledUp);
             if (r.leveledUp)
             {
+                // let VICTORY fully land before the bonus beat (persona pacing note)
                 levelUpNum.text = CrownfallMeta.Level.ToString();
                 UiTween.SpinForever(levelUpRays, 24f);
                 // Scale-from-zero (not PopIn) so the cluster stays invisible
                 // through the delay while the title lands first
                 UiTween.Scale(levelUpRoot, Vector3.zero, Vector3.one, 0.5f,
-                    UiTween.Ease.BackOut, 1.2f, () =>
+                    UiTween.Ease.BackOut, 2.1f, () =>
                     {
                         UiTween.Punch(levelUpBadge, 0.16f, 0.3f);
                         Burst(fxConfettiPrefab, levelUpRoot, Vector2.zero, 1f);
                     });
-                UiTween.PopIn(levelUpTitle, 0.35f, 1.5f);
-                UiTween.PopIn(levelUpGems, 0.35f, 1.65f);
+                UiTween.PopIn(levelUpTitle, 0.35f, 2.4f);
+                UiTween.PopIn(levelUpGems, 0.35f, 2.55f);
             }
             if (r.Any)
             {

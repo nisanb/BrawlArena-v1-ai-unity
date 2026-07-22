@@ -168,7 +168,9 @@ namespace Crownfall
                 var ui = roadRows[i];
                 bool claimed = RoadClaims.Claimed(RoadReqs[i]);
                 bool can = !claimed && tr >= RoadReqs[i];
-                ui.group.alpha = claimed || tr >= RoadReqs[i] ? 1f : 0.55f;
+                // locked rows sit clearly darker so the claimable one pops
+                // (persona night1: locked looked as actionable as earned)
+                ui.group.alpha = claimed || tr >= RoadReqs[i] ? 1f : 0.38f;
                 ui.claimBtn.interactable = can;
                 ui.claimLabel.text = claimed ? "DONE" : "CLAIM";
                 ui.claimLabel.color = claimed ? new Color(1f, 1f, 1f, 0.55f) : Color.white;
