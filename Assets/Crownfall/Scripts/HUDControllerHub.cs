@@ -144,7 +144,7 @@ namespace Crownfall
                 fontSmall, 17, new Color(1f, 0.9f, 0.6f), TextAlignmentOptions.Left);
 
             MenuButton(hubPanel.transform, Vector2.zero, new Vector2(400, 132), "PLAY", 56,
-                btnYellow, icoPlay, () => MatchManager.I?.StartMatch())
+                btnYellow, icoPlay, OpenPlayMenu)
                 .GetComponent<RectTransform>().SetAnchor(new Vector2(1f, 0f), new Vector2(-224, 96));
 
             // -- demo + version, bottom left

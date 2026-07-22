@@ -125,3 +125,5 @@ fastlane/README.md
 
 # Apple API keys must never be committed
 *.p8
+
+Builds/

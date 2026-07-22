@@ -31,6 +31,7 @@ namespace Crownfall
 
         void Update()
         {
+            if (Motor != null && Motor.IsPuppet) return;
             if (!IsDead && Poise < MaxPoise && Time.time - lastPoiseHitTime > Tuning.PoiseRegenDelay)
                 Poise = Mathf.Min(MaxPoise, Poise + Tuning.PoiseRegenPerSec * Time.deltaTime);
         }
@@ -98,6 +99,15 @@ namespace Crownfall
             Current = Max;
             Poise = MaxPoise;
             Revived?.Invoke();
+        }
+
+        /// Puppet mirror: vitals streamed from the owning client. No events fire
+        /// here — deaths/kill-feed flow through the network match authority.
+        public void NetApply(float current, float poise, bool dead)
+        {
+            Current = current;
+            Poise = poise;
+            IsDead = dead;
         }
     }
 }

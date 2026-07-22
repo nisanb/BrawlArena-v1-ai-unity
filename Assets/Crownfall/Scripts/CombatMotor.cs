@@ -21,6 +21,16 @@ namespace Crownfall
         public Stamina Stamina { get; private set; }
         public Animator Anim { get; private set; }
 
+        /// Network shadow (null in pure offline play). When present and not
+        /// ours, this motor is an interpolated puppet: local simulation is off
+        /// and FighterNetSync drives pose/vitals/actions.
+        public FighterNetSync Net { get; set; }
+        public bool IsPuppet => Net != null && !Net.IsMine;
+        /// Owner-side one-shot action feed for the network layer.
+        public event System.Action<NetEvent, Vector3, int, bool> NetAction;
+        public float AnimMoveX => animMoveX;
+        public float AnimMoveZ => animMoveZ;
+
         public MotorState State { get; private set; } = MotorState.Locomotion;
         public CombatMotor LockTarget { get; set; }
         public bool IsDead => State == MotorState.Dead;
@@ -206,6 +216,10 @@ namespace Crownfall
         {
             UpdateConcealment();
 
+            // puppets: pose comes from the stream, actions from RPCs; only the
+            // position-derived systems (concealment above) run locally
+            if (IsPuppet) return;
+
             // the ranged cast drives animator speed and the wand-aura charge pulse;
             // if a cast is interrupted (hit/stagger/death) make sure neither is left
             // stuck away from its rest value
@@ -347,6 +361,90 @@ namespace Crownfall
             Anim.SetFloat(HashLocoRate, locoRate);
         }
 
+        // ------------------------------------------------------------------ network glue
+
+        void FireNet(NetEvent ev, Vector3 v = default, int extraViewId = -1, bool flag = false)
+        {
+            if (Net != null && Net.IsMine) NetAction?.Invoke(ev, v, extraViewId, flag);
+        }
+
+        /// Stream receiver (puppet side): vitals + coarse state for targeting/UI.
+        public void ApplyNetVitals(float hp, float poise, float stamina, MotorState state)
+        {
+            Health.NetApply(hp, poise, state == MotorState.Dead);
+            Stamina.NetSet(stamina);
+            State = state;
+        }
+
+        /// RPC receiver (puppet side): replay one-shot actions as pure cosmetics —
+        /// animator triggers and VFX, never damage or movement authority.
+        public void PuppetPlayback(NetEvent ev, Vector3 v, int extraViewId, bool flag)
+        {
+            if (Anim == null) return;
+            switch (ev)
+            {
+                case NetEvent.AttackLight:
+                    Anim.SetTrigger(HashAttackL);
+                    GameEffects.I?.PlaySwing(transform.position, false);
+                    break;
+                case NetEvent.AttackHeavy:
+                    Anim.SetTrigger(HashAttackH);
+                    if (!Kit.isRanged) GameEffects.I?.PlaySwing(transform.position, true);
+                    break;
+                case NetEvent.Skill:
+                    Anim.SetTrigger(HashSkill);
+                    break;
+                case NetEvent.Roll:
+                    Anim.SetFloat(HashRollX, 0f);
+                    Anim.SetFloat(HashRollZ, 1f);
+                    if (v.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(v);
+                    Anim.SetTrigger(HashRoll);
+                    GameEffects.I?.PlayRoll(transform.position);
+                    break;
+                case NetEvent.Flinch: Anim.SetTrigger(HashHit); break;
+                case NetEvent.Stagger: Anim.SetTrigger(HashStagger); break;
+                case NetEvent.Die:
+                    Anim.ResetTrigger(HashHit);
+                    Anim.SetTrigger(HashDie);
+                    GameEffects.I?.PlayDeath(transform.position);
+                    break;
+                case NetEvent.Respawn:
+                    Anim.ResetTrigger(HashDie);
+                    Anim.Play("Locomotion", 0, 0f);
+                    transform.position = v;
+                    GameEffects.I?.RespawnFlash(v);
+                    break;
+                case NetEvent.Bolt:
+                {
+                    Vector3 origin = weaponTip != null ? weaponTip.position : AimPoint;
+                    var homing = FighterNetSync.Find(extraViewId);
+                    GameEffects.I?.Muzzle(Identity.element, origin, transform.rotation);
+                    GameEffects.I?.PlayCast(Identity.element, origin);
+                    Projectile.Fire(this, Identity.element, origin, v,
+                        homing != null ? homing.Motor : null, 0f, 0f,
+                        Kit.projectileSpeed * (flag ? 1.15f : 1f), flag ? 1.7f : 1f,
+                        cosmetic: true);
+                    break;
+                }
+                case NetEvent.Nova:
+                    GameEffects.I?.Nova(Identity.element, transform.position);
+                    GameEffects.I?.PlayCast(Identity.element, transform.position);
+                    break;
+                case NetEvent.BlockImpact: Anim.SetTrigger(HashBlockImpact); break;
+                case NetEvent.Victory: Anim.SetTrigger(HashVictory); break;
+            }
+        }
+
+        /// Prefab spawns learn their team after Awake — re-tint the ground ring.
+        public void RebindTeamVisuals()
+        {
+            if (ringMat != null && Identity != null)
+            {
+                ringBaseColor = Identity.TeamColor;
+                ringMat.color = ringBaseColor;
+            }
+        }
+
         // ------------------------------------------------------------------ attacks
 
         void StartAttack(bool heavy)
@@ -372,6 +470,7 @@ namespace Crownfall
             Anim.ResetTrigger(HashRoll);
             Anim.speed = 1f;
             Anim.SetTrigger(heavy ? HashAttackH : HashAttackL);
+            FireNet(heavy ? NetEvent.AttackHeavy : NetEvent.AttackLight);
             // ranged casters run a dedicated spell routine (charge -> release-timed
             // bolt/nova -> snappy recovery); melee keeps the strike/lunge/combo flow
             actionRoutine = StartCoroutine(Kit.isRanged ? CastRoutine(heavy) : AttackRoutine(heavy));
@@ -491,6 +590,7 @@ namespace Crownfall
                         comboIndex++;
                         attackAim = AcquireAttackAim();
                         Anim.SetTrigger(HashAttackL);
+                        FireNet(NetEvent.AttackLight);
                         chained = true;
                         break;
                     }
@@ -667,15 +767,26 @@ namespace Crownfall
                     heavy = heavy,
                     unblockable = unblockable,
                 };
-                var res = victim.TakeHit(hit);
+                var res = RouteHit(victim, hit);
                 if (!res.landed) continue;
                 anyHit = true;
                 hits++;
                 anyKill |= res.killed;
                 if (victim.Motor != null) { LastEngagedEnemy = victim.Motor; LastEngagedAt = Time.time; }
 
-                GameEffects.I?.MeleeImpact(Identity.element, hit.point, res.blocked, heavy);
-                GameEffects.I?.ShowDamage(hit.point, res.damageDealt, res.blocked);
+                // forwarded hits get their impact visuals from the victim owner's
+                // broadcast; locally-applied ones show (and broadcast) here
+                if (!res.forwarded)
+                {
+                    var net = victim.Motor != null ? victim.Motor.Net : null;
+                    if (net != null)
+                        net.BroadcastImpact(hit.point, Identity.element, res.damageDealt, res.blocked, heavy);
+                    else
+                    {
+                        GameEffects.I?.MeleeImpact(Identity.element, hit.point, res.blocked, heavy);
+                        GameEffects.I?.ShowDamage(hit.point, res.damageDealt, res.blocked);
+                    }
+                }
             }
 
             if (anyHit)
@@ -687,6 +798,21 @@ namespace Crownfall
                 if (playerInvolved) OrbitCamera.I?.Shake(heavy ? 0.5f : 0.25f);
             }
             return hits;
+        }
+
+        /// All damage funnels through here: hits on fighters owned by another
+        /// client are forwarded to their owner (the health authority); local
+        /// victims apply immediately. The forwarded result is an optimistic
+        /// prediction so attacker feel (hitstop/shake) stays instant.
+        public static HitResult RouteHit(Health victim, HitInfo hit)
+        {
+            var net = victim.Motor != null ? victim.Motor.Net : null;
+            if (net != null && !net.IsMine)
+            {
+                net.ForwardHit(hit);
+                return new HitResult { landed = true, damageDealt = hit.damage, forwarded = true };
+            }
+            return victim.TakeHit(hit);
         }
 
         void DoBolt()
@@ -705,6 +831,9 @@ namespace Crownfall
             GameEffects.I?.Muzzle(Identity.element, origin, transform.rotation);
             GameEffects.I?.PlayCast(Identity.element, origin);
             if (homing != null) { LastEngagedEnemy = homing; LastEngagedAt = Time.time; }
+            FireNet(NetEvent.Bolt, aim,
+                homing != null && homing.Net != null && homing.Net.photonView != null
+                    ? homing.Net.photonView.ViewID : -1, surge);
             Projectile.Fire(this, Identity.element, origin, aim, homing,
                 Kit.lightDamage * (surge ? Tuning.MageSurgeMult : 1f),
                 Kit.lightPoiseDamage * (surge ? 1.6f : 1f),
@@ -716,6 +845,7 @@ namespace Crownfall
         {
             GameEffects.I?.Nova(Identity.element, transform.position);
             GameEffects.I?.PlayCast(Identity.element, transform.position);
+            FireNet(NetEvent.Nova);
             foreach (var victim in MatchManager.I ? MatchManager.I.AliveEnemiesOf(Identity.team) : new List<CombatMotor>())
             {
                 Vector3 to = victim.transform.position - transform.position;
@@ -731,10 +861,11 @@ namespace Crownfall
                     heavy = true,
                     unblockable = true,
                 };
-                var res = victim.Health.TakeHit(hit);
+                var res = RouteHit(victim.Health, hit);
                 if (res.landed)
                 {
-                    GameEffects.I?.ShowDamage(hit.point, res.damageDealt, false);
+                    if (!res.forwarded)
+                        GameEffects.I?.ShowDamage(hit.point, res.damageDealt, false);
                     LastEngagedEnemy = victim;
                     LastEngagedAt = Time.time;
                 }
@@ -768,6 +899,7 @@ namespace Crownfall
             Anim.ResetTrigger(HashRoll);
             Anim.speed = 1f;
             Anim.SetTrigger(HashSkill);
+            FireNet(NetEvent.Skill);
             switch (Kit.id)
             {
                 case ClassId.Knight:     actionRoutine = StartCoroutine(SlamSkillRoutine()); break;
@@ -1049,6 +1181,7 @@ namespace Crownfall
                 Anim.SetFloat(HashRollZ, Mathf.Abs(local.z) >= Mathf.Abs(local.x) ? Mathf.Sign(local.z) : 0f);
             }
             Anim.SetTrigger(HashRoll);
+            FireNet(NetEvent.Roll, dir);
             GameEffects.I?.PlayRoll(transform.position);
 
             float waited = 0f;
@@ -1091,6 +1224,7 @@ namespace Crownfall
         public bool OnBlockedHit(HitInfo hit)
         {
             Anim.SetTrigger(HashBlockImpact);
+            FireNet(NetEvent.BlockImpact);
             cc.Move(hit.direction * 0.3f);
             return Stamina.Drain(hit.damage * 0.85f + 6f, 0.8f);
         }
@@ -1114,6 +1248,7 @@ namespace Crownfall
             if (actionRoutine != null) StopCoroutine(actionRoutine);
             State = MotorState.Hit;
             Anim.SetTrigger(HashHit);
+            FireNet(NetEvent.Flinch);
             cc.Move(hit.direction * (hit.heavy ? 0.28f : 0.16f));
             flinchImmuneUntil = Time.time + (hit.heavy ? 0.5f : 0.65f);
             actionRoutine = StartCoroutine(HitRecover(hit.heavy ? 0.4f : 0.24f));
@@ -1136,6 +1271,7 @@ namespace Crownfall
             State = MotorState.Staggered;
             Anim.ResetTrigger(HashHit);
             Anim.SetTrigger(HashStagger);
+            FireNet(NetEvent.Stagger);
             ClearStunFx();
             stunFxInstance = GameEffects.I?.SpawnStun(transform);
             actionRoutine = StartCoroutine(StaggerRoutine());
@@ -1183,6 +1319,7 @@ namespace Crownfall
             Anim.ResetTrigger(HashAttackH);
             Anim.ResetTrigger(HashSkill);
             Anim.SetTrigger(HashDie);
+            FireNet(NetEvent.Die);
             GameEffects.I?.PlayDeath(transform.position);
         }
 
@@ -1208,6 +1345,7 @@ namespace Crownfall
             // so the trigger would never be consumed and the armed leftover used to
             // eject the NEXT death straight from Die back into idle locomotion.
             Anim.Play("Locomotion", 0, 0f);
+            FireNet(NetEvent.Respawn, pos);
             StartCoroutine(SpawnProtection());
         }
 
@@ -1225,6 +1363,7 @@ namespace Crownfall
             SetTrail(false);
             State = MotorState.Victory;
             Anim.SetTrigger(HashVictory);
+            FireNet(NetEvent.Victory);
         }
 
         void SetTrail(bool on)

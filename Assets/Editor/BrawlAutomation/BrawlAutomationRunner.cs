@@ -161,12 +161,66 @@ namespace BrawlArena.EditorAutomation
                     result.message = $"probe armed class={cls} dir={dir}";
                     break;
                 }
+                case "asset_download":
+                    result.message = BrawlAutomation.AssetStoreDownloader.StartDownload(long.Parse(cmd.arg));
+                    break;
+                case "asset_api_probe":
+                    result.message = BrawlAutomation.AssetStoreDownloader.DescribeApi();
+                    break;
+                case "asset_import":
+                    result.message = BrawlAutomation.AssetStoreDownloader.ImportPackage(cmd.arg);
+                    break;
                 case "crownfall_deathprobe":
                 {
                     string dir = string.IsNullOrEmpty(cmd.arg)
                         ? Path.Combine(Dir, "death-probe") : cmd.arg;
                     BrawlAutomation.CrownfallProbeBoot.Arm(dir, 2, "death");
                     result.message = $"death probe armed dir={dir}";
+                    break;
+                }
+                case "net_status":
+                {
+                    var net = Crownfall.CrownfallNet.I;
+                    var mm2 = Crownfall.MatchManager.I;
+                    result.message = net == null ? "no CrownfallNet in scene" :
+                        $"phase={net.Phase} status='{net.StatusLine}' " +
+                        $"offline={Photon.Pun.PhotonNetwork.OfflineMode} " +
+                        $"connected={Photon.Pun.PhotonNetwork.IsConnected} " +
+                        $"inRoom={Photon.Pun.PhotonNetwork.InRoom} " +
+                        $"players={(Photon.Pun.PhotonNetwork.InRoom ? Photon.Pun.PhotonNetwork.PlayerList.Length : 0)} " +
+                        $"mmState={(mm2 != null ? mm2.State.ToString() : "none")} " +
+                        $"online={(mm2 != null && mm2.OnlineMode)}";
+                    break;
+                }
+                case "crownfall_netprobe":
+                {
+                    string dir = string.IsNullOrEmpty(cmd.arg)
+                        ? Path.Combine(Dir, "net-probe") : cmd.arg;
+                    BrawlAutomation.CrownfallProbeBoot.Arm(dir, 2, "net");
+                    result.message = $"net smoke probe armed dir={dir}";
+                    break;
+                }
+                case "crownfall_liveprobe":
+                {
+                    // REAL Photon cloud (needs the AppId): editor joins as one
+                    // human; run the -autoonline player build as the second
+                    string dir = string.IsNullOrEmpty(cmd.arg)
+                        ? Path.Combine(Dir, "live-probe") : cmd.arg;
+                    BrawlAutomation.CrownfallProbeBoot.Arm(dir, 2, "netlive");
+                    result.message = $"live net probe armed dir={dir}";
+                    break;
+                }
+                case "build_win":
+                {
+                    string outPath = string.IsNullOrEmpty(cmd.arg)
+                        ? "Builds/Win/Crownfall.exe" : cmd.arg;
+                    Directory.CreateDirectory(Path.GetDirectoryName(outPath));
+                    var report = UnityEditor.BuildPipeline.BuildPlayer(
+                        new[] { "Assets/Crownfall/CrownfallArena.unity" }, outPath,
+                        BuildTarget.StandaloneWindows64, BuildOptions.Development);
+                    result.message = $"build {report.summary.result}, " +
+                        $"{report.summary.totalSize / (1024 * 1024)}MB, errors={report.summary.totalErrors}";
+                    result.ok = report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded;
                     break;
                 }
                 case "urp_convert":

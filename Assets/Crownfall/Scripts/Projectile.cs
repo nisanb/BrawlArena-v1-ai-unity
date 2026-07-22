@@ -13,9 +13,11 @@ namespace Crownfall
         float homingUntil;
         float dieAt;
 
+        bool cosmetic;
+
         public static void Fire(CombatMotor owner, ElementId element, Vector3 origin, Vector3 aimPoint,
             CombatMotor homingTarget, float damage, float poiseDamage, float speed,
-            float visualScale = 1f)
+            float visualScale = 1f, bool cosmetic = false)
         {
             var go = new GameObject("Bolt_" + element);
             go.transform.position = origin;
@@ -25,6 +27,7 @@ namespace Crownfall
 
             var p = go.AddComponent<Projectile>();
             p.owner = owner;
+            p.cosmetic = cosmetic;
             p.element = element;
             p.damage = damage;
             p.poiseDamage = poiseDamage;
@@ -67,6 +70,10 @@ namespace Crownfall
                 if ((near - transform.position).sqrMagnitude > 0.72f * 0.72f) continue;
                 if (victim.IsInvulnerable) continue; // rolled through it
 
+                // cosmetic replicas (remote clients' visual of someone else's
+                // bolt) pop on contact but never deal damage
+                if (cosmetic) { Explode(transform.position); return; }
+
                 var info = new HitInfo
                 {
                     attacker = owner,
@@ -76,10 +83,13 @@ namespace Crownfall
                     point = transform.position,
                     element = element,
                 };
-                var res = victim.Health.TakeHit(info);
+                var res = CombatMotor.RouteHit(victim.Health, info);
                 if (res.landed)
                 {
-                    GameEffects.I?.ShowDamage(victim.AimPoint, res.damageDealt, res.blocked);
+                    // forwarded hits show their number via the victim owner's
+                    // broadcast; the local number covers locally-applied ones
+                    if (!res.forwarded)
+                        GameEffects.I?.ShowDamage(victim.AimPoint, res.damageDealt, res.blocked);
                     // a bolt that connects should freeze and kick like a melee hit —
                     // landing one gave the caster nothing back before
                     bool playerInvolved = victim.Identity.isPlayer ||

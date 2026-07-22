@@ -14,6 +14,7 @@ using UnityEngine.UI;
 using Unity.AI.Navigation;
 using TMPro;
 using DamageNumbersPro;
+using Photon.Pun;
 
 namespace Crownfall.EditorTools
 {
@@ -38,6 +39,7 @@ namespace Crownfall.EditorTools
         {
             EnsureFolders();
             var overrides = BuildAnimators();
+            BuildNetPrefabs(overrides);
             BuildScene(overrides);
             Debug.Log("[CrownfallForge] Build complete: " + ScenePath);
         }
@@ -428,8 +430,22 @@ namespace Crownfall.EditorTools
                     playerVariants[pv++] = rig;
                     rig.SetActive(false);
                 }
+                else
+                {
+                    // AI understudies are master-driven networked puppets online
+                    AddFighterNetView(rig);
+                }
             }
             mm.playerVariants = playerVariants;
+
+            // ---- network services: match authority view + connection service
+            var link = mm.gameObject.AddComponent<NetMatchLink>();
+            var mmView = mm.gameObject.AddComponent<PhotonView>();
+            mmView.OwnershipTransfer = OwnershipOption.Fixed;
+            mmView.Synchronization = ViewSynchronization.UnreliableOnChange;
+            mmView.observableSearch = PhotonView.ObservableSearch.Manual;
+            mmView.ObservedComponents = new List<Component> { link };
+            new GameObject("CrownfallNet").AddComponent<CrownfallNet>();
 
             EditorUtility.SetDirty(mm);
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -757,6 +773,53 @@ namespace Crownfall.EditorTools
         }
 
         // ------------------------------------------------------------------ fighters
+
+        /// PhotonView + sync component for a fighter that exists on the network
+        /// (scene AI rigs and the per-class human prefabs).
+        static void AddFighterNetView(GameObject rig)
+        {
+            var sync = rig.AddComponent<FighterNetSync>();
+            var view = rig.AddComponent<PhotonView>();
+            view.OwnershipTransfer = OwnershipOption.Fixed;
+            view.Synchronization = ViewSynchronization.UnreliableOnChange;
+            view.observableSearch = PhotonView.ObservableSearch.Manual;
+            view.ObservedComponents = new List<Component> { sync };
+        }
+
+        /// Per-class fighter prefabs for PhotonNetwork.Instantiate, built by the
+        /// same rig pipeline as the scene fighters. Humans only: no AI brain, no
+        /// nav agent; team/name arrive as instantiation data at spawn.
+        static void BuildNetPrefabs(Dictionary<ClassId, AnimatorOverrideController> overrides)
+        {
+            if (!AssetDatabase.IsValidFolder("Assets/Crownfall/Resources"))
+                AssetDatabase.CreateFolder("Assets/Crownfall", "Resources");
+            if (!AssetDatabase.IsValidFolder("Assets/Crownfall/Resources/Net"))
+                AssetDatabase.CreateFolder("Assets/Crownfall/Resources", "Net");
+
+            var netSpecs = new[]
+            {
+                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Knight", skin = "SwordAndShield01", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Warbrand", skin = "SingleTwoHandSword01", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Duelist", skin = "DoubleSword01", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Mage", skin = "MagicWand01", isPlayerVariant = true },
+            };
+
+            foreach (var spec in netSpecs)
+            {
+                var rig = BuildFighter(spec, overrides[spec.cls], Vector3.zero, Quaternion.identity);
+                Object.DestroyImmediate(rig.GetComponent<AIController>());
+                Object.DestroyImmediate(rig.GetComponent<NavMeshAgent>());
+                var pc = rig.GetComponent<PlayerController>();
+                if (pc != null) pc.enabled = false; // FighterNetSync enables for the owner
+                AddFighterNetView(rig);
+                rig.name = "Fighter_" + spec.cls;
+
+                string path = $"Assets/Crownfall/Resources/Net/Fighter_{spec.cls}.prefab";
+                AssetDatabase.DeleteAsset(path);
+                PrefabUtility.SaveAsPrefabAsset(rig, path);
+                Object.DestroyImmediate(rig);
+            }
+        }
 
         static GameObject BuildFighter(FighterSpec spec, AnimatorOverrideController aoc, Vector3 pos, Quaternion rot)
         {

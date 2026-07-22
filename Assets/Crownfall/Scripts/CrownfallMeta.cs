@@ -50,6 +50,30 @@ namespace Crownfall
 
         public static int XpForLevel(int lvl) => 80 + (lvl - 1) * 45;
 
+        /// Online display name. Defaults to a numbered champion tag so first-run
+        /// players are distinguishable in a room without any setup.
+        public static string PlayerName
+        {
+            get
+            {
+                string n = PlayerPrefs.GetString("meta.playerName", "");
+                if (string.IsNullOrWhiteSpace(n))
+                {
+                    n = "Champion" + UnityEngine.Random.Range(100, 999);
+                    PlayerPrefs.SetString("meta.playerName", n);
+                }
+                return n;
+            }
+            set
+            {
+                string trimmed = (value ?? "").Trim();
+                if (trimmed.Length == 0) return;
+                PlayerPrefs.SetString("meta.playerName", trimmed.Substring(0, Mathf.Min(16, trimmed.Length)));
+                PlayerPrefs.Save();
+                Changed?.Invoke();
+            }
+        }
+
         static void Ensure()
         {
             if (loaded) return;

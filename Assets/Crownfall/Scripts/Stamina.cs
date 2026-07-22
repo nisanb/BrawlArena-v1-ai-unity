@@ -39,9 +39,12 @@ namespace Crownfall
 
         public void RefillFull() { Current = Max; }
 
+        /// Puppet mirror for the streamed value (no regen runs on puppets).
+        public void NetSet(float current) { Current = Mathf.Clamp(current, 0f, Max); }
+
         void Update()
         {
-            if (motor == null || motor.IsDead) return;
+            if (motor == null || motor.IsDead || motor.IsPuppet) return;
             if (Time.time < regenBlockedUntil) return;
 
             var state = motor.State;

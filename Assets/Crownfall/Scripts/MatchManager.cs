@@ -9,8 +9,9 @@ namespace Crownfall
     public enum MatchState { Menu, ClassSelect, Countdown, Fighting, Ended }
 
     /// Owns the 3v3 flow: class select, countdown, kills/score, respawns,
-    /// sudden death and the end ceremony.
-    public class MatchManager : MonoBehaviour
+    /// sudden death and the end ceremony. Online-mode members live in
+    /// MatchManagerOnline.cs; offline flow is unchanged.
+    public partial class MatchManager : MonoBehaviour
     {
         [Header("Wired by forge")]
         public GameObject[] playerVariants = new GameObject[4];
@@ -156,7 +157,8 @@ namespace Crownfall
         {
             if (State != MatchState.Fighting) return;
             Paused = !Paused;
-            GameEffects.I?.SetBaseTimeScale(Paused ? 0f : 1f);
+            // a networked match cannot stop the world — pause is menu-only there
+            GameEffects.I?.SetBaseTimeScale(Paused && !OnlineMode ? 0f : 1f);
             SetCursorFree(Paused);
             PausedChanged?.Invoke(Paused);
         }
@@ -171,7 +173,14 @@ namespace Crownfall
                 if (TimeLeft <= 0f)
                 {
                     TimeLeft = 0f;
-                    if (ScoreAzure != ScoreCrimson)
+                    if (OnlineMode)
+                    {
+                        // only the master may call time; everyone else waits for
+                        // the RPC (their clock is corrected by the stream anyway)
+                        if (Photon.Pun.PhotonNetwork.IsMasterClient)
+                            NetMatchLink.I?.MasterTimeUp();
+                    }
+                    else if (ScoreAzure != ScoreCrimson)
                     {
                         EndMatch(ScoreAzure > ScoreCrimson ? Team.Azure : Team.Crimson);
                     }
@@ -234,6 +243,20 @@ namespace Crownfall
         {
             if (State != MatchState.Fighting) return;
 
+            // online: the victim's owner reports the kill; score, feed, respawn
+            // and match-end all come back from the master via NetMatchLink RPCs
+            if (OnlineMode)
+            {
+                var net = victim.Net;
+                if (net != null && net.IsMine && net.photonView != null && NetMatchLink.I != null)
+                {
+                    int killerView = killer != null && killer.Net != null && killer.Net.photonView != null
+                        ? killer.Net.photonView.ViewID : -1;
+                    NetMatchLink.I.ReportKill(net.photonView.ViewID, killerView);
+                }
+                return;
+            }
+
             var victimId = victim.Identity;
             var killerId = killer != null ? killer.Identity : null;
 
@@ -270,10 +293,12 @@ namespace Crownfall
         {
             if (State == MatchState.Ended) return;
             SetState(MatchState.Ended);
-            LastRewards = IsDemo ? default : CrownfallMeta.GrantMatchRewards(winner == Team.Azure);
+            // offline the player is always Azure; online they may be on either side
+            bool playerWon = PlayerMotor != null && PlayerMotor.Identity != null
+                ? PlayerMotor.Identity.team == winner
+                : winner == Team.Azure;
+            LastRewards = IsDemo ? default : CrownfallMeta.GrantMatchRewards(playerWon);
             MatchEndedEvent?.Invoke(winner);
-
-            bool playerWon = winner == Team.Azure;
             Announce?.Invoke(playerWon ? "VICTORY" : "DEFEAT");
             GameEffects.I?.PlayUi(playerWon ? GameEffects.I.uiVictory : GameEffects.I.uiDefeat, 0.9f);
 
@@ -294,6 +319,7 @@ namespace Crownfall
 
         public void Restart()
         {
+            if (OnlineMode) CrownfallNet.I?.LeaveMatch();
             Time.timeScale = 1f;
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }

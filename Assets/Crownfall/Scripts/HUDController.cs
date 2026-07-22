@@ -154,6 +154,8 @@ namespace Crownfall
             BuildShop();
             BuildInbox();
             BuildGift();
+            BuildPlayMenu();
+            BuildOnlinePanel();
             BuildToast();
 
             CrownfallMeta.Changed += RefreshHub;
@@ -668,9 +670,11 @@ namespace Crownfall
 
             allyRows.ForEach(r => r.motor = null);
             int i = 0;
+            // allies are the player's actual team (online they may be Crimson)
+            Team myTeam = pm.Identity != null ? pm.Identity.team : Team.Azure;
             foreach (var m in FindObjectsByType<CombatMotor>(FindObjectsSortMode.InstanceID))
             {
-                if (m == pm || m.Identity == null || m.Identity.team != Team.Azure || m.Identity.isPlayer) continue;
+                if (m == pm || m.Identity == null || m.Identity.team != myTeam || m.Identity.isPlayer) continue;
                 if (i >= allyRows.Count) break;
                 allyRows[i].motor = m;
                 allyRows[i].label.text = $"{m.Identity.displayName}  ·  {m.Kit.displayName}";
@@ -778,6 +782,8 @@ namespace Crownfall
         {
             var mm = MatchManager.I;
             if (mm == null) return;
+
+            UpdateOnlineHud();
 
             // keep the gift cooldown label live while its popup is open
             if (giftPanel != null && giftPanel.activeSelf) RefreshGift();

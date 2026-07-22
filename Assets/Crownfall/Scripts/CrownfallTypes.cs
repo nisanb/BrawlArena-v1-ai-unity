@@ -153,5 +153,8 @@ namespace Crownfall
         public bool killed;
         public bool staggered;
         public float damageDealt;
+        /// True when the hit was relayed to the victim owner's client instead of
+        /// applied here — the other fields are then an optimistic prediction.
+        public bool forwarded;
     }
 }
