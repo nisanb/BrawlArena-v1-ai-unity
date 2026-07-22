@@ -182,8 +182,10 @@ namespace Crownfall
             // digits (the "-2320" / "1601" soup reviewers flagged).
             int n = dmgPopCount++;
             float ang = n * 2.39996323f;
-            Vector3 offset = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * 0.72f
-                             + Vector3.up * (0.5f + (n % 5) * 0.34f);
+            // wider fan + taller stagger: adjacent popups from different targets
+            // still landed flush and read as one glued number (persona round 2)
+            Vector3 offset = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * 1.05f
+                             + Vector3.up * (0.45f + (n % 5) * 0.5f);
             prefab.Spawn(pos + offset, Mathf.Max(1f, Mathf.Round(amount)));
         }
 

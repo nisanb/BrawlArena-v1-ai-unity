@@ -151,8 +151,8 @@ namespace Crownfall
             fill.fillAmount = Mathf.Max(0.08f, frac);
             // numeric value so picks are informed reads, not guesses (Riley)
             Txt("V", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                pos + new Vector2(104, 0), new Vector2(50, 20), valueText, fontSmall, 14,
-                new Color(1f, 1f, 1f, 0.9f), TextAlignmentOptions.Right);
+                pos + new Vector2(106, 0), new Vector2(56, 22), valueText, fontSmall, 16,
+                Color.white, TextAlignmentOptions.Right);
         }
 
         void RefreshChampFocus()
