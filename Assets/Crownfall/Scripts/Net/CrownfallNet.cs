@@ -151,6 +151,7 @@ namespace Crownfall
         {
             if (Phase != NetPhase.Idle && Phase != NetPhase.Failed) return;
 
+            if (!PhotonNetwork.InRoom) ClearReadyProp(); // belt & braces vs stale rdy
             IsOnlineMatch = true;
             PhotonNetwork.NickName = string.IsNullOrEmpty(nickOverride)
                 ? CrownfallMeta.PlayerName : nickOverride;
@@ -183,7 +184,16 @@ namespace Crownfall
             if (PhotonNetwork.InRoom) PhotonNetwork.LeaveRoom();
             else if (PhotonNetwork.IsConnected && !PhotonNetwork.OfflineMode) PhotonNetwork.Disconnect();
             PhotonNetwork.OfflineMode = false;
+            ClearReadyProp();
             SetPhase(NetPhase.Idle, "");
+        }
+
+        /// Photon persists local custom properties for the whole client session
+        /// and re-publishes them inside the next room-join op — a stale
+        /// rdy=true would auto-ready us in every room after the first.
+        static void ClearReadyProp()
+        {
+            PhotonNetwork.RemovePlayerCustomProperties(new[] { PropReady });
         }
 
         public void SetReady(bool ready)
@@ -229,6 +239,7 @@ namespace Crownfall
             IsOnlineMatch = false;
             if (PhotonNetwork.InRoom) PhotonNetwork.LeaveRoom();
             if (PhotonNetwork.OfflineMode) PhotonNetwork.OfflineMode = false;
+            ClearReadyProp();
             SetPhase(NetPhase.Idle, "");
         }
 

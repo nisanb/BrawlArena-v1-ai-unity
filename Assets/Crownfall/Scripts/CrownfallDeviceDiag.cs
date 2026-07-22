@@ -91,7 +91,7 @@ namespace Crownfall
             // separate from UGUI). If these show but the UGUI icons are white,
             // the textures are fine and it's the Image render path; if these are
             // white too, it's the texture data itself.
-            var hud = FindFirstObjectByType<HUDController>();
+            var hud = FindFirstObjectByType<UiKit>(); // arena HUD or menu-scene MenuHud
             if (hud != null)
             {
                 var samples = new (string, Sprite)[]

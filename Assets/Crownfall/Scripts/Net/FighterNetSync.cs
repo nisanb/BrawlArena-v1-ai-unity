@@ -17,7 +17,11 @@ namespace Crownfall
     [RequireComponent(typeof(CombatMotor))]
     public class FighterNetSync : MonoBehaviourPun, IPunObservable
     {
-        public bool IsMine => photonView == null || photonView.IsMine;
+        /// Outside a Photon room every fighter is locally simulated. Scene
+        /// views carry ViewID 0 until a room assigns them; when the arena is
+        /// runtime-loaded from the menu scene while disconnected they resolve
+        /// IsMine=false, which froze every AI as a "puppet" (2026-07-22).
+        public bool IsMine => photonView == null || !PhotonNetwork.InRoom || photonView.IsMine;
         public CombatMotor Motor { get; private set; }
 
         Vector3 netPos;
@@ -118,7 +122,9 @@ namespace Crownfall
 
         void OnOwnerAction(NetEvent ev, Vector3 v, int extraViewId, bool flag)
         {
-            if (photonView == null || PhotonNetwork.OfflineMode) return;
+            // nothing to notify outside a connected room (offline mode has no
+            // Others either; disconnected sends just error)
+            if (photonView == null || PhotonNetwork.OfflineMode || !PhotonNetwork.InRoom) return;
             photonView.RPC(nameof(RPC_Event), RpcTarget.Others, (byte)ev, v, extraViewId, flag);
         }
 
@@ -168,7 +174,7 @@ namespace Crownfall
         /// Impact cosmetics (spark + damage number) shown on every client.
         public void BroadcastImpact(Vector3 point, ElementId el, float dmg, bool blocked, bool heavy)
         {
-            if (photonView == null || PhotonNetwork.OfflineMode)
+            if (photonView == null || PhotonNetwork.OfflineMode || !PhotonNetwork.InRoom)
             {
                 GameEffects.I?.MeleeImpact(el, point, blocked, heavy);
                 GameEffects.I?.ShowDamage(point, dmg, blocked);

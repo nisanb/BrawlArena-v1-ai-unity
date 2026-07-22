@@ -39,9 +39,9 @@ namespace Crownfall
             resultSub = Txt("Sub", t, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), new Vector2(0, -22), new Vector2(900, 62), "", fontMid, 36, Color.white);
 
-            // match rewards strip (hidden for demo matches)
+            // match rewards strip (hidden for demo matches) — designed navy row
             var rr = Img("Rewards", t, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(0, -88), new Vector2(560, 62), plateRound, PlateDark);
+                new Vector2(0.5f, 0.5f), new Vector2(0, -88), new Vector2(560, 62), rowNavy, Color.white);
             rewardsRow = rr.gameObject;
             Icon("CoinI", rr.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
                 new Vector2(24, 0), new Vector2(38, 38), iconCoinBig, Color.white);
@@ -63,7 +63,7 @@ namespace Crownfall
             MenuButton(t, new Vector2(-200, -196), new Vector2(370, 96), "REMATCH", 34,
                 btnGreen, icoRefresh, () => MatchManager.I?.Restart());
             MenuButton(t, new Vector2(200, -196), new Vector2(370, 96), "HOME", 34,
-                btnBlue, icoHome, () => MatchManager.I?.Restart());
+                btnBlue, icoHome, () => MatchManager.I?.QuitToMenu());
             Txt("Hint", t, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), new Vector2(0, -262), new Vector2(400, 30), "press  [R]",
                 fontSmall, 18, new Color(1f, 1f, 1f, 0.55f));

@@ -46,7 +46,7 @@ namespace Crownfall
         RectTransform attackBtn, dodgeBtn, blockBtn, lockBtn, autoBtn, skillBtn;
         Image attackImg, dodgeImg, blockImg, lockImg, skillImg, skillCover;
         Image attackRing, dodgeRing, blockRing, lockRing, skillRing;
-        Image blockIconImg;
+        Image blockIconImg, skillIconImg;
         TMP_Text blockLabel;
         Vector2 joyRestPos;
         bool skillWasReady;
@@ -90,11 +90,12 @@ namespace Crownfall
             scaler.matchWidthOrHeight = 0.5f;
             var root = go.GetComponent<RectTransform>();
 
-            // one action button: tinted round face inside a themed ring border,
-            // centered icon + small label — matches the redesigned HUD language
+            // one action button: designed dark circle face inside a themed ring
+            // border, class-colored glyph + small label. The face renders at
+            // natural color (alpha only) — color coding lives on the glyph.
             RectTransform Btn(string name, Vector2 anchor, Vector2 pos, float size, Sprite face,
-                Color tint, Sprite icon, string label, float labelSize, out Image faceImg, out Image iconImg,
-                out Image ringImg)
+                Color tint, Sprite icon, Color iconTint, string label, float labelSize, out Image faceImg,
+                out Image iconImg, out Image ringImg)
             {
                 var b = new GameObject(name, typeof(RectTransform));
                 var rt = b.GetComponent<RectTransform>();
@@ -106,7 +107,7 @@ namespace Crownfall
                 faceImg = b.AddComponent<Image>();
                 faceImg.sprite = face != null ? face : circleSprite;
                 faceImg.type = Image.Type.Simple;
-                faceImg.color = tint;
+                faceImg.color = face == btnRound ? new Color(1f, 1f, 1f, tint.a) : tint;
                 faceImg.raycastTarget = false;
 
                 ringImg = null;
@@ -139,6 +140,7 @@ namespace Crownfall
                     iconImg.type = Image.Type.Sliced;
                     iconImg.preserveAspect = false;
                     iconImg.raycastTarget = false;
+                    iconImg.color = iconTint;
                 }
                 if (!string.IsNullOrEmpty(label))
                 {
@@ -161,19 +163,19 @@ namespace Crownfall
 
             joyRestPos = new Vector2(300f, 300f);
             joyBase = Btn("JoyBase", new Vector2(0f, 0f), joyRestPos, 270f, joyRing,
-                new Color(1f, 1f, 1f, 0.35f), null, null, 0f, out _, out _, out _);
+                new Color(1f, 1f, 1f, 0.35f), null, Color.white, null, 0f, out _, out _, out _);
             joyKnob = Btn("JoyKnob", new Vector2(0f, 0f), joyRestPos, 118f, btnRound,
-                new Color(1f, 1f, 1f, 0.65f), null, null, 0f, out _, out _, out _);
+                new Color(1f, 1f, 1f, 0.65f), null, Color.white, null, 0f, out _, out _, out _);
 
             attackBtn = Btn("Attack", new Vector2(1f, 0f), new Vector2(-205f, 240f), 216f, btnRound,
-                AttackCol, iconAttack, null, 0f, out attackImg, out _, out attackRing);
+                Color.white, iconAttack, AttackCol, null, 0f, out attackImg, out _, out attackRing);
             dodgeBtn = Btn("Dodge", new Vector2(1f, 0f), new Vector2(-450f, 185f), 168f, btnRound,
-                DodgeCol, iconDodge, null, 0f, out dodgeImg, out _, out dodgeRing);
+                Color.white, iconDodge, DodgeCol, null, 0f, out dodgeImg, out _, out dodgeRing);
             blockBtn = Btn("Block", new Vector2(1f, 0f), new Vector2(-210f, 480f), 158f, btnRound,
-                BlockCol, iconBlock, "BLOCK", 24f, out blockImg, out blockIconImg, out blockRing);
+                Color.white, iconBlock, BlockCol, "BLOCK", 24f, out blockImg, out blockIconImg, out blockRing);
             blockLabel = blockBtn.GetComponentInChildren<TMP_Text>();
             skillBtn = Btn("Skill", new Vector2(1f, 0f), new Vector2(-448f, 400f), 158f, btnRound,
-                SkillCol, iconSkill, "SKILL", 22f, out skillImg, out _, out skillRing);
+                Color.white, iconSkill, SkillCol, "SKILL", 22f, out skillImg, out skillIconImg, out skillRing);
             // radial cooldown shade that sweeps away as the skill recharges
             var cover = new GameObject("Cooldown", typeof(RectTransform)).GetComponent<RectTransform>();
             cover.SetParent(skillBtn, false);
@@ -185,14 +187,15 @@ namespace Crownfall
             skillCover.fillMethod = Image.FillMethod.Radial360;
             skillCover.fillOrigin = (int)Image.Origin360.Top;
             skillCover.fillClockwise = false;
-            skillCover.color = new Color(0.05f, 0.05f, 0.1f, 0.6f);
+            // functional cooldown shade (state overlay, not a widget face)
+            skillCover.color = new Color(0f, 0f, 0f, 0.55f);
             skillCover.raycastTarget = false;
             skillCover.fillAmount = 0f;
 
             lockBtn = Btn("Lock", new Vector2(1f, 0f), new Vector2(-655f, 300f), 116f, btnRound,
-                LockCol, iconLock, null, 0f, out lockImg, out _, out lockRing);
+                Color.white, iconLock, LockCol, null, 0f, out lockImg, out _, out lockRing);
             autoBtn = Btn("Auto", new Vector2(0f, 1f), new Vector2(126f, -172f), 116f, btnRound,
-                AutoCol, iconAuto, "AUTO", 20f, out _, out _, out _);
+                Color.white, iconAuto, AutoCol, "AUTO", 20f, out _, out _, out _);
 
             canvas.enabled = false; // hidden until a match starts (see Update)
         }
@@ -213,13 +216,14 @@ namespace Crownfall
             var motor = mm.PlayerMotor;
             bool driving = fighting && !mm.Autopilot && motor != null && !motor.IsDead;
 
-            // combat cluster fades when autopiloting / dead but keeps its tint
+            // combat cluster fades when autopiloting / dead; the designed faces
+            // stay at natural color — only alpha moves
             float clusterAlpha = driving ? 1f : 0.4f;
             float ringAlpha = 0.55f * clusterAlpha;
-            attackImg.color = Fade(AttackCol, clusterAlpha);
-            dodgeImg.color = Fade(DodgeCol, clusterAlpha);
-            blockImg.color = Fade(BlockCol, clusterAlpha);
-            lockImg.color = Fade(LockCol, clusterAlpha);
+            attackImg.color = Fade(Color.white, clusterAlpha);
+            dodgeImg.color = Fade(Color.white, clusterAlpha);
+            blockImg.color = Fade(Color.white, clusterAlpha);
+            lockImg.color = Fade(Color.white, clusterAlpha);
             if (attackRing != null) attackRing.color = Fade(Color.white, ringAlpha);
             if (dodgeRing != null) dodgeRing.color = Fade(Color.white, ringAlpha);
             if (blockRing != null) blockRing.color = Fade(Color.white, ringAlpha);
@@ -227,7 +231,9 @@ namespace Crownfall
             if (motor != null)
             {
                 bool ready = motor.SkillReady;
-                skillImg.color = Fade(ready ? SkillCol : new Color(0.5f, 0.45f, 0.6f), clusterAlpha);
+                skillImg.color = Fade(Color.white, clusterAlpha);
+                if (skillIconImg != null)
+                    skillIconImg.color = Fade(ready ? SkillCol : new Color(0.5f, 0.45f, 0.6f), clusterAlpha);
                 skillCover.fillAmount = 1f - motor.SkillReadiness;
                 // gold ring + pulse while the skill is up, quiet while recharging
                 if (skillRing != null)

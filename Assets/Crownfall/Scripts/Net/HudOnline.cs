@@ -29,7 +29,19 @@ namespace Crownfall
         void BuildOnlinePanel()
         {
             var frame = ModalShell("Online", new Vector2(900, 660), out onlineModal);
-            onlineModal.OnHide += () => { if (readyRect != null) UiTween.StopLoop(readyRect); };
+            onlineModal.OnHide += () =>
+            {
+                if (readyRect != null) UiTween.StopLoop(readyRect);
+                // the arena has no menu screens anymore — ANY exit from
+                // matchmaking (X, Escape, LEAVE) must return to the menu scene,
+                // except when the modal closes because the match is starting
+                var net = CrownfallNet.I;
+                if (net != null && net.Phase != NetPhase.InMatch && net.Phase != NetPhase.Starting)
+                {
+                    net.CancelToMenu();
+                    CrownfallLaunch.ToMenu();
+                }
+            };
 
             // -- nickname
             Txt("NameLbl", frame, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
@@ -54,7 +66,7 @@ namespace Crownfall
                 var row = new RosterRow();
                 var bg = Img("Row" + i, frame, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                     new Vector2(0.5f, 1f), new Vector2(0, -224 - i * 52), new Vector2(680, 46),
-                    plateRound, new Color(i % 2 == 0 ? 0.10f : 0.07f, 0.10f, 0.18f, 0.85f));
+                    rowNavy, Color.white);
                 row.root = bg.gameObject;
                 row.name = Txt("N", bg.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
                     new Vector2(0f, 0.5f), new Vector2(20, 0), new Vector2(300, 36), "",
@@ -75,11 +87,7 @@ namespace Crownfall
             readyLabel = readyBtn.GetComponentInChildren<TMP_Text>();
             readyRect = readyBtn.GetComponent<RectTransform>();
             MenuButton(frame, new Vector2(180, -256), new Vector2(300, 92), "LEAVE", 32,
-                btnRed, icoClose, () =>
-                {
-                    CrownfallNet.I?.CancelToMenu();
-                    router.CloseModal(onlineModal);
-                });
+                btnRed, icoClose, () => router.CloseModal(onlineModal)); // OnHide exits to menu
 
             if (CrownfallNet.I != null)
             {

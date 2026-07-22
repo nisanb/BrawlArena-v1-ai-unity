@@ -4,7 +4,7 @@ namespace Crownfall
 {
     public enum Team { Azure = 0, Crimson = 1 }
 
-    public enum ClassId { Knight = 0, Greatsword = 1, Duelist = 2, Mage = 3 }
+    public enum ClassId { Knight = 0, Greatsword = 1, Duelist = 2, Mage = 3, Warhammer = 4 }
 
     public enum ElementId { Light = 0, Earth = 1, Frost = 2, Storm = 3, Shadow = 4, Fire = 5, Arcane = 6 }
 
@@ -82,6 +82,17 @@ namespace Crownfall
                 novaRadius = 4.0f, staminaLight = 14f, staminaHeavy = 32f,
                 skillName = "Arcane Barrage", skillCooldown = 9f, staminaSkill = 34f,
                 skillDamage = 8, skillPoiseDamage = 6, skillRadius = 0f },
+
+            // the Meshy "Neon Hammer Hero" (CC0): slowest, tankiest, hardest
+            // single hits; skill reuses the leap-slam routine with a wide arena-
+            // shaking shockwave
+            new ClassKit { id = ClassId.Warhammer, displayName = "Juggernaut", blurb = "Neon warhammer. Crushing arcs. Skill: Seismic Verdict.",
+                maxHealth = 185, maxStamina = 100, runSpeed = 3.85f,
+                lightDamage = 22, heavyDamage = 40, lightPoiseDamage = 19, heavyPoiseDamage = 38, maxPoise = 60,
+                attackRange = 1.7f, attackRadius = 1.25f, lightLunge = 1.2f, heavyLunge = 2.2f,
+                staminaLight = 20f, staminaHeavy = 36f,
+                skillName = "Seismic Verdict", skillCooldown = 11f, staminaSkill = 40f,
+                skillDamage = 30, skillPoiseDamage = 50, skillRadius = 4.0f },
         };
 
         public static ClassKit Get(ClassId id) => kits[(int)id];

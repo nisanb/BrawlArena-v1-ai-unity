@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "build-live-game": {
+      "source": "Unity-Technologies/skills",
+      "sourceType": "github",
+      "skillPath": "skills/build-live-game/SKILL.md",
+      "computedHash": "9c0931c2fe2030330572f2fe3536bd09bd3002c02c6594630695ea3f18fe8c6c"
+    },
+    "implement-in-app-purchases": {
+      "source": "Unity-Technologies/skills",
+      "sourceType": "github",
+      "skillPath": "skills/implement-in-app-purchases/SKILL.md",
+      "computedHash": "91b70c3502774c24f1165f869632f7f3829459c76e27ccb8e1d102234b0208c4"
+    },
+    "levelplay-unity-integration": {
+      "source": "Unity-Technologies/skills",
+      "sourceType": "github",
+      "skillPath": "skills/levelplay-unity-integration/SKILL.md",
+      "computedHash": "937e6addd78cd1b836b637dde0a42b04ff55202aa32b4b393a890081c2b73b57"
+    },
+    "new-unity-project": {
+      "source": "Unity-Technologies/skills",
+      "sourceType": "github",
+      "skillPath": "skills/new-unity-project/SKILL.md",
+      "computedHash": "0061882b32da9f7dcf9a56c0eb3c011890eeb745fa05e25ba424f91607fe0a7e"
+    },
+    "unity-cli": {
+      "source": "Unity-Technologies/skills",
+      "sourceType": "github",
+      "skillPath": "skills/unity-cli/SKILL.md",
+      "computedHash": "3bde54b28cba587cd41a39fc315943b3c48d1bb5e041971013286f6ef844fb57"
+    },
+    "unity-package-management": {
+      "source": "Unity-Technologies/skills",
+      "sourceType": "github",
+      "skillPath": "skills/unity-package-management/SKILL.md",
+      "computedHash": "44e06e34ff695f0ababd74fd8b81e592fae796d5de86a2ceaa493d855e11d7e3"
+    }
+  }
+}

@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Crownfall/CrownfallMenu.unity
+    guid: 35976d3b0fdaaad44ba3f24b8cb1adc7
+  - enabled: 1
     path: Assets/Crownfall/CrownfallArena.unity
     guid: 78436eb8538dc04448d317e8c4540425
   - enabled: 1

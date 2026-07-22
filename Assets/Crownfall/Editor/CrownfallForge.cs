@@ -23,14 +23,108 @@ namespace Crownfall.EditorTools
     /// wiring, lighting, post-processing and the NavMesh.
     public static class CrownfallForge
     {
-        const string GenDir = "Assets/Crownfall/Generated";
+        internal const string GenDir = "Assets/Crownfall/Generated";
         const string ScenePath = "Assets/Crownfall/CrownfallArena.unity";
-        const string AnimRoot = "Assets/ModularRPGHeroesPBR/Animations";
-        const string CharDir = "Assets/ModularRPGHeroesPBR/Prefabs/BasicCharacters";
-        const string LayerLabSprites = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Sprites/Components";
-        const string LayerLabFonts = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Fonts";
+        internal const string AnimRoot = "Assets/ModularRPGHeroesPBR/Animations";
+        internal const string CharDir = "Assets/ModularRPGHeroesPBR/Prefabs/BasicCharacters";
+        internal const string LayerLabSprites = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Sprites/Components";
+        internal const string LayerLabFonts = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Fonts";
 
         static readonly string[] ElementNames = { "Light", "Earth", "Frost", "Storm", "Shadow", "Fire", "Arcane" };
+
+        /// Legacy modular-pack hammer skin (superseded by the Dungeon Mason
+        /// roster below; kept for ApplyHammerLoadout fallback experiments).
+        internal const string HammerSkin = "SingleTwoHandSword05";
+
+        /// The 2026-07-22 roster redo: Dungeon Mason heroes (all Humanoid).
+        /// Player + net-prefab rigs use the PBR variants; AI understudies wear
+        /// the Polyart finishes so twins on the field still read apart.
+        internal static readonly Dictionary<ClassId, string> HeroSkins = new Dictionary<ClassId, string>
+        {
+            { ClassId.Knight,     "Assets/Mini Legion Footman PBR HP Polyart/Prefabs/FootmanPBR.prefab" },
+            { ClassId.Greatsword, "Assets/Mini Legion Grunt PBR HP Polyart/Prefab/GruntPBR.prefab" },
+            { ClassId.Duelist,    "Assets/RPG Tiny Hero Duo/Prefab/MaleCharacterPBR.prefab" },
+            { ClassId.Mage,       "Assets/WizardPBR/Prefabs/WizardStandardMaterial.prefab" },
+            { ClassId.Warhammer,  "Assets/Mini Legion Rock Golem PBR HP Polyart/Prefabs/PBR_Golem.prefab" },
+        };
+
+        internal static readonly Dictionary<ClassId, string> HeroSkinsAlt = new Dictionary<ClassId, string>
+        {
+            { ClassId.Knight,     "Assets/Mini Legion Footman PBR HP Polyart/Prefabs/FootmanPolyart.prefab" },
+            { ClassId.Greatsword, "Assets/Mini Legion Grunt PBR HP Polyart/Prefab/GruntPolyart.prefab" },
+            { ClassId.Duelist,    "Assets/RPG Tiny Hero Duo/Prefab/MaleCharacterPolyart.prefab" },
+            { ClassId.Mage,       "Assets/WizardPBR/Prefabs/WizardPBRMaskTintMaterial.prefab" },
+            { ClassId.Warhammer,  "Assets/Mini Legion Rock Golem PBR HP Polyart/Prefabs/Polyart_Golem.prefab" },
+        };
+
+        internal static float HeroHeight(ClassId cls) => cls switch
+        {
+            ClassId.Duelist => 1.6f,
+            ClassId.Greatsword => 1.85f,
+            ClassId.Warhammer => 2.0f,
+            _ => 1.72f,
+        };
+
+        internal static GameObject LoadHeroPrefab(string skin) =>
+            AssetDatabase.LoadAssetAtPath<GameObject>(
+                skin.Contains("/") ? skin : $"{CharDir}/{skin}.prefab");
+
+        static Transform FindDeepChild(Transform root, string name)
+        {
+            foreach (var tr in root.GetComponentsInChildren<Transform>(true))
+                if (string.Equals(tr.name, name, System.StringComparison.OrdinalIgnoreCase))
+                    return tr;
+            return null;
+        }
+
+        /// Normalize + arm an external (Dungeon Mason) hero model: uniform
+        /// gameplay height, the wizard's Staff01 flown, the duelist dual-wielding
+        /// the pack's one-handed swords on the humanoid hand bones.
+        internal static void PrepareExternalHero(GameObject model, ClassId cls)
+        {
+            var b = MeasureBoundsInstance(model);
+            if (b.size.y > 0.05f)
+            {
+                float s = HeroHeight(cls) / b.size.y;
+                if (Mathf.Abs(1f - s) > 0.05f)
+                    model.transform.localScale = model.transform.localScale * s;
+            }
+
+            if (cls == ClassId.Mage)
+            {
+                for (int i = 1; i <= 3; i++)
+                {
+                    var staff = FindDeepChild(model.transform, "Staff0" + i);
+                    if (staff != null) staff.gameObject.SetActive(i == 1);
+                }
+            }
+            else if (cls == ClassId.Duelist)
+            {
+                // the male hero ships already holding OHS03 + a shield — twin
+                // blades means shield off, second sword into the left hand
+                var shield = FindDeepChild(model.transform, "Shield08");
+                if (shield != null) shield.gameObject.SetActive(false);
+                var anim = model.GetComponentInChildren<Animator>();
+                if (anim != null && anim.isHuman)
+                    AttachProp(anim, HumanBodyBones.LeftHand, "Assets/RPG Tiny Hero Duo/Prefab/OHS06PBR.prefab");
+            }
+        }
+
+        static void AttachProp(Animator anim, HumanBodyBones bone, string prefabPath)
+        {
+            var hand = anim.GetBoneTransform(bone);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (hand == null || prefab == null)
+            {
+                Debug.LogWarning($"[CrownfallForge] AttachProp failed: hand={hand != null} prefab={prefabPath}");
+                return;
+            }
+            var prop = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            PrefabUtility.UnpackPrefabInstance(prop, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            prop.transform.SetParent(hand, false);
+            prop.transform.localPosition = Vector3.zero;
+            prop.transform.localRotation = Quaternion.identity;
+        }
 
         // ------------------------------------------------------------------ entry points
 
@@ -69,7 +163,7 @@ namespace Crownfall.EditorTools
 
         // ================================================================== animators
 
-        static Dictionary<string, AnimationClip> LoadClips(string folder)
+        internal static Dictionary<string, AnimationClip> LoadClips(string folder)
         {
             // keyed by FILE name: the packs' internal clip names are unreliable
             // (abbreviated suffixes, even duplicated names across files)
@@ -251,6 +345,9 @@ namespace Crownfall.EditorTools
                 { ClassId.Greatsword, "SingleTwohandSword" },
                 { ClassId.Duelist, "DoubleSword" },
                 { ClassId.Mage, "MagicWand" },
+                // the hammer wears the two-hander set — overhead cleaves read as
+                // hammer strikes; the clips are Humanoid so any rig can wear them
+                { ClassId.Warhammer, "SingleTwohandSword" },
             };
             var folders = new Dictionary<ClassId, string>
             {
@@ -258,6 +355,7 @@ namespace Crownfall.EditorTools
                 { ClassId.Greatsword, $"{AnimRoot}/SingleTwoHandSword" },
                 { ClassId.Duelist, $"{AnimRoot}/DoubleSwords" },
                 { ClassId.Mage, $"{AnimRoot}/MagicWand" },
+                { ClassId.Warhammer, $"{AnimRoot}/SingleTwoHandSword" },
             };
             // Attack02_MagicWand is a forward point/thrust -> the bolt (light).
             // Attack01_MagicWand is an overhead raise-and-slam -> the nova (heavy),
@@ -361,9 +459,10 @@ namespace Crownfall.EditorTools
             var hud = managers.AddComponent<HUDController>();
             var touch = managers.AddComponent<TouchController>();
             WireEffects(fx);
-            WireHud(hud);
+            WireKit(hud);
             touch.circleSprite = hud.frameCircle;
-            touch.btnRound = LoadSprite($"{LayerLabSprites}/Button/Button_Circle147_White.png");
+            // designed dark circle face — color coding lives on the glyphs now
+            touch.btnRound = LoadSprite($"{LayerLabSprites}/Button/Button_Circle128_Dark.png");
             touch.joyRing = LoadSprite($"{LayerLabSprites}/Frame/BorderFrame_Circle81.png");
             const string TPicto = LayerLabSprites + "/Icon_PictoIcons/128";
             touch.iconAttack = LoadSprite($"{TPicto}/Pictoicon_Sword.png");
@@ -406,20 +505,21 @@ namespace Crownfall.EditorTools
             // ---- fighters
             var specs = new List<FighterSpec>
             {
-                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Kael", skin = "SwordAndShield01", slot = 0, isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Doran", skin = "SingleTwoHandSword01", slot = 0, isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Vesper", skin = "DoubleSword01", slot = 0, isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Elyra", skin = "MagicWand01", slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Kael", skin = HeroSkins[ClassId.Knight], slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Doran", skin = HeroSkins[ClassId.Greatsword], slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Vesper", skin = HeroSkins[ClassId.Duelist], slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Elyra", skin = HeroSkins[ClassId.Mage], slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Warhammer, element = ElementId.Storm, team = Team.Azure, name = "Volt", skin = HeroSkins[ClassId.Warhammer], slot = 0, isPlayerVariant = true },
 
-                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Bram", skin = "SingleTwoHandSword02", slot = 1, aggression = 0.6f },
-                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Lyra", skin = "MagicWand02", slot = 2, aggression = 0.55f },
+                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Bram", skin = HeroSkinsAlt[ClassId.Greatsword], slot = 1, aggression = 0.6f },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Lyra", skin = HeroSkinsAlt[ClassId.Mage], slot = 2, aggression = 0.55f },
 
-                new FighterSpec { cls = ClassId.Knight, element = ElementId.Shadow, team = Team.Crimson, name = "Vex", skin = "SwordAndShield03", slot = 0, aggression = 0.62f },
-                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Fire, team = Team.Crimson, name = "Sable", skin = "DoubleSword02", slot = 1, aggression = 0.7f },
-                new FighterSpec { cls = ClassId.Mage, element = ElementId.Arcane, team = Team.Crimson, name = "Morgath", skin = "MagicWand03", slot = 2, aggression = 0.58f },
+                new FighterSpec { cls = ClassId.Knight, element = ElementId.Shadow, team = Team.Crimson, name = "Vex", skin = HeroSkinsAlt[ClassId.Knight], slot = 0, aggression = 0.62f },
+                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Fire, team = Team.Crimson, name = "Sable", skin = HeroSkinsAlt[ClassId.Duelist], slot = 1, aggression = 0.7f },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Arcane, team = Team.Crimson, name = "Morgath", skin = HeroSkinsAlt[ClassId.Mage], slot = 2, aggression = 0.58f },
             };
 
-            var playerVariants = new GameObject[4];
+            var playerVariants = new GameObject[5];
             int pv = 0;
             foreach (var spec in specs)
             {
@@ -450,8 +550,13 @@ namespace Crownfall.EditorTools
             EditorUtility.SetDirty(mm);
             EditorSceneManager.SaveScene(scene, ScenePath);
 
+            // the arena always sits right after the menu scene, wherever it is;
+            // with no menu in the list yet it takes slot 0 (dev bootstrap)
             var list = EditorBuildSettings.scenes.Where(s => s.path != ScenePath).ToList();
-            list.Insert(0, new EditorBuildSettingsScene(ScenePath, true));
+            int menuAt = list.FindIndex(s => s.path.EndsWith("CrownfallMenu.unity"));
+            if (menuAt < 0)
+                Debug.LogWarning("[CrownfallForge] CrownfallMenu.unity missing from Build Settings — run Crownfall/Build Menu Scene or standalone builds boot into a UI-less arena.");
+            list.Insert(menuAt + 1, new EditorBuildSettingsScene(ScenePath, true));
             EditorBuildSettings.scenes = list.ToArray();
         }
 
@@ -798,10 +903,11 @@ namespace Crownfall.EditorTools
 
             var netSpecs = new[]
             {
-                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Knight", skin = "SwordAndShield01", isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Warbrand", skin = "SingleTwoHandSword01", isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Duelist", skin = "DoubleSword01", isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Mage", skin = "MagicWand01", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Knight", skin = HeroSkins[ClassId.Knight], isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Warbrand", skin = HeroSkins[ClassId.Greatsword], isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Duelist", skin = HeroSkins[ClassId.Duelist], isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Mage", skin = HeroSkins[ClassId.Mage], isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Warhammer, element = ElementId.Storm, team = Team.Azure, name = "Juggernaut", skin = HeroSkins[ClassId.Warhammer], isPlayerVariant = true },
             };
 
             foreach (var spec in netSpecs)
@@ -827,8 +933,9 @@ namespace Crownfall.EditorTools
             var root = new GameObject($"{(spec.isPlayerVariant ? "Player_" : "")}{spec.name}_{spec.cls}");
             root.transform.SetPositionAndRotation(pos, rot);
 
-            // model
-            var charPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{CharDir}/{spec.skin}.prefab");
+            // model (external Dungeon Mason path or legacy modular-pack name)
+            bool externalSkin = spec.skin.Contains("/");
+            var charPrefab = LoadHeroPrefab(spec.skin);
             GameObject model;
             if (charPrefab != null)
             {
@@ -851,10 +958,17 @@ namespace Crownfall.EditorTools
             anim.applyRootMotion = false;
             anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
 
-            // weapons ship parented to loose "weaponShield_l/r" holder nodes whose
-            // motion is baked per-clip; fast cross-fades make them drift off the
-            // hands. Reparent them into the real hand bones so they are bone-driven.
-            ReparentWeaponsToHands(model.transform);
+            if (externalSkin)
+            {
+                PrepareExternalHero(model, spec.cls);
+            }
+            else
+            {
+                // modular-pack weapons ship on loose "weaponShield_l/r" holder
+                // nodes whose motion is baked per-clip — move them to hand bones
+                ReparentWeaponsToHands(model.transform);
+                if (spec.cls == ClassId.Warhammer) ApplyHammerLoadout(model.transform);
+            }
 
             // physics + brain components
             var cc = root.AddComponent<CharacterController>();
@@ -1034,7 +1148,7 @@ namespace Crownfall.EditorTools
 
         // ------------------------------------------------------------------ wiring
 
-        static void WireEffects(GameEffects fx)
+        internal static void WireEffects(GameEffects fx)
         {
             var sets = new List<GameEffects.ElementSet>();
             for (int i = 0; i < ElementNames.Length; i++)
@@ -1081,7 +1195,9 @@ namespace Crownfall.EditorTools
             EditorUtility.SetDirty(fx);
         }
 
-        static void WireHud(HUDController hud)
+        /// Wire the shared UiKit theme (fonts + designed sprite table) onto any
+        /// UI host — the arena's HUDController or the menu scene's MenuHud.
+        internal static void WireKit(UiKit hud)
         {
             // the "Outline" variants have hollow glyph faces â€” unreadable at title
             // sizes; the plain SDF is the filled face
@@ -1219,6 +1335,64 @@ namespace Crownfall.EditorTools
             hud.icoMedalGold = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Medal_Gold.png");
             hud.icoGemGold = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_GemGold.png");
 
+            // ---- designed composites for the de-tinted widgets (2026-07-22
+            // owner feedback: never fake a colored widget by tinting a white base)
+            hud.rowNavy = LoadSprite($"{LayerLabSprites}/Frame/ListFrame02_Single_Navy.png");
+            hud.toastBar = LoadSprite($"{LayerLabSprites}/Popup/ToastMessage_Topbar_Single_Purple.png");
+            hud.panelTopbarNavy = LoadSprite($"{LayerLabSprites}/Frame/PanelFrame04_TopbarDivided_Single_Navy.png");
+            hud.bar4FillGreen = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_Fill_Green.png");
+            hud.barBg2 = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic02_Bg.png");
+            hud.barFillYellow = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic02_Fill_Yellow.png");
+            hud.allyBarBg = LoadSprite($"{LayerLabSprites}/Slider/Slider_Icon04_Bg.png");
+            hud.allyFillGreen = LoadSprite($"{LayerLabSprites}/Slider/Slider_Icon04_Fill_Green.png");
+            hud.allyFillRed = LoadSprite($"{LayerLabSprites}/Slider/Slider_Icon04_Fill_Red.png");
+            hud.circleDark = LoadSprite($"{LayerLabSprites}/Button/Button_Circle128_Dark.png");
+            hud.itemBlue = LoadSprite($"{LayerLabSprites}/Frame/ItemFrame01_Single_Blue.png");
+            hud.itemPurple = LoadSprite($"{LayerLabSprites}/Frame/ItemFrame01_Single_Purple.png");
+            hud.itemYellow = LoadSprite($"{LayerLabSprites}/Frame/ItemFrame01_Single_Yellow.png");
+            hud.itemRed = LoadSprite($"{LayerLabSprites}/Frame/ItemFrame01_Single_Red.png");
+            hud.itemGreen = LoadSprite($"{LayerLabSprites}/Frame/ItemFrame01_Single_Green.png");
+
+            // ---- menu scene 2026-07: the pack Lobby's own composition pieces
+            hud.bgStage = LoadSprite($"{Demo}/Background_02.png");
+            hud.userInfoTop = LoadSprite($"{LayerLabSprites}/UI_Etc/UserInfo01_Top.png");
+            hud.userInfoBottom = LoadSprite($"{LayerLabSprites}/UI_Etc/UserInfo01_Bottom.png");
+            hud.userInfoIcon = LoadSprite($"{LayerLabSprites}/UI_Etc/UserInfo_Profile_Icon.png");
+            hud.lvl3Bg = LoadSprite($"{LayerLabSprites}/Slider/Slider_Level03_Bg.png");
+            hud.lvl3Fill = LoadSprite($"{LayerLabSprites}/Slider/Slider_Level03_Fill_Blue.png");
+            hud.lvl3Badge = LoadSprite($"{LayerLabSprites}/Slider/Slider_Level03_Badge.png");
+            hud.btnBattleYellow = LoadSprite($"{LayerLabSprites}/Button/Button02_Yellow.png");
+            hud.btnBattleBlue = LoadSprite($"{LayerLabSprites}/Button/Button02_Blue.png");
+            hud.btnSideBlue = LoadSprite($"{LayerLabSprites}/Button/Button03_Blue.png");
+            hud.btnSidePurple = LoadSprite($"{LayerLabSprites}/Button/Button03_Purple.png");
+            hud.btnSquareNavy = LoadSprite($"{LayerLabSprites}/Button/Button_Square06_Navy.png");
+            hud.alertTextRed = LoadSprite($"{LayerLabSprites}/UI_Etc/Alert_Text_s_Red.png");
+            hud.alertTextGreen = LoadSprite($"{LayerLabSprites}/UI_Etc/Alert_Text_s_Green.png");
+            hud.resourceBtnYellow = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Btn_Single_Yellow.png");
+            hud.resourceBtnPurple = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Btn_Single_Purple.png");
+            hud.iconGemPurple = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Icon_Gem_Purple.png");
+            hud.card3Blue = LoadSprite($"{LayerLabSprites}/Frame/CardFrame03_Single_Blue.png");
+            hud.card3Green = LoadSprite($"{LayerLabSprites}/Frame/CardFrame03_Single_Green.png");
+            hud.card3Orange = LoadSprite($"{LayerLabSprites}/Frame/CardFrame03_Single_Orange.png");
+            hud.card3Purple = LoadSprite($"{LayerLabSprites}/Frame/CardFrame03_Single_Purple.png");
+            hud.card3Dim = LoadSprite($"{LayerLabSprites}/Frame/CardFrame03_Single_Dim.png");
+            hud.card3Glow = LoadSprite($"{LayerLabSprites}/Frame/CardFrame03_Glow.png");
+            hud.trapGreen = LoadSprite($"{LayerLabSprites}/Label/Label_Trapezoid_Single_Green.png");
+            hud.trapPurple = LoadSprite($"{LayerLabSprites}/Label/Label_Trapezoid_Single_Purple.png");
+            hud.ribbonIcon = LoadSprite($"{LayerLabSprites}/Label/Title_Ribbon_Icon.png");
+            hud.icoBattleSword = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Knife_Battle.png");
+            hud.barFillBlue = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic01_Fill_Blue.png");
+            hud.vsText = LoadSprite("Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Sprites/Demo/Demo_Image/Image_Vs_text.png");
+            hud.icoEnergy = LoadSprite($"{LayerLabSprites}/UI_Etc/ResourceBar_Icon_Energy.png");
+            hud.icoHammer = LoadSprite($"{Picto}/Pictoicon_Hammer.Png"); // capital .Png — pack quirk
+
+            // generated champion portraits (menu forge output; may not exist yet)
+            if (hud.championPortraits == null || hud.championPortraits.Length != 5)
+                hud.championPortraits = new Sprite[5];
+            for (int i = 0; i < 5; i++)
+                hud.championPortraits[i] =
+                    AssetDatabase.LoadAssetAtPath<Sprite>($"{GenDir}/Portraits/Champion_{i}.png");
+
             hud.fxSparklePrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{FxPrefabs}/Fx_Sparkle_Star01_CustomColor_Yellow.prefab");
             hud.fxConfettiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{FxPrefabs}/Fx_Spread_Star01.prefab");
             hud.fxRotateLightPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{FxPrefabs}/Fx_Rotate_Light01.prefab");
@@ -1232,7 +1406,7 @@ namespace Crownfall.EditorTools
 
         static readonly Dictionary<string, GameObject> prefabCache = new Dictionary<string, GameObject>();
 
-        static GameObject FindPrefab(string folderHint, string name)
+        internal static GameObject FindPrefab(string folderHint, string name)
         {
             string key = folderHint + "/" + name;
             if (prefabCache.TryGetValue(key, out var cached)) return cached;
@@ -1264,7 +1438,7 @@ namespace Crownfall.EditorTools
             return null;
         }
 
-        static Sprite LoadSprite(string path)
+        internal static Sprite LoadSprite(string path)
         {
             var s = AssetDatabase.LoadAssetAtPath<Sprite>(path);
             var importer = AssetImporter.GetAtPath(path) as TextureImporter;
@@ -1348,7 +1522,7 @@ namespace Crownfall.EditorTools
             return b;
         }
 
-        static void ReparentWeaponsToHands(Transform model)
+        internal static void ReparentWeaponsToHands(Transform model)
         {
             Transform FindDeep(Transform t, string name)
             {
@@ -1371,6 +1545,56 @@ namespace Crownfall.EditorTools
                 for (int i = holder.childCount - 1; i >= 0; i--)
                     holder.GetChild(i).SetParent(hand, true);
             }
+        }
+
+        /// Swap the two-hander's sword for the modular pack's Hammer01 with a
+        /// neon storm-glow emissive material. Runs on any Warhammer rig: scene
+        /// fighters, net prefab, menu showcase and portrait models.
+        internal static void ApplyHammerLoadout(Transform model)
+        {
+            var sword = FindWeaponTransform(model);
+            if (sword == null)
+            {
+                Debug.LogWarning("[CrownfallForge] Hammer loadout: no weapon node found");
+                return;
+            }
+            var hammerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/ModularRPGHeroesPBR/Prefabs/Weapons/Hammer01.prefab");
+            if (hammerPrefab == null)
+            {
+                Debug.LogWarning("[CrownfallForge] Hammer loadout: Hammer01.prefab missing");
+                return;
+            }
+            var hammer = (GameObject)PrefabUtility.InstantiatePrefab(hammerPrefab);
+            PrefabUtility.UnpackPrefabInstance(hammer, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            hammer.name = "Hammer01";
+            hammer.transform.SetParent(sword.parent, false);
+            hammer.transform.localPosition = sword.localPosition;
+            hammer.transform.localRotation = sword.localRotation;
+            hammer.transform.localScale = sword.localScale;
+
+            var glow = LoadOrCreateNeonHammerMat(hammer);
+            if (glow != null)
+                foreach (var r in hammer.GetComponentsInChildren<Renderer>())
+                    r.sharedMaterial = glow;
+
+            Object.DestroyImmediate(sword.gameObject);
+        }
+
+        static Material LoadOrCreateNeonHammerMat(GameObject hammer)
+        {
+            string path = $"{GenDir}/NeonHammerGlow.mat";
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null) return existing;
+            var srcRend = hammer.GetComponentInChildren<Renderer>();
+            if (srcRend == null || srcRend.sharedMaterial == null) return null;
+            var mat = new Material(srcRend.sharedMaterial);
+            mat.EnableKeyword("_EMISSION");
+            mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+            // storm cyan pushed past bloom threshold so the head glows
+            mat.SetColor("_EmissionColor", new Color(0.35f, 0.85f, 1f) * 2.2f);
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
         }
 
         static Transform FindWeaponTransform(Transform model)

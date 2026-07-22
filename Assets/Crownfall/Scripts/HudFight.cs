@@ -64,9 +64,9 @@ namespace Crownfall
             Icon("Crown", banner.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f),
                 new Vector2(0, -2), new Vector2(54, 54), iconCrown, Color.white);
 
-            // -- timer plate under the banner
+            // -- timer plate under the banner (designed navy row)
             var timerPlate = Img("TimerPlate", fight, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0.5f, 1f), new Vector2(0, -108), new Vector2(190, 42), plateRound, PlateDark);
+                new Vector2(0.5f, 1f), new Vector2(0, -108), new Vector2(190, 42), rowNavy, Color.white);
             Icon("TimerIco", timerPlate.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f), new Vector2(14, 0), new Vector2(24, 24), icoTimer, Color.white);
             timerText = Txt("Timer", timerPlate.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
@@ -87,21 +87,23 @@ namespace Crownfall
             playerName = Txt("Name", panel, Vector2.zero, Vector2.zero, Vector2.zero,
                 new Vector2(116, 106), new Vector2(340, 40), "KNIGHT", fontSmall, 26, Color.white,
                 TextAlignmentOptions.Left);
-            hpFill = ProBar("HP", panel, new Vector2(116, 76), new Vector2(430, 36), bar4FillWhite,
-                new Color(0.42f, 0.88f, 0.34f), out hpGhost);
+            // pre-colored pack fills at natural color (green HP tube, yellow stamina)
+            hpFill = ProBar("HP", panel, new Vector2(116, 76), new Vector2(430, 36), bar4FillGreen,
+                Color.white, out hpGhost);
             stFill = Bar("Stamina", panel, new Vector2(116, 36), new Vector2(360, 24),
-                barBgBasic, barFillBasic, new Color(1f, 0.8f, 0.25f), out _);
+                barBg2, barFillYellow, Color.white, out _);
 
             // -- class skill pip: gold when ready, radial shade sweeps off as it recharges
             var skillPlate = Img("SkillPip", panel, Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(492, 8), new Vector2(60, 60), frameCircle, new Color(0.08f, 0.09f, 0.16f, 0.92f));
+                new Vector2(492, 8), new Vector2(60, 60), circleDark, Color.white);
             skillPlate.type = Image.Type.Simple;
             skillPipRect = skillPlate.rectTransform;
             skillPipIcon = Icon("SkillIco", skillPlate.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), new Vector2(0, 1), new Vector2(32, 32), icoSkill, Gold);
+            // radial cooldown shade: functional dark state overlay, not a widget face
             skillPipCover = Img("SkillCd", skillPlate.transform, Vector2.zero, Vector2.one,
-                new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, frameCircle,
-                new Color(0.03f, 0.03f, 0.07f, 0.72f));
+                new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, circleDark,
+                new Color(0f, 0f, 0f, 0.62f));
             skillPipCover.type = Image.Type.Filled;
             skillPipCover.fillMethod = Image.FillMethod.Radial360;
             skillPipCover.fillOrigin = (int)Image.Origin360.Top;
@@ -122,17 +124,16 @@ namespace Crownfall
                     new Vector2(30, 24), new Vector2(270, 28), "Ally", fontSmall, 18, new Color(0.8f, 0.9f, 1f),
                     TextAlignmentOptions.Left);
                 var fill = Bar("AllyHp", row, new Vector2(0, 10), new Vector2(240, 18),
-                    barBgBasic, barFillBasic, AzureCol, out _);
+                    allyBarBg, allyFillGreen, Color.white, out _);
                 allyRows.Add(new AllyRow { fill = fill, label = label, icon = icon });
             }
 
             // -- target frame: the enemy you are locked onto or last damaged
             var tf = Img("TargetFrame", fight, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0, -162), new Vector2(520, 88), frameRound, new Color(0.08f, 0.09f, 0.16f, 0.92f));
+                new Vector2(0, -162), new Vector2(520, 88), rowNavy, Color.white);
             targetFrame = tf.gameObject;
             var tCircle = Img("TCircle", tf.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(46, 0), new Vector2(62, 62), frameCircle,
-                new Color(0.32f, 0.12f, 0.12f, 0.98f));
+                new Vector2(0.5f, 0.5f), new Vector2(46, 0), new Vector2(62, 62), circleDark, Color.white);
             tCircle.type = Image.Type.Simple;
             targetIcon = Icon("TIcon", tCircle.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), new Vector2(0, 1), new Vector2(34, 34), icoSword,
@@ -140,7 +141,7 @@ namespace Crownfall
             targetName = Txt("TName", tf.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                 new Vector2(24, -8), new Vector2(400, 32), "Vex  ·  Knight", fontSmall, 23, Color.white);
             var tBarBg = Img("TBarBg", tf.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(24, 10), new Vector2(410, 26), bar4Bg, new Color(0.07f, 0.06f, 0.1f, 0.95f));
+                new Vector2(24, 10), new Vector2(410, 26), bar4Bg, Color.white);
             targetGhost = MakeFill(tBarBg.rectTransform, bar4FillWhite, new Color(1f, 0.88f, 0.75f, 0.95f),
                 new Vector2(410, 26));
             targetFill = MakeFill(tBarBg.rectTransform, bar4FillRed, Color.white, new Vector2(410, 26));
@@ -167,7 +168,7 @@ namespace Crownfall
 
             // -- autopilot tag
             var auto = Img("Autopilot", fight, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
-                new Vector2(-24, 20), new Vector2(356, 42), plateRound, PlateDark);
+                new Vector2(-24, 20), new Vector2(356, 42), rowNavy, Color.white);
             Icon("AutoIco", auto.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
                 new Vector2(14, 0), new Vector2(22, 22), icoPlay, Gold);
             Txt("AutoTxt", auto.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
@@ -222,7 +223,7 @@ namespace Crownfall
             string k = killer != null ? killer.displayName : "The Arena";
             Color kc = killer != null ? killer.TeamColor : Color.gray;
             var plate = Img("Feed", feedContainer, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
-                Vector2.zero, new Vector2(430, 38), plateRound, PlateDark);
+                Vector2.zero, new Vector2(430, 38), rowNavy, Color.white);
             Icon("Skull", plate.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
                 new Vector2(12, 0), new Vector2(22, 22), icoSkull, new Color(1f, 1f, 1f, 0.85f));
             var entryText = Txt("T", plate.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
@@ -326,7 +327,8 @@ namespace Crownfall
                 {
                     float f = row.motor.Health.Max > 0 ? row.motor.Health.Current / row.motor.Health.Max : 0f;
                     row.fill.fillAmount = Mathf.Lerp(row.fill.fillAmount, f, 12f * Time.unscaledDeltaTime);
-                    row.fill.color = row.motor.IsDead ? new Color(0.4f, 0.4f, 0.45f) : AzureCol;
+                    // designed fill swap for the dead state instead of a tint
+                    row.fill.sprite = row.motor.IsDead ? allyFillRed : allyFillGreen;
                 }
             }
 

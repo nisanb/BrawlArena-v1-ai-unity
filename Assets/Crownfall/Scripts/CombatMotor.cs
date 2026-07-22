@@ -903,6 +903,7 @@ namespace Crownfall
             switch (Kit.id)
             {
                 case ClassId.Knight:     actionRoutine = StartCoroutine(SlamSkillRoutine()); break;
+                case ClassId.Warhammer:  actionRoutine = StartCoroutine(SlamSkillRoutine()); break;
                 case ClassId.Greatsword: actionRoutine = StartCoroutine(WhirlSkillRoutine()); break;
                 case ClassId.Duelist:    actionRoutine = StartCoroutine(FlurrySkillRoutine()); break;
                 default:                 actionRoutine = StartCoroutine(BarrageSkillRoutine()); break;

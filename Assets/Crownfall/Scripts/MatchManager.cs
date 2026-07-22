@@ -55,11 +55,20 @@ namespace Crownfall
         readonly List<GameObject> aiRigs = new List<GameObject>();
         Light podiumLight;
 
+        int playerKills;
+
         void Awake()
         {
             I = this;
             Time.timeScale = 1f;
             TimeLeft = matchDuration;
+            // quest bookkeeping: count the local player's takedowns; works for
+            // both the offline path and the master-echoed online kill feed
+            KillFeed += (killer, victim) =>
+            {
+                if (killer != null && PlayerMotor != null && killer == PlayerMotor.Identity)
+                    playerKills++;
+            };
         }
 
         void Start()
@@ -209,8 +218,8 @@ namespace Crownfall
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb != null && kb.f1Key.wasPressedThisFrame && !Paused)
                 Autopilot = !Autopilot;
-            if (kb != null && kb.escapeKey.wasPressedThisFrame)
-                TogglePause();
+            // ESC is owned by HUDController.Update — handling it here too made
+            // the same press toggle pause twice (review 2026-07-22)
         }
 
         // ------------------------------------------------------------------ flow
@@ -311,6 +320,7 @@ namespace Crownfall
                 ? PlayerMotor.Identity.team == winner
                 : winner == Team.Azure;
             LastRewards = IsDemo ? default : CrownfallMeta.GrantMatchRewards(playerWon);
+            if (!IsDemo) CrownfallQuests.OnMatchFinished(playerWon, playerKills);
             MatchEndedEvent?.Invoke(winner);
             Announce?.Invoke(playerWon ? "VICTORY" : "DEFEAT");
             GameEffects.I?.PlayUi(playerWon ? GameEffects.I.uiVictory : GameEffects.I.uiDefeat, 0.9f);
@@ -334,7 +344,19 @@ namespace Crownfall
         {
             if (OnlineMode) CrownfallNet.I?.LeaveMatch();
             Time.timeScale = 1f;
+            // reload into the same kind of match the menu launched us into —
+            // without this the reloaded arena would idle on the empty showcase
+            CrownfallLaunch.Pending = CrownfallLaunch.LastKind;
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+
+        /// Leave the match and return to the standalone menu scene.
+        public void QuitToMenu()
+        {
+            if (OnlineMode) CrownfallNet.I?.LeaveMatch();
+            Time.timeScale = 1f;
+            GameEffects.I?.SetBaseTimeScale(1f);
+            CrownfallLaunch.ToMenu();
         }
 
         void LateUpdate()
