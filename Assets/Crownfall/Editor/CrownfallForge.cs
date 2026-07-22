@@ -1171,6 +1171,58 @@ namespace Crownfall.EditorTools
             hud.icoClose = LoadSprite($"{Picto}/PictoIcon_Close.png");
             hud.icoCheck = LoadSprite($"{Picto}/PictoIcon_Check.png");
             hud.icoBack = LoadSprite($"{Picto}/Pictoicon_Arrow_Backward.png");
+
+            // ---- 2026-07 UI redesign: backdrops, modal chrome, cards, login, fx
+            const string Demo = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Sprites/Demo/Demo_Background";
+            const string Fx = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Particles/Texture";
+            const string FxPrefabs = "Assets/Layer Lab/GUI Pro-CasualGame/Prefabs/Prefabs_DemoScene_Particle";
+
+            hud.bgLayer1 = LoadSprite($"{Demo}/Background_09_Purple1.png");
+            hud.bgGlowTop = LoadSprite($"{Demo}/Background_09_Purple3_GlowTop.png");
+            hud.bgGlowBottom = LoadSprite($"{Demo}/Background_09_Purple4_GlowBottom.png");
+            hud.dimNavy = LoadSprite($"{Demo}/Background_ScreenDimed_Navy.png");
+            hud.dimBlack = LoadSprite($"{Demo}/Background_ScreenDimed_Black.png");
+            hud.screenGlow = LoadSprite($"{Demo}/Background_ScreenGlow.png");
+
+            hud.slideNavy = LoadSprite($"{LayerLabSprites}/Popup/Popup_Slide02_Single_Navy.png");
+            hud.slideTopBar = LoadSprite($"{LayerLabSprites}/Popup/Popup_Slide02_Single_Navy_TopBar.png");
+            hud.slideTopGlow = LoadSprite($"{LayerLabSprites}/Popup/Popup_Slide02_Single_Navy_TopGlow.png");
+            hud.panelNavy = LoadSprite($"{LayerLabSprites}/Frame/PanelFrame02_Round_Single_Navy.png");
+            hud.cardChampBlue = LoadSprite($"{LayerLabSprites}/Frame/CardFrame08_Single_Blue.png");
+            hud.cardChampPurple = LoadSprite($"{LayerLabSprites}/Frame/CardFrame08_Single_Purple.png");
+            hud.cardChampFocus = LoadSprite($"{LayerLabSprites}/Frame/CardFrame08_Focus.png");
+            hud.cardChampGlow = LoadSprite($"{LayerLabSprites}/Frame/CardFrame08_Glow_1.png");
+            hud.cardEventBg = LoadSprite($"{LayerLabSprites}/Frame/CardFrame06_Bg_Blue.png");
+            hud.cardShopBlue = LoadSprite($"{LayerLabSprites}/Frame/CardFrame06_Bg_Blue.png");
+            hud.cardShopYellow = LoadSprite($"{LayerLabSprites}/Frame/CardFrame06_Bg_Yellow.png");
+            hud.cardShopPurple = LoadSprite($"{LayerLabSprites}/Frame/CardFrame06_Bg_Purple.png");
+            hud.inputBg = LoadSprite($"{LayerLabSprites}/UI_Etc/InputField01_Bg_n.png");
+            hud.icoAccount = LoadSprite($"{LayerLabSprites}/UI_Etc/InputField_Icon_Account.png");
+            hud.flagPurple = LoadSprite($"{LayerLabSprites}/Label/Title_Flag01_Purple.png");
+            hud.flagBlue = LoadSprite($"{LayerLabSprites}/Label/Title_Flag01_Blue.png");
+            hud.dividerL = LoadSprite($"{LayerLabSprites}/Label/Title_Line_Divider_Left.png");
+            hud.dividerR = LoadSprite($"{LayerLabSprites}/Label/Title_Line_Divider_Right.png");
+            hud.lvlBg = LoadSprite($"{LayerLabSprites}/Slider/Slider_Level02_Bg.png");
+            hud.lvlFill = LoadSprite($"{LayerLabSprites}/Slider/Slider_Level02_Fill_Blue.png");
+            hud.fxGlow = LoadSprite($"{Fx}/fx_glow.png");
+            hud.fxCircleGlow = LoadSprite($"{Fx}/fx_circle_glow.png");
+            hud.fxRays = LoadSprite($"{Fx}/fx_rotate_line.png");
+            hud.fxStar = LoadSprite($"{Fx}/fx_star_yellow.png");
+            hud.icoStatHp = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_StatsIcon_Hp01.png");
+            hud.icoStatDmg = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_StatsIcon_Damage.png");
+            hud.icoStatSpd = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_StatsIcon_Speed.png");
+            hud.icoTrophyBig = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Trophy_l.png");
+            hud.icoStar = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Star01_l.png");
+            hud.shopCoinSmall = LoadSprite($"{LayerLabSprites}/Icon_ShopItems/ShopItem_Coin_2.png");
+            hud.shopCoinBig = LoadSprite($"{LayerLabSprites}/Icon_ShopItems/ShopItem_Coin_4.png");
+            hud.shopChest = LoadSprite($"{LayerLabSprites}/Icon_ShopItems/ShopItem_SpecialChest_Purple.png");
+
+            hud.fxSparklePrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{FxPrefabs}/Fx_Sparkle_Star01_CustomColor_Yellow.prefab");
+            hud.fxConfettiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{FxPrefabs}/Fx_Spread_Star01.prefab");
+            hud.fxRotateLightPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{FxPrefabs}/Fx_Rotate_Light01.prefab");
+            if (hud.fxSparklePrefab == null || hud.fxConfettiPrefab == null)
+                Debug.LogWarning("[CrownfallForge] UI particle prefabs missing — bursts will no-op");
+
             EditorUtility.SetDirty(hud);
         }
 

@@ -74,6 +74,41 @@ namespace Crownfall
             }
         }
 
+        // ---------------------------------------------------------------- profile
+
+        static readonly string[] NameFore =
+            { "Iron", "Storm", "Grim", "Shadow", "Ember", "Frost", "Gold", "Night", "Oath", "Ash" };
+        static readonly string[] NameAft =
+            { "blade", "fang", "ward", "brand", "heart", "howl", "crown", "reign", "mark", "born" };
+
+        /// A lore-flavored random callsign for the login screen's dice button.
+        public static string RandomName() =>
+            NameFore[UnityEngine.Random.Range(0, NameFore.Length)] +
+            NameAft[UnityEngine.Random.Range(0, NameAft.Length)] +
+            UnityEngine.Random.Range(1, 99);
+
+        /// True once the player has been through the login screen. Cleared by
+        /// Logout so the login flow can be revisited from settings.
+        public static bool HasProfile
+        {
+            get { return PlayerPrefs.GetInt("meta.hasProfile", 0) != 0; }
+        }
+
+        public static void CompleteLogin(string name)
+        {
+            if (!string.IsNullOrWhiteSpace(name)) PlayerName = name;
+            PlayerPrefs.SetInt("meta.hasProfile", 1);
+            PlayerPrefs.Save();
+            Changed?.Invoke();
+        }
+
+        public static void Logout()
+        {
+            PlayerPrefs.SetInt("meta.hasProfile", 0);
+            PlayerPrefs.Save();
+            Changed?.Invoke();
+        }
+
         static void Ensure()
         {
             if (loaded) return;
