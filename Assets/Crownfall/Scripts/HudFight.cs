@@ -22,6 +22,7 @@ namespace Crownfall
         float targetShown = 1f, targetGhostShown = 1f;
         CombatMotor shownTarget;
         Image hpFill, hpGhost, stFill;
+        Image sigilBadge;
         Image skillPipIcon, skillPipCover;
         RectTransform skillPipRect;
         bool skillWasReady;
@@ -81,6 +82,8 @@ namespace Crownfall
                 new Vector2(9, 15), new Vector2(86, 86), profileInner, Color.white);
             portraitIcon = Icon("PortraitIcon", panel, Vector2.zero, Vector2.zero, Vector2.zero,
                 new Vector2(26, 32), new Vector2(52, 52), icoShield, new Color(0.16f, 0.22f, 0.42f));
+            sigilBadge = Icon("SigilBadge", panel, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f),
+                new Vector2(96, 100), new Vector2(34, 34), iconCrown, Gold);
             playerName = Txt("Name", panel, Vector2.zero, Vector2.zero, Vector2.zero,
                 new Vector2(116, 106), new Vector2(340, 40), "KNIGHT", fontSmall, 26, Color.white,
                 TextAlignmentOptions.Left);
@@ -187,6 +190,8 @@ namespace Crownfall
             if (pm == null) return;
             playerName.text = pm.Kit.displayName.ToUpper();
             portraitIcon.sprite = IconFor(pm.Kit.id);
+            sigilBadge.sprite = SigilSprite(CrownfallMeta.EquippedSigil);
+            sigilBadge.gameObject.SetActive(CrownfallMeta.EquippedSigil > 0);
             hpShown = ghostShown = stShown = 1f;
             pm.Health.Damaged -= OnPlayerDamaged;
             pm.Health.Damaged += OnPlayerDamaged;

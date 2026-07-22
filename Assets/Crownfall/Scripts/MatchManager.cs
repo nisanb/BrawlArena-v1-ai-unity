@@ -97,10 +97,22 @@ namespace Crownfall
             if (State == MatchState.ClassSelect) SetState(MatchState.Menu);
         }
 
+        /// Offline matches honor the hub's mode carousel pick. Online rooms are
+        /// untouched: every match ends in a scene reload, which restores the
+        /// serialized standard values before a networked start can happen.
+        void ApplySelectedMode()
+        {
+            var mode = GameModes.Selected;
+            killTarget = mode.killTarget;
+            matchDuration = mode.duration;
+            TimeLeft = mode.duration;
+        }
+
         /// Home-hub PLAY: fight with the persisted champion pick.
         public void StartMatch()
         {
             IsDemo = false;
+            ApplySelectedMode();
             SelectClass(CrownfallMeta.SelectedClass);
         }
 
@@ -150,6 +162,7 @@ namespace Crownfall
             if (State != MatchState.Menu && State != MatchState.ClassSelect) return;
             IsDemo = true;
             Autopilot = true;
+            ApplySelectedMode();
             SelectClass(UnityEngine.Random.Range(0, playerVariants.Length));
         }
 

@@ -147,6 +147,8 @@ namespace Crownfall
         public Sprite shopCoinSmall;     // ShopItem_Coin_2
         public Sprite shopCoinBig;       // ShopItem_Coin_4
         public Sprite shopChest;         // ShopItem_SpecialChest_Purple
+        public Sprite icoMedalGold;      // Icon_ImageIcon_Medal_Gold
+        public Sprite icoGemGold;        // Icon_ImageIcon_GemGold
         public GameObject fxSparklePrefab;   // Fx_Sparkle_Star01_CustomColor_Yellow
         public GameObject fxConfettiPrefab;  // Fx_Spread_Star01
         public GameObject fxRotateLightPrefab; // Fx_Rotate_Light01
@@ -174,6 +176,24 @@ namespace Crownfall
             ClassId.Duelist => icoSword,
             _ => icoWand,
         };
+
+        /// Cosmetic sigil catalog sold in the shop. Index 0 = the free class
+        /// icon default; the order is persisted in PlayerPrefs, never reorder.
+        internal (string name, Sprite sprite, int cost)[] SigilCatalog => new[]
+        {
+            ("CLASS", IconFor((ClassId)CrownfallMeta.SelectedClass), 0),
+            ("CROWN", iconCrown, 250),
+            ("STAR", icoStar, 150),
+            ("MEDAL", icoMedalGold, 400),
+            ("SKULL", icoSkull, 300),
+            ("GOLD GEM", icoGemGold, 600),
+        };
+
+        internal Sprite SigilSprite(int index)
+        {
+            var cat = SigilCatalog;
+            return cat[Mathf.Clamp(index, 0, cat.Length - 1)].sprite;
+        }
 
         void Start()
         {

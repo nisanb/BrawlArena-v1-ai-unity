@@ -13,7 +13,8 @@ namespace Crownfall
     public partial class HUDController
     {
         TMP_Text hubCoins, hubGems, hubTrophies, hubLevelNum, hubChampName, hubPlayerName;
-        Image hubXpFill, hubChampIcon;
+        TMP_Text hubModeName, hubModeSub;
+        Image hubXpFill, hubChampIcon, hubSigilIcon;
         GameObject inboxBadge, giftBadge;
         TMP_Text inboxBadgeText;
         int coinsShown = -1, gemsShown = -1;
@@ -249,6 +250,8 @@ namespace Crownfall
             var xpBg = Img("XpBg", profile.transform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f),
                 new Vector2(94, 18), new Vector2(210, 20), lvlBg, Color.white);
             hubXpFill = MakeFill(xpBg.rectTransform, lvlFill, Color.white, new Vector2(210, 20));
+            hubSigilIcon = Icon("Sigil", profile.transform, new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(0.5f, 0.5f), new Vector2(-26, -30), new Vector2(34, 34), iconCrown, Gold);
 
             // -- trophy road pill docked right of the profile (Brawl-style)
             var road = Img("TrophyRoad", t, new Vector2(0f, 1f), new Vector2(0f, 1f),
@@ -308,13 +311,26 @@ namespace Crownfall
             hubEventRect = evt.rectTransform;
             MakeClickable(evt, OpenPlayMenu);
             Icon("EIco", evt.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-                new Vector2(18, 6), new Vector2(48, 48), icoSword, Gold);
-            Txt("EName", evt.transform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(40, -22), new Vector2(-96, 32), "10-KILL BRAWL", fontSmall, 23, Color.white,
+                new Vector2(30, 6), new Vector2(44, 44), icoSword, Gold);
+            hubModeName = Txt("EName", evt.transform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(48, -22), new Vector2(-118, 32), "10-KILL BRAWL", fontSmall, 21, Color.white,
                 TextAlignmentOptions.Left);
-            Txt("ESub", evt.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(40, 26), new Vector2(-96, 28), "Sundered Crown  ·  3v3",
-                fontSmall, 16, new Color(1f, 0.9f, 0.6f), TextAlignmentOptions.Left);
+            hubModeSub = Txt("ESub", evt.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(48, 26), new Vector2(-118, 28), "",
+                fontSmall, 14, new Color(1f, 0.9f, 0.6f), TextAlignmentOptions.Left);
+
+            // mode carousel arrows on the card edges
+            var prev = Icon("ModePrev", evt.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(4, 6), new Vector2(44, 44), btnCircle, Color.white);
+            MakeClickable(prev, () => CycleMode(-1));
+            Icon("A", prev.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                new Vector2(-1, 1), new Vector2(18, 18), icoBack, Color.white);
+            var next = Icon("ModeNext", evt.transform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(-4, 6), new Vector2(44, 44), btnCircle, Color.white);
+            MakeClickable(next, () => CycleMode(+1));
+            var nextArrow = Icon("A", next.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                new Vector2(1, 1), new Vector2(18, 18), icoBack, Color.white);
+            nextArrow.rectTransform.localScale = new Vector3(-1f, 1f, 1f);
 
             // PLAY gets a slow-spinning ray halo behind it
             var playRays = Icon("PlayRays", t, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0.5f),
@@ -430,6 +446,11 @@ namespace Crownfall
             var kit = ClassKits.Get((ClassId)CrownfallMeta.SelectedClass);
             hubChampName.text = kit.displayName.ToUpper();
             hubChampIcon.sprite = IconFor(kit.id);
+            hubSigilIcon.sprite = SigilSprite(CrownfallMeta.EquippedSigil);
+
+            var mode = GameModes.Selected;
+            hubModeName.text = mode.title;
+            hubModeSub.text = mode.subtitle;
 
             int unread = CrownfallMeta.UnreadNews;
             inboxBadge.SetActive(unread > 0);
@@ -438,6 +459,13 @@ namespace Crownfall
 
             RefreshShopAffordability();
             RefreshChampFocus();
+        }
+
+        void CycleMode(int dir)
+        {
+            int n = GameModes.All.Length;
+            CrownfallMeta.SelectedMode = (CrownfallMeta.SelectedMode + dir + n) % n;
+            UiTween.Punch(hubEventRect, 0.1f, 0.28f);
         }
     }
 }

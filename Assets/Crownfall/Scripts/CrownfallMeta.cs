@@ -74,6 +74,54 @@ namespace Crownfall
             }
         }
 
+        // ---------------------------------------------------------------- modes
+
+        /// Index into GameModes.All, persisted so the hub carousel remembers.
+        public static int SelectedMode
+        {
+            get { return PlayerPrefs.GetInt("meta.mode", 0); }
+            set
+            {
+                PlayerPrefs.SetInt("meta.mode", Mathf.Max(0, value));
+                PlayerPrefs.Save();
+                Changed?.Invoke();
+            }
+        }
+
+        // ---------------------------------------------------------------- sigils
+
+        /// Cosmetic profile sigils (index into the HUD's sigil catalog).
+        /// Index 0 is the free class-icon default; the rest are coin unlocks.
+        public static int EquippedSigil
+        {
+            get { return PlayerPrefs.GetInt("meta.sigil", 0); }
+            set
+            {
+                PlayerPrefs.SetInt("meta.sigil", Mathf.Max(0, value));
+                PlayerPrefs.Save();
+                Changed?.Invoke();
+            }
+        }
+
+        public static bool OwnsSigil(int index)
+        {
+            if (index <= 0) return true;
+            return (PlayerPrefs.GetInt("meta.sigilsOwned", 0) & (1 << index)) != 0;
+        }
+
+        /// Coin purchase; returns false when unaffordable. Owned is idempotent.
+        public static bool UnlockSigil(int index, int costCoins)
+        {
+            if (OwnsSigil(index)) return true;
+            Ensure();
+            if (coins < costCoins) return false;
+            coins -= costCoins;
+            PlayerPrefs.SetInt("meta.sigilsOwned", PlayerPrefs.GetInt("meta.sigilsOwned", 0) | (1 << index));
+            Save();
+            Changed?.Invoke();
+            return true;
+        }
+
         // ---------------------------------------------------------------- profile
 
         static readonly string[] NameFore =

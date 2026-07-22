@@ -1216,6 +1216,8 @@ namespace Crownfall.EditorTools
             hud.shopCoinSmall = LoadSprite($"{LayerLabSprites}/Icon_ShopItems/ShopItem_Coin_2.png");
             hud.shopCoinBig = LoadSprite($"{LayerLabSprites}/Icon_ShopItems/ShopItem_Coin_4.png");
             hud.shopChest = LoadSprite($"{LayerLabSprites}/Icon_ShopItems/ShopItem_SpecialChest_Purple.png");
+            hud.icoMedalGold = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_Medal_Gold.png");
+            hud.icoGemGold = LoadSprite($"{LayerLabSprites}/IconMisc/Icon_ImageIcon_GemGold.png");
 
             hud.fxSparklePrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{FxPrefabs}/Fx_Sparkle_Star01_CustomColor_Yellow.prefab");
             hud.fxConfettiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{FxPrefabs}/Fx_Spread_Star01.prefab");

@@ -24,13 +24,13 @@ namespace Crownfall
 
         void BuildShop()
         {
-            var frame = ModalShell("Shop", new Vector2(920, 600), out shopModal);
+            var frame = ModalShell("Shop", new Vector2(960, 830), out shopModal);
 
-            ShopCard(frame, new Vector2(-290, -30), "COIN STASH", cardShopBlue, shopCoinSmall, "+150", 10,
+            ShopCard(frame, new Vector2(-300, 88), "COIN STASH", cardShopBlue, shopCoinSmall, "+150", 10,
                 () => { CrownfallMeta.AddCoins(150); ShowToast("+150 COINS"); });
-            ShopCard(frame, new Vector2(0, -30), "GOLD POUCH", cardShopYellow, shopCoinBig, "+400", 24,
+            ShopCard(frame, new Vector2(0, 88), "GOLD POUCH", cardShopYellow, shopCoinBig, "+400", 24,
                 () => { CrownfallMeta.AddCoins(400); ShowToast("+400 COINS"); });
-            ShopCard(frame, new Vector2(290, -30), "GOLDEN CHEST", cardShopPurple, shopChest, "40-220?", 16,
+            ShopCard(frame, new Vector2(300, 88), "GOLDEN CHEST", cardShopPurple, shopChest, "40-220?", 16,
                 () =>
                 {
                     int roll = Random.Range(40, 221);
@@ -38,9 +38,62 @@ namespace Crownfall
                     ShowToast($"CHEST PAID OUT  +{roll} COINS");
                 });
 
+            // -- sigil rack: coin-priced profile cosmetics
+            Icon("SigDivL", frame, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-210, -136), new Vector2(130, 20), dividerL, new Color(1f, 1f, 1f, 0.6f));
+            Txt("SigTitle", frame, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0, -136), new Vector2(240, 34), "SIGILS", fontMid, 26, Gold);
+            Icon("SigDivR", frame, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(210, -136), new Vector2(130, 20), dividerR, new Color(1f, 1f, 1f, 0.6f));
+
+            var cat = SigilCatalog;
+            for (int i = 1; i < cat.Length; i++)   // 0 = free class default, not sold
+            {
+                float x = -300 + (i - 1) * 150;
+                SigilCard(frame, new Vector2(x, -252), i, cat[i].name, cat[i].cost);
+            }
+
             Txt("Hint", frame, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0, 22), new Vector2(700, 30), "earn gems from level-ups and free gifts",
-                fontSmall, 18, new Color(1f, 1f, 1f, 0.55f));
+                new Vector2(0, 18), new Vector2(760, 28), "sigils crown your profile  ·  earn gems from level-ups and gifts",
+                fontSmall, 16, new Color(1f, 1f, 1f, 0.55f));
+        }
+
+        readonly List<(Button btn, TMP_Text label, int index, int cost)> sigilButtons =
+            new List<(Button, TMP_Text, int, int)>();
+
+        void SigilCard(Transform parent, Vector2 pos, int index, string name, int cost)
+        {
+            var card = Img("Sigil_" + name, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), pos, new Vector2(140, 196), plateRound,
+                new Color(0.09f, 0.11f, 0.2f, 0.96f));
+            Glow("G", card.transform, new Vector2(0, 34), 96, new Color(1f, 0.9f, 0.5f, 0.25f));
+            Icon("I", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0, 34), new Vector2(64, 64), SigilSprite(index), Color.white);
+            Txt("N", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0, -22), new Vector2(134, 26), name, fontSmall, 15, Color.white);
+
+            var buy = Img("Buy", card.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f), new Vector2(0, 12), new Vector2(118, 48), btnGreen, Color.white);
+            TMP_Text label = null;
+            var b = MakeClickable(buy, () =>
+            {
+                if (CrownfallMeta.OwnsSigil(index))
+                {
+                    CrownfallMeta.EquippedSigil = index;
+                    ShowToast(name + "  EQUIPPED");
+                }
+                else if (CrownfallMeta.UnlockSigil(index, cost))
+                {
+                    CrownfallMeta.EquippedSigil = index;
+                    Burst(fxSparklePrefab, (RectTransform)card.transform, Vector2.zero, 0.7f);
+                    GameEffects.I?.PlayUi(GameEffects.I.killDing, 0.5f);
+                    ShowToast(name + "  UNLOCKED");
+                }
+                else ShowToast("NOT ENOUGH COINS");
+            });
+            label = Txt("P", buy.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                new Vector2(0, 2), new Vector2(-10, -8), cost.ToString(), fontSmall, 17, Color.white);
+            sigilButtons.Add((b, label, index, cost));
         }
 
         void ShopCard(Transform parent, Vector2 pos, string name, Sprite cardBg, Sprite icon, string amount,
@@ -82,6 +135,15 @@ namespace Crownfall
                 bool can = CrownfallMeta.Gems >= cost;
                 btn.interactable = can;
                 label.color = can ? Color.white : new Color(1f, 1f, 1f, 0.45f);
+            }
+            foreach (var (btn, label, index, cost) in sigilButtons)
+            {
+                bool owned = CrownfallMeta.OwnsSigil(index);
+                bool equipped = owned && CrownfallMeta.EquippedSigil == index;
+                bool can = owned || CrownfallMeta.Coins >= cost;
+                btn.interactable = !equipped && can;
+                label.text = equipped ? "ON" : owned ? "EQUIP" : cost.ToString();
+                label.color = equipped ? Gold : can ? Color.white : new Color(1f, 1f, 1f, 0.45f);
             }
             foreach (var (idx, dot) in newsDots)
                 dot.SetActive(!CrownfallMeta.IsNewsRead(idx));
@@ -251,9 +313,13 @@ namespace Crownfall
         {
             var frame = ModalShell("Battle", new Vector2(680, 500), out battleModal);
 
-            Txt("Sub", frame, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0, -96), new Vector2(520, 34), "Sundered Crown  ·  3 v 3  ·  first to 10",
-                fontSmall, 20, new Color(1f, 0.9f, 0.6f));
+            var sub = Txt("Sub", frame, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0, -96), new Vector2(560, 34), "", fontSmall, 20, new Color(1f, 0.9f, 0.6f));
+            battleModal.OnShow += () =>
+            {
+                var mode = GameModes.Selected;
+                sub.text = $"{mode.title}  ·  {mode.subtitle}";
+            };
 
             MenuButton(frame, new Vector2(0, 6), new Vector2(440, 108), "ONLINE MATCH", 38,
                 btnYellow, icoPlay, () =>
