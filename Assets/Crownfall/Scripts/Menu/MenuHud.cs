@@ -17,7 +17,7 @@ namespace Crownfall
         public Camera menuCamera;
 
         UiPanel bootScreen, loginScreen, hubScreen, champScreen;
-        UiPanel shopModal, inboxModal, giftModal, settingsModal, battleModal, questModal;
+        UiPanel shopModal, inboxModal, giftModal, settingsModal, battleModal, questModal, trophyRoadModal;
 
         static bool bootPlayed; // splash only once per app run, not per return
 
@@ -38,6 +38,7 @@ namespace Crownfall
             BuildSettings();
             BuildBattleModal();
             BuildQuests();
+            BuildTrophyRoad();
             BuildToast();
 
             CrownfallMeta.Changed += RefreshHub;
@@ -65,6 +66,7 @@ namespace Crownfall
         void OpenShop() { router.OpenModal(shopModal); RefreshHub(); }
         void OpenInbox() { router.OpenModal(inboxModal); RefreshHub(); }
         void OpenQuests() { router.OpenModal(questModal); RefreshHub(); }
+        void OpenTrophyRoad() { router.OpenModal(trophyRoadModal); RefreshHub(); }
         void OpenPlayMenu() => router.OpenModal(battleModal);
         public void OpenSettings() => router.OpenModal(settingsModal);
 

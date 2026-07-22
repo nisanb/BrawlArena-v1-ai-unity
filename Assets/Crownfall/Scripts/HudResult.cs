@@ -13,7 +13,8 @@ namespace Crownfall
         Image resultIcon;
         RectTransform resultRays, resultTitleRect, resultIconRect;
         GameObject rewardsRow;
-        TMP_Text rewardCoinsText, rewardXpText, rewardTrophyText, levelUpText;
+        TMP_Text rewardCoinsText, rewardXpText, rewardTrophyText, levelUpNum;
+        RectTransform levelUpRoot, levelUpRays, levelUpBadge, levelUpTitle, levelUpGems;
 
         void BuildResult()
         {
@@ -56,9 +57,29 @@ namespace Crownfall
             rewardTrophyText = Txt("TroT", rr.transform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f), new Vector2(-24, 1), new Vector2(90, 44), "+0", fontMid, 27, Gold,
                 TextAlignmentOptions.Left);
-            levelUpText = Txt("LvUp", t, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(0, -136), new Vector2(600, 34),
-                "LEVEL UP!  +10 GEMS", fontSmall, 22, new Color(0.55f, 1f, 0.6f));
+            // level-up celebration cluster — parked left of the ceremony centre so
+            // it never covers the rewards strip; shown only when the match levelled us
+            levelUpRoot = Rect("LevelUp", t, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(-520, 10), new Vector2(380, 420));
+            levelUpRays = Icon("Rays", levelUpRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(330, 330), fxRays,
+                new Color(1f, 0.85f, 0.4f, 0.28f)).rectTransform;
+            Glow("Glow", levelUpRoot, Vector2.zero, 300f, new Color(1f, 0.85f, 0.4f, 0.55f));
+            var lvBadge = Icon("Badge", levelUpRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(140, 140), lvl3Badge, Color.white);
+            levelUpBadge = lvBadge.rectTransform;
+            levelUpNum = Txt("Num", lvBadge.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                new Vector2(0, 9), new Vector2(-18, -44), "1", fontMid, 52, Color.white);
+            levelUpTitle = Txt("LvTitle", levelUpRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(0, 128), new Vector2(380, 56), "LEVEL UP!",
+                fontMid, 40, Gold).rectTransform;
+            levelUpGems = Rect("Gems", levelUpRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(0, -112), new Vector2(220, 46));
+            Icon("GemI", levelUpGems, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(28, 0), new Vector2(40, 40), icoGemGold, Color.white);
+            Txt("GemT", levelUpGems, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                new Vector2(56, 1), new Vector2(160, 42), "+10 GEMS", fontMid, 28, Gold,
+                TextAlignmentOptions.Left);
 
             MenuButton(t, new Vector2(-200, -196), new Vector2(370, 96), "REMATCH", 34,
                 btnGreen, icoRefresh, () => MatchManager.I?.Restart());
@@ -95,8 +116,22 @@ namespace Crownfall
 
             var r = MatchManager.I.LastRewards;
             rewardsRow.SetActive(r.Any);
-            levelUpText.gameObject.SetActive(r.leveledUp);
-            if (r.leveledUp) UiTween.PopIn(levelUpText.rectTransform, 0.4f, 1.3f);
+            levelUpRoot.gameObject.SetActive(r.leveledUp);
+            if (r.leveledUp)
+            {
+                levelUpNum.text = CrownfallMeta.Level.ToString();
+                UiTween.SpinForever(levelUpRays, 24f);
+                // Scale-from-zero (not PopIn) so the cluster stays invisible
+                // through the delay while the title lands first
+                UiTween.Scale(levelUpRoot, Vector3.zero, Vector3.one, 0.5f,
+                    UiTween.Ease.BackOut, 1.2f, () =>
+                    {
+                        UiTween.Punch(levelUpBadge, 0.16f, 0.3f);
+                        Burst(fxConfettiPrefab, levelUpRoot, Vector2.zero, 1f);
+                    });
+                UiTween.PopIn(levelUpTitle, 0.35f, 1.5f);
+                UiTween.PopIn(levelUpGems, 0.35f, 1.65f);
+            }
             if (r.Any)
             {
                 UiTween.CountUp(rewardCoinsText, 0, r.coins, 0.9f, v => $"+{v}");

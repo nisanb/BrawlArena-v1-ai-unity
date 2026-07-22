@@ -308,6 +308,7 @@ namespace Crownfall
             var road = Img("TrophyRoad", t, new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(0f, 1f), new Vector2(440, -26), new Vector2(232, 62), resourcePill, PillNavy);
             hubTrophyRect = road.rectTransform;
+            MakeClickable(road, OpenTrophyRoad);
             Icon("TIco", road.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(38, 4), new Vector2(56, 56), icoTrophyBig, Color.white);
             hubTrophies = Txt("TCount", road.transform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f),

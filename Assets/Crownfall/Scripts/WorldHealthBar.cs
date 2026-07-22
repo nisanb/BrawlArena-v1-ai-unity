@@ -10,6 +10,9 @@ namespace Crownfall
         public Image fill;
         public Image ghost;
         public CanvasGroup group;
+        [Header("Designed relation fills (wired by forge)")]
+        public Sprite allyFill;   // designed green
+        public Sprite enemyFill;  // designed red
 
         float shown = 1f, ghostShown = 1f;
 
@@ -35,11 +38,13 @@ namespace Crownfall
             // Read the bar's allegiance from the PLAYER's point of view, not raw
             // team colour: enemies = red, allies = green. Team-blue collided with
             // the blue "Azure" scoreboard and made enemy bars look friendly.
+            // Designed pre-colored fill sprites carry the color — no tinting.
             var pm = MatchManager.I != null ? MatchManager.I.PlayerMotor : null;
             if (pm != null && pm.Identity != null && health.Motor != null && health.Motor.Identity != null)
             {
                 bool ally = health.Motor.Identity.team == pm.Identity.team;
-                fill.color = ally ? new Color(0.35f, 0.85f, 0.42f) : new Color(0.92f, 0.26f, 0.24f);
+                var want = ally ? allyFill : enemyFill;
+                if (want != null && fill.sprite != want) fill.sprite = want;
             }
 
             if (group != null)

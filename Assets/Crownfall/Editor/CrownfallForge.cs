@@ -1052,7 +1052,7 @@ namespace Crownfall.EditorTools
             }
 
             BuildTeamRing(root.transform, id.TeamColor);
-            BuildWorldBar(root.transform, id.TeamColor);
+            BuildWorldBar(root.transform, id.team);
             root.AddComponent<HitFlash>();
 
             SetLayerRecursive(root, 2); // Ignore Raycast: cameras/projectiles ignore, melee overlap still hits
@@ -1102,7 +1102,7 @@ namespace Crownfall.EditorTools
             return tex;
         }
 
-        static void BuildWorldBar(Transform root, Color teamColor)
+        static void BuildWorldBar(Transform root, Team team)
         {
             var barGo = new GameObject("WorldBar", typeof(Canvas));
             barGo.transform.SetParent(root, false);
@@ -1116,7 +1116,13 @@ namespace Crownfall.EditorTools
 
             // fillAmount is silently ignored on sprite-less Images, so the fills
             // MUST carry a real sprite or the bar renders full forever
-            var fillSprite = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic01_Fill_White.png");
+            var bgSprite = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic01_Bg.png");
+            var ghostSprite = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic01_Fill_White.png");
+            // designed pre-colored fills per team; the pack has no Basic01 red,
+            // so Crimson borrows Basic04's designed red
+            var fillSprite = team == Team.Azure
+                ? LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic01_Fill_Blue.png")
+                : LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_Fill_Red.png");
 
             Image MakeImg(string n, Color c, Vector2 size, Sprite sprite)
             {
@@ -1131,11 +1137,11 @@ namespace Crownfall.EditorTools
                 return img;
             }
 
-            MakeImg("Bg", new Color(0.05f, 0.05f, 0.08f, 0.88f), new Vector2(120f, 16f), null);
-            var ghost = MakeImg("Ghost", new Color(1f, 0.85f, 0.7f, 0.9f), new Vector2(114f, 11f), fillSprite);
+            MakeImg("Bg", Color.white, new Vector2(120f, 16f), bgSprite);
+            var ghost = MakeImg("Ghost", new Color(1f, 0.85f, 0.7f, 0.9f), new Vector2(114f, 11f), ghostSprite);
             ghost.type = Image.Type.Filled;
             ghost.fillMethod = Image.FillMethod.Horizontal;
-            var fill = MakeImg("Fill", teamColor, new Vector2(114f, 11f), fillSprite);
+            var fill = MakeImg("Fill", Color.white, new Vector2(114f, 11f), fillSprite);
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
 
@@ -1144,6 +1150,10 @@ namespace Crownfall.EditorTools
             bar.fill = fill;
             bar.ghost = ghost;
             bar.group = group;
+            // relation recolor at runtime swaps DESIGNED sprites, never tints:
+            // allies read green, enemies red, from the local player's seat
+            bar.allyFill = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_Fill_Green.png");
+            bar.enemyFill = LoadSprite($"{LayerLabSprites}/Slider/Slider_Basic04_Fill_Red.png");
         }
 
         // ------------------------------------------------------------------ wiring

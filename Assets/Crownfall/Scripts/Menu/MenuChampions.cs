@@ -6,14 +6,18 @@ using Crownfall.UI;
 
 namespace Crownfall
 {
-    /// Champion roster: four designed rarity-colored CardFrame03 cards with
-    /// real portrait renders, gold focus glow on the current pick, designed
-    /// pre-colored stat fills, sparkle burst on selection.
+    /// Champion roster: five designed rarity-colored CardFrame03 cards with
+    /// big portrait renders over trapezoid name plates, gold focus glow on
+    /// the current pick, designed pre-colored stat fills, sparkle burst on
+    /// selection and a gentle idle bob on the selected hero.
     public partial class MenuHud
     {
         RectTransform champFocus, champFocusGlow;
         readonly List<Vector2> champCardPos = new List<Vector2>();
         readonly List<RectTransform> champCards = new List<RectTransform>();
+        readonly List<RectTransform> champPortraitRects = new List<RectTransform>();
+        readonly List<Vector2> champPortraitRest = new List<Vector2>();
+        int champBobIdx = -1;
 
         void BuildChampions()
         {
@@ -42,6 +46,9 @@ namespace Crownfall
 
             champCardPos.Clear();
             champCards.Clear();
+            champPortraitRects.Clear();
+            champPortraitRest.Clear();
+            champBobIdx = -1;
             for (int i = 0; i < 5; i++)
             {
                 int idx = i;
@@ -58,31 +65,48 @@ namespace Crownfall
                 });
 
                 var portrait = PortraitFor(i);
+                RectTransform hero;
                 if (portrait != null)
                 {
-                    Icon("Portrait", card.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                        new Vector2(0.5f, 1f), new Vector2(0, -14), new Vector2(212, 200), portrait, Color.white);
+                    hero = Icon("Portrait", card.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                        new Vector2(0.5f, 1f), new Vector2(0, -6), new Vector2(236, 250),
+                        portrait, Color.white).rectTransform;
                 }
                 else
                 {
-                    Glow("G", card.transform, new Vector2(0, 116), 190, new Color(1f, 1f, 1f, 0.22f));
-                    Icon("Ico", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                        new Vector2(0.5f, 0.5f), new Vector2(0, 116), new Vector2(112, 112),
-                        IconFor(kit.id), Color.white);
+                    Glow("G", card.transform, new Vector2(0, 84), 190, new Color(1f, 1f, 1f, 0.22f));
+                    hero = Icon("Ico", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                        new Vector2(0.5f, 0.5f), new Vector2(0, 84), new Vector2(120, 120),
+                        IconFor(kit.id), Color.white).rectTransform;
                 }
-                Txt("N", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0, 24), new Vector2(280, 52), kit.displayName.ToUpper(), fontMid, 33, Color.white);
+                // BobForever treats the current anchoredPosition as its rest,
+                // so the build-time pose must be remembered to restore it
+                champPortraitRects.Add(hero);
+                champPortraitRest.Add(hero.anchoredPosition);
+
+                // designed trapezoid name plate, drawn after the portrait so
+                // the hero's feet tuck behind it
+                var plate = Img("NamePlate", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f), new Vector2(0, -52), new Vector2(236, 44),
+                    (i & 1) == 0 ? trapBlue : trapPurple, Color.white);
+                Txt("N", plate.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                    new Vector2(0, 1), new Vector2(-36, -8), kit.displayName.ToUpper(), fontMid, 26, Color.white);
+
                 var blurb = Txt("B", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f), new Vector2(0, -40), new Vector2(252, 80), kit.blurb, fontSmall, 18,
+                    new Vector2(0.5f, 0.5f), new Vector2(0, -96), new Vector2(238, 42), kit.blurb, fontSmall, 16,
                     new Color(0.93f, 0.93f, 0.99f));
                 blurb.enableWordWrapping = true;
+                blurb.maxVisibleLines = 2;
 
-                StatBar(card.transform, new Vector2(0, -104), icoStatHp, Mathf.Clamp01(kit.maxHealth / 190f),
+                StatBar(card.transform, new Vector2(0, -128), icoStatHp, Mathf.Clamp01(kit.maxHealth / 190f),
                     bar4FillGreen, Color.white);
-                StatBar(card.transform, new Vector2(0, -136), icoStatDmg, Mathf.Clamp01(kit.lightDamage / 30f),
+                StatBar(card.transform, new Vector2(0, -152), icoStatDmg, Mathf.Clamp01(kit.lightDamage / 30f),
                     bar4FillRed, Color.white);
-                StatBar(card.transform, new Vector2(0, -168), icoStatSpd, Mathf.Clamp01((kit.runSpeed - 3f) / 2.5f),
+                StatBar(card.transform, new Vector2(0, -176), icoStatSpd, Mathf.Clamp01((kit.runSpeed - 3f) / 2.5f),
                     bar4FillWhite, AzureCol);
+
+                Txt("SK", card.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0, -196), new Vector2(240, 18), "SKILL: " + kit.skillName, fontSmall, 14, Gold);
             }
 
             var focus = Icon("Focus", t, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -129,10 +153,26 @@ namespace Crownfall
         void RefreshChampFocus()
         {
             if (champFocus == null || CrownfallMeta.SelectedClass >= champCardPos.Count) return;
-            var pos = champCardPos[CrownfallMeta.SelectedClass];
+            int sel = CrownfallMeta.SelectedClass;
+            var pos = champCardPos[sel];
             champFocus.anchoredPosition = pos;
             champFocusGlow.anchoredPosition = pos;
             UiTween.Punch(champFocus, 0.1f, 0.3f);
+
+            // idle bob rides on the selected portrait only; RefreshHub calls
+            // here on every meta change, so restart only on an actual switch
+            if (sel == champBobIdx) return;
+            if (champBobIdx >= 0 && champBobIdx < champPortraitRects.Count && champPortraitRects[champBobIdx] != null)
+            {
+                UiTween.StopLoop(champPortraitRects[champBobIdx]);
+                champPortraitRects[champBobIdx].anchoredPosition = champPortraitRest[champBobIdx];
+            }
+            champBobIdx = sel;
+            if (sel < champPortraitRects.Count && champPortraitRects[sel] != null)
+            {
+                champPortraitRects[sel].anchoredPosition = champPortraitRest[sel];
+                UiTween.BobForever(champPortraitRects[sel], 4f, 2.2f);
+            }
         }
     }
 }
