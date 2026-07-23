@@ -426,8 +426,11 @@ namespace Crownfall
 
         void SetCursorFree(bool free)
         {
-            Cursor.lockState = free ? CursorLockMode.None : CursorLockMode.Locked;
-            Cursor.visible = free;
+            // the on-screen controls need a free cursor to be clickable during a
+            // fight (mouse-as-finger on PC), so never lock it while they are active
+            bool wantFree = free || TouchController.Active;
+            Cursor.lockState = wantFree ? CursorLockMode.None : CursorLockMode.Locked;
+            Cursor.visible = wantFree;
         }
 
         /// Headless testing entry: pick a class and optionally enable autopilot.

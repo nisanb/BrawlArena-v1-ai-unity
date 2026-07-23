@@ -30,6 +30,15 @@ namespace Crownfall
 
         public static bool forceEnableForTesting;
 
+        /// True once the on-screen controls are built and acting as the control
+        /// scheme (now every platform). PlayerController/MatchManager read this to
+        /// hand the mouse to the buttons instead of mouse-look, and to keep the
+        /// cursor free during a fight so the buttons are clickable on PC.
+        public static bool Active;
+        /// The touch joystick is currently steering — the keyboard driver defers
+        /// movement while this is set.
+        public static bool JoystickActive;
+
         const float HoldHeavySeconds = 0.24f;
         const float HoldSprintSeconds = 0.25f;
         const float JoyRadius = 110f;
@@ -60,19 +69,20 @@ namespace Crownfall
 
         void Start()
         {
-            if (!Application.isMobilePlatform && !forceEnableForTesting)
-            {
-                enabled = false;
-                return;
-            }
+            // The on-screen mobile controls now show on EVERY platform (owner wants
+            // the mobile layout available on PC too). On desktop the mouse operates
+            // them directly (mouse-as-finger, see PollMouse) — no global TouchSimulation.
+            Active = true;
             EnhancedTouchSupport.Enable();
             BuildUi();
         }
 
-        void OnEnable()
+        void OnEnable() => EnhancedTouchSupport.Enable();
+
+        void OnDestroy()
         {
-            if (Application.isMobilePlatform || forceEnableForTesting)
-                EnhancedTouchSupport.Enable();
+            Active = false;
+            JoystickActive = false;
         }
 
         // ------------------------------------------------------------------ ui
@@ -253,20 +263,34 @@ namespace Crownfall
             }
 
             foreach (var touch in ETouch.activeTouches)
-                HandleTouch(touch, mm, motor, driving);
+                ProcessPointer(touch.touchId, touch.screenPosition, touch.phase, touch.delta, mm, motor, driving);
+
+            // desktop: drive the very same controls with the mouse (mouse = one finger)
+            if (!Application.isMobilePlatform)
+                PollMouse(mm, motor, driving);
 
             EndLostTouches();
 
+            JoystickActive = driving && moveTouchId != -1;
             if (driving)
             {
-                Vector3 world = Vector3.zero;
-                var cam = OrbitCamera.I;
-                if (moveDir01.sqrMagnitude > 0.001f && cam != null)
-                    world = (cam.PlanarForward * moveDir01.y + cam.PlanarRight * moveDir01.x);
-
-                bool sprint = sprintHeld && dodgeTouchId != -1 &&
-                              Time.unscaledTime - dodgeDownTime >= HoldSprintSeconds;
-                motor.SetMoveInput(world * Mathf.Clamp01(moveDir01.magnitude), sprint);
+                // Movement ownership: while the joystick is engaged the touch layer
+                // steers; otherwise let the keyboard driver own it (PC), and only the
+                // pure-touch path (no keyboard) zeroes it on release.
+                if (moveTouchId != -1)
+                {
+                    Vector3 world = Vector3.zero;
+                    var cam = OrbitCamera.I;
+                    if (moveDir01.sqrMagnitude > 0.001f && cam != null)
+                        world = (cam.PlanarForward * moveDir01.y + cam.PlanarRight * moveDir01.x);
+                    bool sprint = sprintHeld && dodgeTouchId != -1 &&
+                                  Time.unscaledTime - dodgeDownTime >= HoldSprintSeconds;
+                    motor.SetMoveInput(world * Mathf.Clamp01(moveDir01.magnitude), sprint);
+                }
+                else if (UnityEngine.InputSystem.Keyboard.current == null)
+                {
+                    motor.SetMoveInput(Vector3.zero, false);
+                }
 
                 // hold-to-heavy on the attack button
                 if (attackTouchId != -1 && !heavyFired &&
@@ -279,19 +303,38 @@ namespace Crownfall
                 if (motor.Kit.canBlock)
                     motor.SetBlock(blockTouchId != -1);
             }
-            else if (motor != null && !mm.Autopilot)
+            else if (motor != null && !mm.Autopilot && UnityEngine.InputSystem.Keyboard.current == null)
             {
                 motor.SetMoveInput(Vector3.zero, false);
                 motor.SetBlock(false);
             }
         }
 
-        void HandleTouch(ETouch touch, MatchManager mm, CombatMotor motor, bool driving)
-        {
-            int id = touch.touchId;
-            Vector2 pos = touch.screenPosition;
+        // A single mouse acts as one finger on desktop, routed through the exact
+        // same pointer logic as a real touch.
+        const int MouseId = 900;
+        bool mouseWasDown;
 
-            switch (touch.phase)
+        void PollMouse(MatchManager mm, CombatMotor motor, bool driving)
+        {
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse == null) return;
+            Vector2 pos = mouse.position.ReadValue();
+            Vector2 delta = mouse.delta.ReadValue();
+            bool down = mouse.leftButton.isPressed;
+            if (down && !mouseWasDown)
+                ProcessPointer(MouseId, pos, UnityEngine.InputSystem.TouchPhase.Began, delta, mm, motor, driving);
+            else if (down)
+                ProcessPointer(MouseId, pos, UnityEngine.InputSystem.TouchPhase.Moved, delta, mm, motor, driving);
+            else if (mouseWasDown)
+                ProcessPointer(MouseId, pos, UnityEngine.InputSystem.TouchPhase.Ended, delta, mm, motor, driving);
+            mouseWasDown = down;
+        }
+
+        void ProcessPointer(int id, Vector2 pos, UnityEngine.InputSystem.TouchPhase phase, Vector2 delta,
+            MatchManager mm, CombatMotor motor, bool driving)
+        {
+            switch (phase)
             {
                 case UnityEngine.InputSystem.TouchPhase.Began:
                     if (Hit(autoBtn, pos)) { mm.Autopilot = !mm.Autopilot; return; }
@@ -341,11 +384,10 @@ namespace Crownfall
                         moveDir01 = delta / Mathf.Max(1f, maxPix);
                         SetJoyVisual(moveAnchor, pos);
                     }
-                    else if (id == cameraTouchId && touch.phase == UnityEngine.InputSystem.TouchPhase.Moved)
+                    else if (id == cameraTouchId && phase == UnityEngine.InputSystem.TouchPhase.Moved)
                     {
-                        Vector2 d = touch.delta;
                         float sens = 0.24f * (1080f / Screen.height) * CrownfallSettings.Sensitivity;
-                        OrbitCamera.I?.AddOrbitInput(new Vector2(d.x * sens, d.y * sens));
+                        OrbitCamera.I?.AddOrbitInput(new Vector2(delta.x * sens, delta.y * sens));
                     }
                     break;
 
@@ -391,6 +433,8 @@ namespace Crownfall
             // safety net: if a tracked touch vanished without an Ended phase, clear it
             var live = new HashSet<int>();
             foreach (var t in ETouch.activeTouches) live.Add(t.touchId);
+            var mouseDev = UnityEngine.InputSystem.Mouse.current;
+            if (mouseDev != null && mouseDev.leftButton.isPressed) live.Add(MouseId);
             var mm = MatchManager.I;
             var motor = mm != null ? mm.PlayerMotor : null;
             bool driving = mm != null && mm.State == MatchState.Fighting && !mm.Autopilot && motor != null;

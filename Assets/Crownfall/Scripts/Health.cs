@@ -69,7 +69,13 @@ namespace Crownfall
             {
                 Poise -= hit.poiseDamage;
                 lastPoiseHitTime = Time.time;
-                if (Current > 0f && Poise <= 0f)
+                if (Current > 0f && Poise <= 0f && Motor != null && Motor.HasHealArmor)
+                {
+                    // healer mid-mend refuses to be staggered — recover some poise
+                    // and keep channelling instead of dropping the heal
+                    Poise = MaxPoise * 0.4f;
+                }
+                else if (Current > 0f && Poise <= 0f)
                 {
                     Poise = MaxPoise;
                     res.staggered = true;

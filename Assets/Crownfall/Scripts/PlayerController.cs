@@ -27,14 +27,19 @@ namespace Crownfall
 
             if (mm.State != MatchState.Fighting || mm.Autopilot || mm.Paused)
             {
-                Motor.SetMoveInput(Vector3.zero, false);
+                if (!TouchController.JoystickActive) Motor.SetMoveInput(Vector3.zero, false);
                 Motor.SetBlock(false);
                 return;
             }
 
             var kb = Keyboard.current;
             var mouse = Mouse.current;
-            if (kb == null || mouse == null) return;
+            if (kb == null) return; // pure-touch platform: TouchController owns input
+
+            // When the on-screen controls are active (now every platform), the mouse
+            // operates the buttons / camera-drag, not mouse-look and click-attacks —
+            // so keep the keyboard here and hand the mouse to the touch layer.
+            bool touchScheme = TouchController.Active;
 
             // --- movement, camera relative
             Vector2 wasd = Vector2.zero;
@@ -53,35 +58,32 @@ namespace Crownfall
             }
 
             bool sprint = kb.leftShiftKey.isPressed;
-            Motor.SetMoveInput(move, sprint);
+            // the touch joystick steers while engaged; keyboard owns movement otherwise
+            if (!TouchController.JoystickActive) Motor.SetMoveInput(move, sprint);
 
-            // --- attacks: LMB tap = light, LMB hold = heavy
-            if (mouse.leftButton.wasPressedThisFrame)
+            // --- mouse combat (LMB attack / RMB block-or-heavy) only when the on-screen
+            // buttons are NOT the active scheme; otherwise the buttons own those actions
+            if (!touchScheme && mouse != null)
             {
-                lmbDownTime = Time.unscaledTime;
-                heavyFired = false;
-            }
-            if (mouse.leftButton.isPressed && lmbDownTime > 0f && !heavyFired &&
-                Time.unscaledTime - lmbDownTime >= HoldHeavyThreshold)
-            {
-                heavyFired = true;
-                Motor.RequestHeavy();
-            }
-            if (mouse.leftButton.wasReleasedThisFrame && lmbDownTime > 0f && !heavyFired)
-            {
-                Motor.RequestLight();
-                lmbDownTime = -1f;
-            }
+                if (mouse.leftButton.wasPressedThisFrame)
+                {
+                    lmbDownTime = Time.unscaledTime;
+                    heavyFired = false;
+                }
+                if (mouse.leftButton.isPressed && lmbDownTime > 0f && !heavyFired &&
+                    Time.unscaledTime - lmbDownTime >= HoldHeavyThreshold)
+                {
+                    heavyFired = true;
+                    Motor.RequestHeavy();
+                }
+                if (mouse.leftButton.wasReleasedThisFrame && lmbDownTime > 0f && !heavyFired)
+                {
+                    Motor.RequestLight();
+                    lmbDownTime = -1f;
+                }
 
-            // --- RMB: block for shield classes, heavy for the rest
-            if (Motor.Kit.canBlock)
-            {
-                Motor.SetBlock(mouse.rightButton.isPressed);
-            }
-            else
-            {
-                Motor.SetBlock(false);
-                if (mouse.rightButton.wasPressedThisFrame) Motor.RequestHeavy();
+                if (Motor.Kit.canBlock) Motor.SetBlock(mouse.rightButton.isPressed);
+                else if (mouse.rightButton.wasPressedThisFrame) Motor.RequestHeavy();
             }
 
             // --- class skill
@@ -93,7 +95,7 @@ namespace Crownfall
                 Motor.RequestRoll(move.sqrMagnitude > 0.01f ? move : -transform.forward);
 
             // --- lock-on
-            if (kb.qKey.wasPressedThisFrame || mouse.middleButton.wasPressedThisFrame)
+            if (kb.qKey.wasPressedThisFrame || (!touchScheme && mouse != null && mouse.middleButton.wasPressedThisFrame))
                 ToggleLockOn();
             if (kb.tabKey.wasPressedThisFrame && Motor.LockTarget != null)
                 CycleLockOn();

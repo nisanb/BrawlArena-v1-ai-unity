@@ -35,6 +35,10 @@ namespace Crownfall
         public CombatMotor LockTarget { get; set; }
         public bool IsDead => State == MotorState.Dead;
         public bool IsInvulnerable { get; private set; }
+        /// A healer channelling a mend/Sanctuary shrugs off poise-break staggers so
+        /// the heal completes (still takes damage). Paired with the heavy-hit
+        /// hyperarmor in NotifyHitReact.
+        public bool HasHealArmor => Kit != null && Kit.isHealer && State == MotorState.Attacking;
         public bool IsSprinting { get; private set; }
         public bool IsBlockingHeld => blockHeld && Kit != null && Kit.canBlock && State == MotorState.Locomotion && Stamina.Current > 0f;
         public Vector3 AimPoint => transform.position + Vector3.up * 1.15f;
@@ -1367,13 +1371,15 @@ namespace Crownfall
             if (IsDead || State == MotorState.Staggered || State == MotorState.Rolling) return;
 
             // Hyperarmor: a light hit no longer yanks you out of your own committed
-            // attack/cast — poise still accrues (a heavy hit or a poise-break can
-            // still interrupt), but chip damage stops cancelling every swing/bolt.
-            if (State == MotorState.Attacking && !hit.heavy) { flinchImmuneUntil = Time.time + 0.25f; return; }
+            // action, and a HEALER mid-heal shrugs off HEAVY hits too — a mend or
+            // Sanctuary can't be knocked out of your hands (you still take the
+            // damage). Keeps the healer able to focus on healing under fire.
+            if (State == MotorState.Attacking && (!hit.heavy || Kit.isHealer))
+            { flinchImmuneUntil = Time.time + 0.25f; return; }
 
-            // Flinch budget: after a flinch you get brief flinch immunity, so a
-            // focus-firing squad can't chain-stun you locked-in-place (the "every
-            // hit knocks me and I can't move" feel). The hit still deals damage and
+            // Flinch budget: after a flinch you get flinch immunity, so a
+            // focus-firing squad can't chain-knock you locked-in-place (the "getting
+            // knocked too much, can't act" complaint). The hit still deals damage and
             // spawns its impact vfx/number — you just keep control.
             if (Time.time < flinchImmuneUntil) return;
             if (State != MotorState.Locomotion && State != MotorState.Hit) return;
@@ -1382,9 +1388,11 @@ namespace Crownfall
             State = MotorState.Hit;
             Anim.SetTrigger(HashHit);
             FireNet(NetEvent.Flinch);
-            cc.Move(hit.direction * (hit.heavy ? 0.28f : 0.16f));
-            flinchImmuneUntil = Time.time + (hit.heavy ? 0.5f : 0.65f);
-            actionRoutine = StartCoroutine(HitRecover(hit.heavy ? 0.4f : 0.24f));
+            // gentler shove + a longer immunity window than before so you aren't
+            // shoved around and chain-flinched by focus fire
+            cc.Move(hit.direction * (hit.heavy ? 0.16f : 0.09f));
+            flinchImmuneUntil = Time.time + (hit.heavy ? 0.85f : 0.95f);
+            actionRoutine = StartCoroutine(HitRecover(hit.heavy ? 0.28f : 0.18f));
         }
 
         IEnumerator HitRecover(float dur)

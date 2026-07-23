@@ -104,8 +104,8 @@ namespace Crownfall
             // Seraph: a staff-wielding battle medic. Every swing mends allies in the
             // arc while chipping enemies; the skill, Sanctuary, is a 360 AoE heal.
             new ClassKit { id = ClassId.Healer, displayName = "Seraph", blurb = "Staff healer. Swing to mend allies. Skill: Sanctuary (AoE heal).",
-                isHealer = true, maxHealth = 150, maxStamina = 125, runSpeed = 4.4f,
-                lightDamage = 9, heavyDamage = 17, lightPoiseDamage = 8, heavyPoiseDamage = 16, maxPoise = 40,
+                isHealer = true, maxHealth = 165, maxStamina = 125, runSpeed = 4.5f,
+                lightDamage = 9, heavyDamage = 17, lightPoiseDamage = 8, heavyPoiseDamage = 16, maxPoise = 72,
                 attackRange = 1.5f, attackRadius = 1.15f, lightLunge = 0.9f, heavyLunge = 1.5f,
                 staminaLight = 13f, staminaHeavy = 28f,
                 healLight = 20, healHeavy = 34,
@@ -146,7 +146,7 @@ namespace Crownfall
         public const float RollCancelPoint = 0.55f;
         public const float LungeStart = 0.12f;
         public const float LungeEnd = 0.42f;
-        public const float StaggerDuration = 1.55f;
+        public const float StaggerDuration = 1.05f;   // was 1.55 — shorter stuns, less helpless time
         public const float RespawnSeconds = 5f;
         public const float SpawnProtection = 1.5f;
         public const float HitstopLight = 0.05f;
@@ -158,8 +158,8 @@ namespace Crownfall
         public const float StaminaRegenPerSec = 24f;
         public const float StaminaRegenDelay = 0.75f;
         public const float SprintStaminaPerSec = 9f;
-        public const float PoiseRegenPerSec = 12f;
-        public const float PoiseRegenDelay = 2f;
+        public const float PoiseRegenPerSec = 20f;    // was 12 — poise recovers faster, fewer staggers
+        public const float PoiseRegenDelay = 1f;       // was 2
         public const float BlockAngle = 68f;
         public const float MeleeHitAngle = 85f;
     }
