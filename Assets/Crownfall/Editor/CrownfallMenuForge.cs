@@ -28,6 +28,7 @@ namespace Crownfall.EditorTools
             (ClassId.Duelist, null),
             (ClassId.Mage, null),
             (ClassId.Warhammer, null),
+            (ClassId.Healer, null),
         };
 
         static string SkinFor(ClassId cls) => CrownfallForge.HeroSkins[cls];
@@ -39,13 +40,14 @@ namespace Crownfall.EditorTools
             CrownfallForge.AnimRoot + "/DoubleSwords",
             CrownfallForge.AnimRoot + "/MagicWand",
             CrownfallForge.AnimRoot + "/SingleTwoHandSword",
+            CrownfallForge.AnimRoot + "/MagicWand",
         };
 
         [MenuItem("Crownfall/Build Menu Scene")]
         public static void BuildMenuScene()
         {
-            var overrides = new AnimatorOverrideController[5];
-            for (int i = 0; i < 5; i++)
+            var overrides = new AnimatorOverrideController[Champions.Length];
+            for (int i = 0; i < Champions.Length; i++)
             {
                 overrides[i] = AssetDatabase.LoadAssetAtPath<AnimatorOverrideController>(
                     $"{CrownfallForge.GenDir}/Fighter_{(ClassId)i}.overrideController");
@@ -122,7 +124,8 @@ namespace Crownfall.EditorTools
 
             // ---- champion rigs: model + idle animator only, facing the camera
             var rigRoot = new GameObject("Champions").transform;
-            for (int i = 0; i < 5; i++)
+            showcase.championRigs = new GameObject[Champions.Length];
+            for (int i = 0; i < Champions.Length; i++)
             {
                 var rig = BuildShowcaseRig(i, overrides[i]);
                 rig.transform.SetParent(rigRoot, true);
@@ -202,7 +205,7 @@ namespace Crownfall.EditorTools
         {
             Directory.CreateDirectory(PortraitDir);
 
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < Champions.Length; i++)
             {
                 string path = $"{PortraitDir}/Champion_{i}.png";
                 var cls = Champions[i].cls;

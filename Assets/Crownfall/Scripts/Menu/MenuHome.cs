@@ -204,11 +204,12 @@ namespace Crownfall
                 new Vector2(-255, -486), new Vector2(360, 30), "CHOOSE YOUR CHAMPION", fontSmall, 19,
                 new Color(1f, 1f, 1f, 0.65f), TextAlignmentOptions.Left);
             loginEmblems.Clear();
-            for (int i = 0; i < 5; i++)
+            int classCount = System.Enum.GetValues(typeof(ClassId)).Length;
+            for (int i = 0; i < classCount; i++)
             {
                 int idx = i;
                 var kit = ClassKits.Get((ClassId)i);
-                float x = -244 + i * 122;
+                float x = (i - (classCount - 1) * 0.5f) * 108f;
                 var glow = Icon("Glow" + i, card.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                     new Vector2(0.5f, 0.5f), new Vector2(x, -566), new Vector2(142, 142), card3Glow, Gold);
                 var emblem = Img("Em" + i, card.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),

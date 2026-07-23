@@ -217,6 +217,7 @@ namespace Crownfall
             ClassId.Greatsword => icoAxe,
             ClassId.Duelist => icoSword,
             ClassId.Warhammer => icoHammer,
+            ClassId.Healer => icoStatHp,   // heart glyph — reads as "healer"
             _ => icoWand,
         };
 
@@ -228,7 +229,8 @@ namespace Crownfall
             1 => card3Orange,
             2 => card3Purple,
             3 => card3Green,
-            _ => cardShopYellow,
+            4 => cardShopYellow,
+            _ => cardShopBlue,   // Seraph the healer
         };
 
         protected Sprite PortraitFor(int classIndex) =>

@@ -52,6 +52,7 @@ namespace Crownfall
         readonly List<CombatMotor> all = new List<CombatMotor>();
         readonly Dictionary<CombatMotor, int> spawnSlot = new Dictionary<CombatMotor, int>();
         readonly List<CombatMotor> aliveScratch = new List<CombatMotor>();
+        readonly List<CombatMotor> allyScratch = new List<CombatMotor>();
         readonly List<GameObject> aiRigs = new List<GameObject>();
         Light podiumLight;
 
@@ -379,6 +380,20 @@ namespace Crownfall
                 aliveScratch.Add(m);
             }
             return aliveScratch;
+        }
+
+        /// Living, active teammates on `team`, excluding `self`. Used by the
+        /// healer to pick who to face and mend.
+        public List<CombatMotor> AlliesOf(Team team, CombatMotor self)
+        {
+            allyScratch.Clear();
+            foreach (var m in all)
+            {
+                if (m == null || m == self || !m.gameObject.activeInHierarchy || m.IsDead) continue;
+                if (m.Identity == null || m.Identity.team != team) continue;
+                allyScratch.Add(m);
+            }
+            return allyScratch;
         }
 
         public int CountTargeting(CombatMotor candidate, AIController asker)

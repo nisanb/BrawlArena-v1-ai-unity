@@ -93,6 +93,16 @@ namespace Crownfall
             return res;
         }
 
+        /// Restore HP (allies only, capped at Max). Returns the amount actually
+        /// healed so callers can suppress the popup/vfx when already topped off.
+        public float Heal(float amount)
+        {
+            if (IsDead || amount <= 0f) return 0f;
+            float before = Current;
+            Current = Mathf.Min(Max, Current + amount);
+            return Current - before;
+        }
+
         public void ReviveFull()
         {
             IsDead = false;

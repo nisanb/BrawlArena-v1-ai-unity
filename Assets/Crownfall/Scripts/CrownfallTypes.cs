@@ -4,9 +4,9 @@ namespace Crownfall
 {
     public enum Team { Azure = 0, Crimson = 1 }
 
-    public enum ClassId { Knight = 0, Greatsword = 1, Duelist = 2, Mage = 3, Warhammer = 4 }
+    public enum ClassId { Knight = 0, Greatsword = 1, Duelist = 2, Mage = 3, Warhammer = 4, Healer = 5 }
 
-    public enum ElementId { Light = 0, Earth = 1, Frost = 2, Storm = 3, Shadow = 4, Fire = 5, Arcane = 6 }
+    public enum ElementId { Light = 0, Earth = 1, Frost = 2, Storm = 3, Shadow = 4, Fire = 5, Arcane = 6, Life = 7 }
 
     public enum MotorState { Locomotion, Attacking, Rolling, Hit, Staggered, Dead, Victory }
 
@@ -44,7 +44,14 @@ namespace Crownfall
         public float staminaSkill = 34f;
         public float skillDamage;       // per hit / pulse / bolt
         public float skillPoiseDamage;  // per hit / pulse / bolt
-        public float skillRadius;       // AoE reach for slam / whirl
+        public float skillRadius;       // AoE reach for slam / whirl / sanctuary
+
+        // healer support kit: a Healer's basic strikes mend allies caught in the
+        // swing arc (and still chip enemies), and the skill is an AoE heal burst.
+        public bool isHealer;
+        public float healLight;         // HP restored to allies by a light strike
+        public float healHeavy;         // HP restored to allies by a heavy strike
+        public float skillHeal;         // HP restored to every ally by Sanctuary
     }
 
     public static class ClassKits
@@ -93,6 +100,17 @@ namespace Crownfall
                 staminaLight = 20f, staminaHeavy = 36f,
                 skillName = "Seismic Verdict", skillCooldown = 11f, staminaSkill = 40f,
                 skillDamage = 30, skillPoiseDamage = 50, skillRadius = 4.0f },
+
+            // Seraph: a staff-wielding battle medic. Every swing mends allies in the
+            // arc while chipping enemies; the skill, Sanctuary, is a 360 AoE heal.
+            new ClassKit { id = ClassId.Healer, displayName = "Seraph", blurb = "Staff healer. Swing to mend allies. Skill: Sanctuary (AoE heal).",
+                isHealer = true, maxHealth = 150, maxStamina = 125, runSpeed = 4.4f,
+                lightDamage = 9, heavyDamage = 17, lightPoiseDamage = 8, heavyPoiseDamage = 16, maxPoise = 40,
+                attackRange = 1.5f, attackRadius = 1.15f, lightLunge = 0.9f, heavyLunge = 1.5f,
+                staminaLight = 13f, staminaHeavy = 28f,
+                healLight = 20, healHeavy = 34,
+                skillName = "Sanctuary", skillCooldown = 13f, staminaSkill = 40f,
+                skillHeal = 46, skillRadius = 5.5f },
         };
 
         public static ClassKit Get(ClassId id) => kits[(int)id];
@@ -110,6 +128,7 @@ namespace Crownfall
                 case ElementId.Storm: return new Color(0.55f, 0.7f, 1f);
                 case ElementId.Shadow: return new Color(0.7f, 0.4f, 1f);
                 case ElementId.Fire: return new Color(1f, 0.55f, 0.25f);
+                case ElementId.Life: return new Color(0.4f, 1f, 0.55f);
                 default: return new Color(0.85f, 0.5f, 1f);
             }
         }

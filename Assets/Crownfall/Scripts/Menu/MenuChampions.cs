@@ -49,11 +49,13 @@ namespace Crownfall
             champPortraitRects.Clear();
             champPortraitRest.Clear();
             champBobIdx = -1;
-            for (int i = 0; i < 5; i++)
+            int classCount = System.Enum.GetValues(typeof(ClassId)).Length;
+            for (int i = 0; i < classCount; i++)
             {
                 int idx = i;
                 var kit = ClassKits.Get((ClassId)i);
-                var pos = new Vector2(-568 + i * 284, -66);
+                // centre the row: 6 cards fit at a 300px pitch inside 1920 wide
+                var pos = new Vector2((i - (classCount - 1) * 0.5f) * 300f, -66);
                 champCardPos.Add(pos);
                 var card = Img("Class" + i, t, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f), pos, new Vector2(262, 420), CardFor(i), Color.white, true);

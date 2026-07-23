@@ -8,7 +8,7 @@ namespace Crownfall
     public class MenuShowcase : MonoBehaviour
     {
         [Header("Wired by forge")]
-        public GameObject[] championRigs = new GameObject[5];
+        public GameObject[] championRigs = new GameObject[6];
 
         int shown = -1;
         float popT = 1f;

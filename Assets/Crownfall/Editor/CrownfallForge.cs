@@ -30,7 +30,7 @@ namespace Crownfall.EditorTools
         internal const string LayerLabSprites = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Sprites/Components";
         internal const string LayerLabFonts = "Assets/Layer Lab/GUI Pro-CasualGame/ResourcesData/Fonts";
 
-        static readonly string[] ElementNames = { "Light", "Earth", "Frost", "Storm", "Shadow", "Fire", "Arcane" };
+        static readonly string[] ElementNames = { "Light", "Earth", "Frost", "Storm", "Shadow", "Fire", "Arcane", "Life" };
 
         /// Legacy modular-pack hammer skin (superseded by the Dungeon Mason
         /// roster below; kept for ApplyHammerLoadout fallback experiments).
@@ -48,6 +48,9 @@ namespace Crownfall.EditorTools
             // Polyart golem: the PBR one read as a gritty outsider next to the
             // chibi cast (persona review night1 art-coherence finding)
             { ClassId.Warhammer,  "Assets/Mini Legion Rock Golem PBR HP Polyart/Prefabs/Polyart_Golem.prefab" },
+            // Seraph the healer: the RPG Tiny Hero female — chibi, art-coherent
+            // with the Duelist (her pack twin), dressed with a staff below.
+            { ClassId.Healer,     "Assets/RPG Tiny Hero Duo/Prefab/FemaleCharacterPBR.prefab" },
         };
 
         internal static readonly Dictionary<ClassId, string> HeroSkinsAlt = new Dictionary<ClassId, string>
@@ -57,11 +60,13 @@ namespace Crownfall.EditorTools
             { ClassId.Duelist,    "Assets/RPG Tiny Hero Duo/Prefab/MaleCharacterPolyart.prefab" },
             { ClassId.Mage,       "Assets/WizardPBR/Prefabs/WizardPBRMaskTintMaterial.prefab" },
             { ClassId.Warhammer,  "Assets/Mini Legion Rock Golem PBR HP Polyart/Prefabs/Polyart_Golem.prefab" },
+            { ClassId.Healer,     "Assets/RPG Tiny Hero Duo/Prefab/FemaleCharacterPolyart.prefab" },
         };
 
         internal static float HeroHeight(ClassId cls) => cls switch
         {
             ClassId.Duelist => 1.6f,
+            ClassId.Healer => 1.6f,
             ClassId.Greatsword => 1.85f,
             ClassId.Warhammer => 2.0f,
             _ => 1.72f,
@@ -110,22 +115,63 @@ namespace Crownfall.EditorTools
                 if (anim != null && anim.isHuman)
                     AttachProp(anim, HumanBodyBones.LeftHand, "Assets/RPG Tiny Hero Duo/Prefab/OHS06PBR.prefab");
             }
+            else if (cls == ClassId.Healer)
+            {
+                // the female hero ships holding OHS06 + Shield05 on her weapon_l/r
+                // sockets — strip whatever is parented there so only the staff shows
+                foreach (var sock in new[] { "weapon_l", "weapon_r" })
+                {
+                    var s = FindDeepChild(model.transform, sock);
+                    if (s != null)
+                        foreach (Transform child in s) child.gameObject.SetActive(false);
+                }
+                // fly a wizard staff into her right hand so she reads as a staff
+                // healer (name "staff" lets the weapon-trail/enchant pass below find it)
+                var anim = model.GetComponentInChildren<Animator>();
+                if (anim != null && anim.isHuman)
+                {
+                    var staff = AttachProp(anim, HumanBodyBones.RightHand, "Assets/WizardPBR/Prefabs/Staff01.prefab");
+                    if (staff != null)
+                    {
+                        staff.name = "HealerStaff";
+                        // WizardPBR's staff mesh is authored at a huge native scale
+                        // (the wizard prefab corrects it on its own root). Renderer.bounds
+                        // is unreliable for a freshly-attached object at forge time, so
+                        // size off the MESH ASSET's local bounds x the transform's world
+                        // scale — both always valid — and normalize to a chibi-hand length.
+                        float longest = 0f;
+                        foreach (var mf in staff.GetComponentsInChildren<MeshFilter>())
+                        {
+                            if (mf.sharedMesh == null) continue;
+                            Vector3 sz = mf.sharedMesh.bounds.size;
+                            Vector3 ls = mf.transform.lossyScale;
+                            longest = Mathf.Max(longest, Mathf.Max(sz.x * Mathf.Abs(ls.x),
+                                Mathf.Max(sz.y * Mathf.Abs(ls.y), sz.z * Mathf.Abs(ls.z))));
+                        }
+                        if (longest > 0.001f)
+                            staff.transform.localScale *= 1.15f / longest; // ~1.15u staff
+                        staff.transform.localRotation = Quaternion.identity;
+                        staff.transform.localPosition = Vector3.zero;
+                    }
+                }
+            }
         }
 
-        static void AttachProp(Animator anim, HumanBodyBones bone, string prefabPath)
+        static GameObject AttachProp(Animator anim, HumanBodyBones bone, string prefabPath)
         {
             var hand = anim.GetBoneTransform(bone);
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             if (hand == null || prefab == null)
             {
                 Debug.LogWarning($"[CrownfallForge] AttachProp failed: hand={hand != null} prefab={prefabPath}");
-                return;
+                return null;
             }
             var prop = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             PrefabUtility.UnpackPrefabInstance(prop, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
             prop.transform.SetParent(hand, false);
             prop.transform.localPosition = Vector3.zero;
             prop.transform.localRotation = Quaternion.identity;
+            return prop;
         }
 
         // ------------------------------------------------------------------ entry points
@@ -350,6 +396,9 @@ namespace Crownfall.EditorTools
                 // the hammer wears the two-hander set — overhead cleaves read as
                 // hammer strikes; the clips are Humanoid so any rig can wear them
                 { ClassId.Warhammer, "SingleTwohandSword" },
+                // the healer wields a staff — the wand caster clips read as
+                // channelled staff gestures (the Skill = the Attack02Maintain pose)
+                { ClassId.Healer, "MagicWand" },
             };
             var folders = new Dictionary<ClassId, string>
             {
@@ -358,6 +407,7 @@ namespace Crownfall.EditorTools
                 { ClassId.Duelist, $"{AnimRoot}/DoubleSwords" },
                 { ClassId.Mage, $"{AnimRoot}/MagicWand" },
                 { ClassId.Warhammer, $"{AnimRoot}/SingleTwoHandSword" },
+                { ClassId.Healer, $"{AnimRoot}/MagicWand" },
             };
             // Attack02_MagicWand is a forward point/thrust -> the bolt (light).
             // Attack01_MagicWand is an overhead raise-and-slam -> the nova (heavy),
@@ -381,7 +431,9 @@ namespace Crownfall.EditorTools
                 var cls = kv.Key;
                 var suffix = kv.Value;
                 var clips = LoadClips(folders[cls]);
-                var map = cls == ClassId.Mage ? mageMap : (cls == ClassId.Knight ? null : noShieldMap);
+                // the healer shares the wand caster clips/mapping with the Mage
+                var map = (cls == ClassId.Mage || cls == ClassId.Healer) ? mageMap
+                    : (cls == ClassId.Knight ? null : noShieldMap);
 
                 var aoc = new AnimatorOverrideController(ctrl) { name = "Fighter_" + cls };
                 var pairs = new List<KeyValuePair<AnimationClip, AnimationClip>>();
@@ -512,6 +564,7 @@ namespace Crownfall.EditorTools
                 new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Vesper", skin = HeroSkins[ClassId.Duelist], slot = 0, isPlayerVariant = true },
                 new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Elyra", skin = HeroSkins[ClassId.Mage], slot = 0, isPlayerVariant = true },
                 new FighterSpec { cls = ClassId.Warhammer, element = ElementId.Storm, team = Team.Azure, name = "Volt", skin = HeroSkins[ClassId.Warhammer], slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Healer, element = ElementId.Life, team = Team.Azure, name = "Seraph", skin = HeroSkins[ClassId.Healer], slot = 0, isPlayerVariant = true },
 
                 new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Bram", skin = HeroSkinsAlt[ClassId.Greatsword], slot = 1, aggression = 0.6f },
                 new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Lyra", skin = HeroSkinsAlt[ClassId.Mage], slot = 2, aggression = 0.55f },
@@ -521,7 +574,7 @@ namespace Crownfall.EditorTools
                 new FighterSpec { cls = ClassId.Mage, element = ElementId.Arcane, team = Team.Crimson, name = "Morgath", skin = HeroSkinsAlt[ClassId.Mage], slot = 2, aggression = 0.58f },
             };
 
-            var playerVariants = new GameObject[5];
+            var playerVariants = new GameObject[6];
             int pv = 0;
             foreach (var spec in specs)
             {
@@ -912,6 +965,7 @@ namespace Crownfall.EditorTools
                 new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Duelist", skin = HeroSkins[ClassId.Duelist], isPlayerVariant = true },
                 new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Mage", skin = HeroSkins[ClassId.Mage], isPlayerVariant = true },
                 new FighterSpec { cls = ClassId.Warhammer, element = ElementId.Storm, team = Team.Azure, name = "Juggernaut", skin = HeroSkins[ClassId.Warhammer], isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Healer, element = ElementId.Life, team = Team.Azure, name = "Seraph", skin = HeroSkins[ClassId.Healer], isPlayerVariant = true },
             };
 
             foreach (var spec in netSpecs)
@@ -1194,6 +1248,8 @@ namespace Crownfall.EditorTools
             if (dmgGo != null) fx.damageNumberPrefab = dmgGo.GetComponent<DamageNumber>();
             var blockGo = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/DamageNumbersPro/Demo/Prefabs/3D/Clear.prefab");
             if (blockGo != null) fx.blockedNumberPrefab = blockGo.GetComponent<DamageNumber>();
+            var healGo = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/DamageNumbersPro/Demo/Prefabs/3D/Pixel Heal.prefab");
+            if (healGo != null) fx.healNumberPrefab = healGo.GetComponent<DamageNumber>();
 
             fx.swingLight = FindClip("Fly2");
             fx.swingHeavy = FindClip("Fly3");
@@ -1401,9 +1457,10 @@ namespace Crownfall.EditorTools
             hud.icoHammer = LoadSprite($"{Picto}/Pictoicon_Hammer.Png"); // capital .Png — pack quirk
 
             // generated champion portraits (menu forge output; may not exist yet)
-            if (hud.championPortraits == null || hud.championPortraits.Length != 5)
-                hud.championPortraits = new Sprite[5];
-            for (int i = 0; i < 5; i++)
+            int classCount = System.Enum.GetValues(typeof(ClassId)).Length;
+            if (hud.championPortraits == null || hud.championPortraits.Length != classCount)
+                hud.championPortraits = new Sprite[classCount];
+            for (int i = 0; i < classCount; i++)
                 hud.championPortraits[i] =
                     AssetDatabase.LoadAssetAtPath<Sprite>($"{GenDir}/Portraits/Champion_{i}.png");
 

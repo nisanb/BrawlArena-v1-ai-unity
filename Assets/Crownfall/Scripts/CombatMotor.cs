@@ -478,6 +478,9 @@ namespace Crownfall
 
         CombatMotor AcquireAttackAim()
         {
+            // a healer swings to MEND: aim at the ally who needs it most so the
+            // heal arc lands where the player is pointing, not at an enemy
+            if (Kit.isHealer) return AcquireHealAim();
             if (LockTarget != null && !LockTarget.IsDead) return LockTarget;
             if (MatchManager.I == null || Identity == null) return null;
             float maxRange = Kit.isRanged ? 16f : 9f;
@@ -497,6 +500,30 @@ namespace Crownfall
                 if (score > bestScore) { bestScore = score; best = e; }
             }
             return best;
+        }
+
+        /// The most-wounded living ally within reach (falls back to the nearest
+        /// ally so a healer at full-health team still has something to face).
+        CombatMotor AcquireHealAim()
+        {
+            if (MatchManager.I == null || Identity == null) return null;
+            Vector3 refFwd = moveInput.sqrMagnitude > 0.04f ? moveInput.normalized : transform.forward;
+            CombatMotor best = null, nearest = null;
+            float bestScore = float.MinValue, nearestDist = float.MaxValue;
+            foreach (var a in MatchManager.I.AlliesOf(Identity.team, this))
+            {
+                Vector3 to = a.transform.position - transform.position;
+                to.y = 0f;
+                float dist = to.magnitude;
+                if (dist > 12f) continue;
+                if (dist < nearestDist) { nearestDist = dist; nearest = a; }
+                float missing = a.Health.Max - a.Health.Current;
+                if (missing <= 1f) continue; // topped off — not a heal target
+                float ang = Vector3.Angle(refFwd, to);
+                float score = missing * 1.5f - dist * 1.2f - ang * 0.04f;
+                if (score > bestScore) { bestScore = score; best = a; }
+            }
+            return best != null ? best : nearest;
         }
 
         IEnumerator AttackRoutine(bool heavy)
@@ -722,6 +749,7 @@ namespace Crownfall
                 else DoBolt();
                 return;
             }
+            if (Kit.isHealer) { DoHealStrike(heavy); return; }
 
             float dmg = heavy ? Kit.heavyDamage : Kit.lightDamage;
             float poise = heavy ? Kit.heavyPoiseDamage : Kit.lightPoiseDamage;
@@ -731,6 +759,56 @@ namespace Crownfall
 
             Vector3 origin = transform.position + transform.forward * Kit.attackRange + Vector3.up * 1.05f;
             StrikeArea(origin, Kit.attackRadius, Tuning.MeleeHitAngle, dmg, poise, heavy);
+        }
+
+        // Healer staff swing: mend every ally caught in the arc (the "hit a
+        // teammate to heal them" hook) while still chipping any enemy in reach.
+        void DoHealStrike(bool heavy)
+        {
+            float heal = heavy ? Kit.healHeavy : Kit.healLight;
+            if (!heavy && comboIndex == Tuning.MeleeComboLength) heal *= 1.4f; // combo finisher mends more
+
+            Vector3 origin = transform.position + transform.forward * Kit.attackRange + Vector3.up * 1.05f;
+            HealArea(origin, Kit.attackRadius + 0.4f, Tuning.MeleeHitAngle, heal, includeSelf: false);
+            StrikeArea(origin, Kit.attackRadius, Tuning.MeleeHitAngle,
+                heavy ? Kit.heavyDamage : Kit.lightDamage,
+                heavy ? Kit.heavyPoiseDamage : Kit.lightPoiseDamage, heavy);
+        }
+
+        /// Ally-side counterpart of StrikeArea: overlap, same-team filter, facing
+        /// cone (maxAngle >= 180 = full circle), heal + green popup. Returns the
+        /// number of allies actually mended (already-full allies are skipped).
+        int HealArea(Vector3 origin, float radius, float maxAngle, float heal, bool includeSelf)
+        {
+            if (Identity == null) return 0;
+            var cols = Physics.OverlapSphere(origin, radius);
+            var seen = new HashSet<Health>();
+            int healed = 0;
+            foreach (var col in cols)
+            {
+                var ally = col.GetComponentInParent<Health>();
+                if (ally == null || seen.Contains(ally) || ally.IsDead || ally.Identity == null) continue;
+                bool self = ally.Motor == this;
+                if (self && !includeSelf) continue;
+                if (!self && ally.Identity.team != Identity.team) continue;
+                seen.Add(ally);
+
+                if (!self && maxAngle < 180f)
+                {
+                    Vector3 to = ally.transform.position - transform.position;
+                    to.y = 0f;
+                    if (Vector3.Angle(transform.forward, to) > maxAngle) continue;
+                }
+
+                float did = ally.Heal(heal);
+                if (did <= 0f) continue; // already topped off
+                healed++;
+                Vector3 p = ally.Motor != null ? ally.Motor.AimPoint : ally.transform.position + Vector3.up;
+                GameEffects.I?.HealPop(p);
+                GameEffects.I?.ShowHeal(p, did);
+            }
+            if (healed > 0) GameEffects.I?.PlayCast(ElementId.Life, origin);
+            return healed;
         }
 
         /// Shared melee/skill hit resolution: overlap, team filter, facing cone
@@ -906,6 +984,7 @@ namespace Crownfall
                 case ClassId.Warhammer:  actionRoutine = StartCoroutine(SlamSkillRoutine()); break;
                 case ClassId.Greatsword: actionRoutine = StartCoroutine(WhirlSkillRoutine()); break;
                 case ClassId.Duelist:    actionRoutine = StartCoroutine(FlurrySkillRoutine()); break;
+                case ClassId.Healer:     actionRoutine = StartCoroutine(SanctuaryRoutine()); break;
                 default:                 actionRoutine = StartCoroutine(BarrageSkillRoutine()); break;
             }
         }
@@ -1070,6 +1149,59 @@ namespace Crownfall
             }
             SetTrail(false);
             EndSkill();
+        }
+
+        // Healer: raises the staff and calls down a Sanctuary — a 360 burst that
+        // mends every ally within reach (self included). The enchant aura swells
+        // through the wind-up as a charge tell, then the green nova erupts.
+        IEnumerator SanctuaryRoutine()
+        {
+            yield return WaitForSkillState();
+            if (State != MotorState.Attacking || skillStateLen <= 0f) { EndSkill(); yield break; }
+            float len = skillStateLen;
+
+            GameObject chargeFx = weaponTip != null
+                ? GameEffects.I?.SpawnCharge(ElementId.Life, weaponTip, 1.6f) : null;
+
+            bool burst = false;
+            float t = 0f;
+            while (State == MotorState.Attacking)
+            {
+                t = SkillTime(t, len);
+
+                // charge tell: the staff aura grows into the release
+                if (enchantFx != null && enchantBaseScale != Vector3.zero && !burst)
+                    enchantFx.transform.localScale = enchantBaseScale *
+                        Mathf.Lerp(1f, 2.8f, Mathf.Clamp01(t / 0.42f));
+
+                if (!burst && t >= 0.42f)
+                {
+                    burst = true;
+                    if (chargeFx != null) { Destroy(chargeFx); chargeFx = null; }
+                    if (enchantFx != null && enchantBaseScale != Vector3.zero)
+                        enchantFx.transform.localScale = enchantBaseScale;
+                    GameEffects.I?.HealNova(transform.position);
+                    HealArea(transform.position, Kit.skillRadius, 360f, Kit.skillHeal, includeSelf: true);
+                    if (Identity != null && Identity.isPlayer) GameEffects.I?.Hitstop(Tuning.HitstopLight);
+                    OrbitCamera.I?.ShakeIfNear(transform.position, 8f, 0.3f);
+                }
+
+                if (burst && bufferedRollUntil > Time.time && Stamina.TrySpend(Kit.staminaRoll))
+                {
+                    bufferedRollUntil = 0f;
+                    StartRoll(bufferedRollDir);
+                    yield break;
+                }
+                if (t >= 0.92f) break;
+                yield return null;
+            }
+
+            if (chargeFx != null) Destroy(chargeFx);
+            if (enchantFx != null && enchantBaseScale != Vector3.zero)
+                enchantFx.transform.localScale = enchantBaseScale;
+            // the Skill maps to the looping Attack02Maintain channel pose, so blend
+            // back to locomotion rather than waiting for a clip exit that never comes
+            EndSkill(crossFade: true);
         }
 
         // Mage: plants and channels, then rakes the target with four homing bolts.

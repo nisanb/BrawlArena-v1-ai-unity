@@ -33,6 +33,7 @@ namespace Crownfall
 
         public DamageNumber damageNumberPrefab;
         public DamageNumber blockedNumberPrefab;
+        public DamageNumber healNumberPrefab;
 
         public AudioClip swingLight;
         public AudioClip swingHeavy;
@@ -187,6 +188,38 @@ namespace Crownfall
             Vector3 offset = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * 1.05f
                              + Vector3.up * (0.45f + (n % 5) * 0.5f);
             prefab.Spawn(pos + offset, Mathf.Max(1f, Mathf.Round(amount)));
+        }
+
+        /// Green "+N" popup for a healed ally. Falls back to the damage number
+        /// prefab if the dedicated heal prefab was never wired.
+        public void ShowHeal(Vector3 pos, float amount)
+        {
+            var prefab = healNumberPrefab != null ? healNumberPrefab : damageNumberPrefab;
+            if (prefab == null) return;
+            int n = dmgPopCount++;
+            float ang = n * 2.39996323f;
+            Vector3 offset = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * 0.6f
+                             + Vector3.up * (0.5f + (n % 4) * 0.35f);
+            prefab.Spawn(pos + offset, Mathf.Max(1f, Mathf.Round(amount)));
+        }
+
+        // ------------------------------------------------------------------ healing vfx
+
+        /// Small green life spark on a single mended ally.
+        public void HealPop(Vector3 pos)
+        {
+            var set = Set(ElementId.Life);
+            SpawnTemp(set?.slashHit != null ? set.slashHit : set?.charge, pos + Vector3.up * 1.0f,
+                Quaternion.identity, 1f);
+            if (set != null) PlayAt(set.impactSound, pos, 0.35f, Random.Range(1.05f, 1.2f));
+        }
+
+        /// Big green Sanctuary burst erupting from the healer: nova core + radial
+        /// sphere shockwave + a ground pillar, all in the Life palette.
+        public void HealNova(Vector3 pos)
+        {
+            Nova(ElementId.Life, pos);
+            PlayCast(ElementId.Life, pos);
         }
 
         // ------------------------------------------------------------------ audio
