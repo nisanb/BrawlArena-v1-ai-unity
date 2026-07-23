@@ -157,6 +157,16 @@ namespace Crownfall
             Changed?.Invoke();
         }
 
+        /// Drops the cached statics, re-reads PlayerPrefs, and repaints the UI.
+        /// Used when an external writer (the cloud sync layer or the admin
+        /// console) has changed the underlying keys behind our back.
+        public static void Reload()
+        {
+            loaded = false;
+            Ensure();
+            Changed?.Invoke();
+        }
+
         static void Ensure()
         {
             if (loaded) return;

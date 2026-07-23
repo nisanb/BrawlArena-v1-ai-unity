@@ -141,6 +141,16 @@ namespace Crownfall
                 if (wantLine != li) { li = wantLine; loadTxt.text = lines[li]; }
                 yield return null;
             }
+            // Let the backend finish sign-in + first cloud pull so the hub opens
+            // on synced data. Bounded so an offline device never hangs on the
+            // splash — if the pull lands later, CrownfallMeta.Changed repaints.
+            float waited = 0f;
+            while (!Backend.CrownfallServices.ReadyCompleted && waited < 3f)
+            {
+                waited += Time.unscaledDeltaTime;
+                loadTxt.text = "reaching the vault...";
+                yield return null;
+            }
             PlaySting();
             ShowMenuLayer();
         }

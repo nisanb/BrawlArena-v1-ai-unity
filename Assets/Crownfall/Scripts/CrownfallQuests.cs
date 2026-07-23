@@ -26,6 +26,11 @@ namespace Crownfall
 
         public static event Action Changed;
 
+        /// Repaints quest UI after an external writer (cloud sync / admin console)
+        /// has rewritten the quests.* keys. The store itself reads PlayerPrefs
+        /// live, so there is no cache to drop — just fan the change out.
+        public static void Reload() => Changed?.Invoke();
+
         static string Today => DateTime.UtcNow.ToString("yyyyMMdd");
 
         static void EnsureDay()
