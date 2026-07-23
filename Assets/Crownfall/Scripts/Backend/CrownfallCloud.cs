@@ -144,16 +144,24 @@ namespace Crownfall.Backend
 
                 if (results != null && results.TryGetValue(Key, out var item))
                 {
-                    string json = item.Value.GetAs<string>();
-                    var cloud = JsonUtility.FromJson<Snapshot>(json);
-                    if (cloud != null && cloud.rev >= LocalRev)
+                    Snapshot cloud = null;
+                    try { cloud = item.Value.GetAs<Snapshot>(); }
+                    catch (Exception ex) { Debug.LogWarning("[Crownfall] Cloud record unreadable: " + ex.Message); }
+
+                    if (cloud == null)
+                    {
+                        // Unreadable/old-format record — reseed from local so it self-heals.
+                        await PushAsync();
+                        return;
+                    }
+                    if (cloud.rev >= LocalRev)
                     {
                         ApplyToLocal(cloud);
                         Debug.Log($"[Crownfall] Cloud pull applied (rev {cloud.rev}).");
                         return;
                     }
                     // Local is ahead of the cloud (offline progress) — push it up.
-                    Debug.Log($"[Crownfall] Local ahead of cloud ({LocalRev} > {(cloud?.rev ?? -1)}); pushing.");
+                    Debug.Log($"[Crownfall] Local ahead of cloud ({LocalRev} > {cloud.rev}); pushing.");
                     await PushAsync();
                     return;
                 }
@@ -176,10 +184,11 @@ namespace Crownfall.Backend
             {
                 int rev = LocalRev + 1;
                 var snap = Capture(rev);
-                string json = JsonUtility.ToJson(snap);
 
+                // Store the snapshot as a structured object (not a stringified
+                // blob) so the UGS CLI admin tool reads/writes the same shape.
                 await CloudSaveService.Instance.Data.Player.SaveAsync(
-                    new Dictionary<string, object> { { Key, json } });
+                    new Dictionary<string, object> { { Key, snap } });
 
                 SetLocalRev(rev);
                 dirty = false;
@@ -209,7 +218,7 @@ namespace Crownfall.Backend
                     new HashSet<string> { Key });
                 if (results != null && results.TryGetValue(Key, out var item))
                 {
-                    var cloud = JsonUtility.FromJson<Snapshot>(item.Value.GetAs<string>());
+                    var cloud = item.Value.GetAs<Snapshot>();
                     ApplyToLocal(cloud);
                     Debug.Log("[Crownfall] Admin force-pull applied.");
                 }
