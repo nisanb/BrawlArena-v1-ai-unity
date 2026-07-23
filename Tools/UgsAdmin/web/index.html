@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crownfall Admin</title>
+<style>
+  :root {
+    --bg:#0e1017; --panel:#171a24; --panel2:#1e222f; --line:#2a2f3e;
+    --text:#e7e9f0; --dim:#8b90a3; --gold:#f2c14e; --gold2:#c9992f;
+    --blue:#6f9bff; --red:#e0555f; --green:#54c06e;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;
+    background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:14px; padding:14px 20px;
+    background:linear-gradient(180deg,#191d2a,#12151d); border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:5; }
+  header h1 { margin:0; font-size:18px; letter-spacing:.5px; }
+  header h1 .c { color:var(--gold); }
+  header .spacer { flex:1; }
+  select, input, button { font:inherit; color:var(--text); }
+  select, input {
+    background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; outline:none; }
+  input:focus, select:focus { border-color:var(--blue); }
+  button { cursor:pointer; border:1px solid var(--line); background:var(--panel2);
+    border-radius:8px; padding:8px 14px; transition:.12s; }
+  button:hover { border-color:var(--gold2); }
+  button.primary { background:linear-gradient(180deg,var(--gold),var(--gold2));
+    color:#20160a; border:none; font-weight:600; }
+  button.danger { border-color:#5a2b30; color:var(--red); }
+  main { max-width:1000px; margin:0 auto; padding:20px; }
+  .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:18px; }
+  .who { color:var(--dim); font-size:13px; }
+  .who b { color:var(--text); }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 22px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; }
+  .card h3 { margin:0 0 12px; font-size:12px; text-transform:uppercase;
+    letter-spacing:1px; color:var(--gold); }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:6px 0; }
+  .row label { color:var(--dim); }
+  .row input { width:150px; text-align:right; }
+  .row input[type=text] { text-align:left; }
+  .empty { color:var(--dim); padding:40px; text-align:center; }
+  #toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+    background:#222735; border:1px solid var(--line); border-radius:10px;
+    padding:12px 18px; opacity:0; transition:.25s; pointer-events:none; max-width:80vw; }
+  #toast.show { opacity:1; }
+  #toast.ok { border-color:var(--green); }
+  #toast.err { border-color:var(--red); }
+  .footnote { color:var(--dim); font-size:12px; margin-top:24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="c">&#9819;</span> Crownfall Admin</h1>
+  <span class="spacer"></span>
+  <span class="who" id="who">local &middot; production</span>
+</header>
+
+<main>
+  <div class="bar">
+    <select id="players"><option value="">Loading players&hellip;</option></select>
+    <button id="reload">Refresh</button>
+    <button id="load" class="primary">Load account</button>
+  </div>
+
+  <div id="panel" style="display:none">
+    <div class="actions">
+      <button data-quick="coins:1000">+1000 coins</button>
+      <button data-quick="gems:100">+100 gems</button>
+      <button data-quick="trophies:100">+100 trophies</button>
+      <button data-quick="sigils">Unlock all sigils</button>
+      <button data-quick="quests">Complete quests</button>
+      <button id="save" class="primary">Save changes</button>
+      <button id="reset" class="danger">Reset account</button>
+    </div>
+    <div class="grid" id="fields"></div>
+    <p class="footnote">Editing player <b id="pid"></b> &middot; rev <b id="rev"></b>.
+      Changes bump the rev and win the player&rsquo;s next sync. Don&rsquo;t edit
+      someone who is mid-match &mdash; their device can overwrite you.</p>
+  </div>
+  <div id="empty" class="empty">Pick a player and choose <b>Load account</b>.</div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const INT_FIELDS = [
+  ["Economy","meta.coins","Coins"],
+  ["Economy","meta.gems","Gems"],
+  ["Progression","meta.trophies","Trophies"],
+  ["Progression","meta.level","Level"],
+  ["Progression","meta.xp","XP"],
+  ["Champion","meta.selectedClass","Champion (0-4)"],
+  ["Champion","meta.mode","Mode index"],
+  ["Cosmetics","meta.sigil","Equipped sigil"],
+  ["Cosmetics","meta.sigilsOwned","Owned sigils (bitmask)"],
+  ["Profile","meta.hasProfile","Has profile (0/1)"],
+  ["Profile","meta.inboxRead","Inbox read mask"],
+  ["Quests","quests.p.play","Play progress"],
+  ["Quests","quests.p.win","Win progress"],
+  ["Quests","quests.p.kills","Kills progress"],
+  ["Quests","quests.c.play","Play claimed (0/1)"],
+  ["Quests","quests.c.win","Win claimed (0/1)"],
+  ["Quests","quests.c.kills","Kills claimed (0/1)"],
+  ["Trophy Road","trophyroad.claimed.50","Claimed 50"],
+  ["Trophy Road","trophyroad.claimed.100","Claimed 100"],
+  ["Trophy Road","trophyroad.claimed.200","Claimed 200"],
+  ["Trophy Road","trophyroad.claimed.350","Claimed 350"],
+  ["Trophy Road","trophyroad.claimed.500","Claimed 500"],
+  ["Trophy Road","trophyroad.claimed.750","Claimed 750"],
+  ["Trophy Road","trophyroad.claimed.1000","Claimed 1000"],
+];
+const STR_FIELDS = [
+  ["Profile","meta.playerName","Name"],
+  ["Profile","meta.lastGift","Last gift (ticks)"],
+  ["Quests","quests.day","Quest day (yyyymmdd)"],
+];
+const INT_KEYS = new Set(INT_FIELDS.map(f=>f[1]));
+const STR_KEYS = new Set(STR_FIELDS.map(f=>f[1]));
+
+let loaded = null; // last loaded snapshot
+
+function toast(msg, kind){ const t=document.getElementById('toast');
+  t.textContent=msg; t.className='show '+(kind||''); setTimeout(()=>t.className='',2600); }
+
+async function api(path, opts){ const r=await fetch(path,opts);
+  const j=await r.json(); if(!r.ok||j.error) throw new Error(j.error||('HTTP '+r.status)); return j; }
+
+async function loadPlayers(){
+  const sel=document.getElementById('players');
+  try{ const {players}=await api('/api/players');
+    sel.innerHTML = players.length ? players.map(p=>`<option value="${p.id}">${p.id}</option>`).join('')
+      : '<option value="">(no players yet)</option>';
+  }catch(e){ sel.innerHTML='<option value="">error</option>'; toast(e.message,'err'); }
+}
+
+function valueMap(snap){
+  const m={}; (snap.ints||[]).forEach(kv=>m[kv.k]=kv.v); (snap.strs||[]).forEach(kv=>m[kv.k]=kv.v); return m;
+}
+
+function render(snap){
+  loaded=snap;
+  document.getElementById('empty').style.display='none';
+  document.getElementById('panel').style.display='block';
+  document.getElementById('pid').textContent=snap.playerId||document.getElementById('players').value;
+  document.getElementById('rev').textContent=snap.rev||0;
+  const m=valueMap(snap);
+  const groups={};
+  const add=(g,k,label,isStr)=>{ (groups[g]=groups[g]||[]).push({k,label,isStr}); };
+  INT_FIELDS.forEach(([g,k,l])=>add(g,k,l,false));
+  STR_FIELDS.forEach(([g,k,l])=>add(g,k,l,true));
+  const order=["Economy","Progression","Champion","Cosmetics","Profile","Quests","Trophy Road"];
+  const host=document.getElementById('fields'); host.innerHTML='';
+  order.forEach(g=>{ if(!groups[g])return;
+    const card=document.createElement('div'); card.className='card';
+    card.innerHTML=`<h3>${g}</h3>`;
+    groups[g].forEach(({k,label,isStr})=>{
+      const v = (k in m) ? m[k] : (isStr?'':0);
+      const row=document.createElement('div'); row.className='row';
+      row.innerHTML=`<label title="${k}">${label}</label>`+
+        `<input data-k="${k}" data-str="${isStr?1:0}" type="${isStr?'text':'number'}" value="${String(v).replace(/"/g,'&quot;')}">`;
+      card.appendChild(row);
+    });
+    host.appendChild(card);
+  });
+}
+
+function collectSnapshot(){
+  const ints=[], strs=[];
+  document.querySelectorAll('#fields input').forEach(inp=>{
+    const k=inp.dataset.k;
+    if(inp.dataset.str==='1') strs.push({k, v:inp.value});
+    else ints.push({k, v:parseInt(inp.value||'0',10)});
+  });
+  // Preserve any keys that were in the loaded snapshot but not in our schema.
+  const known=new Set([...INT_KEYS,...STR_KEYS]);
+  (loaded.ints||[]).forEach(kv=>{ if(!known.has(kv.k)) ints.push(kv); });
+  (loaded.strs||[]).forEach(kv=>{ if(!known.has(kv.k)) strs.push(kv); });
+  return { rev:loaded.rev||0, utc:loaded.utc||0, playerId:loaded.playerId||document.getElementById('players').value, ints, strs };
+}
+
+async function doLoad(){
+  const pid=document.getElementById('players').value;
+  if(!pid){ toast('pick a player','err'); return; }
+  try{ const {snapshot}=await api('/api/get?playerId='+encodeURIComponent(pid));
+    if(!snapshot){ render({rev:0,utc:0,playerId:pid,ints:[],strs:[]}); toast('no cloud record yet - defaults shown'); }
+    else { render(snapshot); toast('loaded','ok'); }
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function doSave(){
+  const pid=document.getElementById('players').value;
+  try{ const {rev}=await api('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({playerId:pid, snapshot:collectSnapshot()})});
+    document.getElementById('rev').textContent=rev; if(loaded)loaded.rev=rev;
+    toast('saved - rev '+rev,'ok');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+function setInput(k, v){ const i=document.querySelector(`#fields input[data-k="${k}"]`); if(i)i.value=v; }
+function getInt(k){ const i=document.querySelector(`#fields input[data-k="${k}"]`); return i?parseInt(i.value||'0',10):0; }
+
+async function quick(spec){
+  if(spec==='sigils'){ setInput('meta.sigilsOwned',63); }
+  else if(spec==='quests'){ setInput('quests.p.play',3); setInput('quests.p.win',2); setInput('quests.p.kills',8); }
+  else { const [k,amt]=spec.split(':'); const key='meta.'+k; setInput(key, getInt(key)+parseInt(amt,10)); }
+  await doSave();
+}
+
+document.getElementById('reload').onclick=loadPlayers;
+document.getElementById('load').onclick=doLoad;
+document.getElementById('save').onclick=doSave;
+document.getElementById('reset').onclick=async()=>{
+  const pid=document.getElementById('players').value; if(!pid)return;
+  if(!confirm('Reset '+pid+' to a brand-new account?')) return;
+  try{ const {rev}=await api('/api/reset',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({playerId:pid})}); toast('reset - rev '+rev,'ok'); doLoad();
+  }catch(e){ toast(e.message,'err'); }
+};
+document.querySelectorAll('[data-quick]').forEach(b=> b.onclick=()=>quick(b.dataset.quick));
+
+loadPlayers();
+</script>
+</body>
+</html>

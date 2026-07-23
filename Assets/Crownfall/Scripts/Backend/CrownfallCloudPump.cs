@@ -5,9 +5,9 @@ namespace Crownfall.Backend
     /// The single DontDestroyOnLoad host for the backend runtime bits: it ticks
     /// the Cloud Save debounce and flushes a pending push when the app is
     /// backgrounded or quit (the moments a mobile player is most likely to lose
-    /// unsynced progress). It also carries the admin overlay component so the
-    /// whole backend rig is one object, spawned from code — no scene or forge
-    /// wiring, and it survives menu<->arena scene loads.
+    /// unsynced progress). Spawned from code — no scene or forge wiring — and it
+    /// survives menu<->arena scene loads. (Admin is deliberately NOT in the build;
+    /// player accounts are managed externally via Tools/UgsAdmin.)
     [DefaultExecutionOrder(-100)]
     public class CrownfallCloudPump : MonoBehaviour
     {
@@ -19,7 +19,6 @@ namespace Crownfall.Backend
             var go = new GameObject("CrownfallBackend");
             DontDestroyOnLoad(go);
             instance = go.AddComponent<CrownfallCloudPump>();
-            go.AddComponent<CrownfallAdmin>();
         }
 
         void Update()
