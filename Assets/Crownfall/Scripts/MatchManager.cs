@@ -14,7 +14,7 @@ namespace Crownfall
     public partial class MatchManager : MonoBehaviour
     {
         [Header("Wired by forge")]
-        public GameObject[] playerVariants = new GameObject[4];
+        public GameObject[] playerVariants = new GameObject[6];
         public Transform[] azureSpawns;
         public Transform[] crimsonSpawns;
 

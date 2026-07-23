@@ -42,7 +42,7 @@ namespace Crownfall
             set
             {
                 Ensure();
-                selectedClass = Mathf.Clamp(value, 0, 4);
+                selectedClass = Mathf.Clamp(value, 0, System.Enum.GetValues(typeof(ClassId)).Length - 1);
                 Save();
                 Changed?.Invoke();
             }
