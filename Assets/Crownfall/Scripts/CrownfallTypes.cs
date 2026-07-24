@@ -141,9 +141,33 @@ namespace Crownfall
         public const float RollIFrameEnd = 0.62f;
         public const float RollSpeedStart = 7.2f;
         public const float RollSpeedEnd = 2.6f;
-        public const float ComboWindowOpen = 0.5f;
+        // ---- attack cancel windows (fractions of the attack clip) ----
+        // A swing used to own the full clip: no chaining until 50%, no dodge
+        // until 55%, no movement at all until 100%, and the animator held the
+        // state to 92%. That is ~0.5s of dead air per press, which is what read
+        // as "sluggish/laggy" — the motor was refusing input, not transitioning
+        // slowly. Everything after the strike lands is recovery and is now
+        // cancelable; the commitment that gives a swing weight lives in the
+        // windup (before StrikeMoment), where it belongs.
         public const float StrikeMoment = 0.38f;
-        public const float RollCancelPoint = 0.55f;
+        /// Chain into the next combo hit as soon as the strike has registered.
+        public const float ComboWindowOpen = 0.42f;
+        /// Dodge out the instant the hit lands — the defensive option must never
+        /// be the slowest one, or fights feel like trading turns.
+        public const float RollCancelPoint = 0.40f;
+        /// Walk out of the tail of a swing. Later than the roll window so the
+        /// follow-through still reads, early enough that you are never stuck.
+        public const float MoveCancelPoint = 0.62f;
+        /// Hard end of the attack routine (animator exitTime matches).
+        public const float AttackExitPoint = 0.78f;
+
+        // ---- movement authority while committed (0 = frozen, 1 = full) ----
+        // Partial control beats a hard freeze: you can still adjust your spacing
+        // through a swing, which is what makes AAA melee feel alive rather than
+        // turn-based, without losing the weight of the commitment.
+        public const float AuthorityWindup = 0.30f;
+        public const float AuthorityStrike = 0.08f;
+        public const float AuthorityRecovery = 0.85f;
         public const float LungeStart = 0.12f;
         public const float LungeEnd = 0.42f;
         public const float StaggerDuration = 1.05f;   // was 1.55 — shorter stuns, less helpless time

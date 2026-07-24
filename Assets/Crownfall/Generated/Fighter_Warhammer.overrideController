@@ -9,12 +9,12 @@ AnimatorOverrideController:
   m_Name: Fighter_Warhammer
   m_Controller: {fileID: 9100000, guid: 82c3aa3991b58c44aac81b1d1d915d47, type: 2}
   m_Clips:
-  - m_OriginalClip: {fileID: 7400000, guid: 6383a08b0ddb19543948954c6e075143, type: 3}
-    m_OverrideClip: {fileID: 7400000, guid: 39048ae2454ec3744a251f993d77e2a7, type: 3}
-  - m_OriginalClip: {fileID: 7400000, guid: e160663af1b56d44e94a7ceb3007c110, type: 3}
-    m_OverrideClip: {fileID: 7400000, guid: 51560fff94db26a4d9740bd73681cd27, type: 3}
   - m_OriginalClip: {fileID: 7400000, guid: dfbba31277e926e44b3def7cde351a13, type: 3}
     m_OverrideClip: {fileID: 7400000, guid: ca222832b189eb44b8e04d9b863cb144, type: 3}
+  - m_OriginalClip: {fileID: 7400000, guid: e160663af1b56d44e94a7ceb3007c110, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 51560fff94db26a4d9740bd73681cd27, type: 3}
+  - m_OriginalClip: {fileID: 7400000, guid: 6383a08b0ddb19543948954c6e075143, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 39048ae2454ec3744a251f993d77e2a7, type: 3}
   - m_OriginalClip: {fileID: 7400000, guid: 997f29e6d83e40441819abcdf569bb75, type: 3}
     m_OverrideClip: {fileID: 7400000, guid: 24287e03ab7b0764a952b272b0f27d35, type: 3}
   - m_OriginalClip: {fileID: 7400000, guid: 01ab921b262eb73469713ce3d30cec68, type: 3}

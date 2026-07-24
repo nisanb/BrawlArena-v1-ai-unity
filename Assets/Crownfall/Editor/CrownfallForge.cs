@@ -32,147 +32,49 @@ namespace Crownfall.EditorTools
 
         static readonly string[] ElementNames = { "Light", "Earth", "Frost", "Storm", "Shadow", "Fire", "Arcane", "Life" };
 
-        /// Legacy modular-pack hammer skin (superseded by the Dungeon Mason
-        /// roster below; kept for ApplyHammerLoadout fallback experiments).
-        internal const string HammerSkin = "SingleTwoHandSword05";
-
-        /// The 2026-07-22 roster redo: Dungeon Mason heroes (all Humanoid).
-        /// Player + net-prefab rigs use the PBR variants; AI understudies wear
-        /// the Polyart finishes so twins on the field still read apart.
-        internal static readonly Dictionary<ClassId, string> HeroSkins = new Dictionary<ClassId, string>
+        /// Every fighter is built from ONE rig. See CrownfallLoadout for why:
+        /// the previous four-pack roster (Mini Legion / RPG Tiny Hero / WizardPBR)
+        /// meant four rig conventions at three unit scales and four ad-hoc weapon
+        /// attach paths, which left three of six classes with no weapon at all.
+        ///
+        /// Builds the visual model for a class: instantiate the shared modular
+        /// rig, toggle it into the class loadout, and return the focus weapon
+        /// (the tip/trail/enchant anchor). Shared by the arena forge, the net
+        /// prefabs, and the menu showcase/portraits so all three agree.
+        public static GameObject BuildHeroModel(ClassId cls, bool understudy, out Transform focusWeapon)
         {
-            { ClassId.Knight,     "Assets/Mini Legion Footman PBR HP Polyart/Prefabs/FootmanPBR.prefab" },
-            { ClassId.Greatsword, "Assets/Mini Legion Grunt PBR HP Polyart/Prefab/GruntPBR.prefab" },
-            { ClassId.Duelist,    "Assets/RPG Tiny Hero Duo/Prefab/MaleCharacterPBR.prefab" },
-            { ClassId.Mage,       "Assets/WizardPBR/Prefabs/WizardStandardMaterial.prefab" },
-            // Polyart golem: the PBR one read as a gritty outsider next to the
-            // chibi cast (persona review night1 art-coherence finding)
-            { ClassId.Warhammer,  "Assets/Mini Legion Rock Golem PBR HP Polyart/Prefabs/Polyart_Golem.prefab" },
-            // Seraph the healer: the RPG Tiny Hero female — chibi, art-coherent
-            // with the Duelist (her pack twin), dressed with a staff below.
-            { ClassId.Healer,     "Assets/RPG Tiny Hero Duo/Prefab/FemaleCharacterPBR.prefab" },
-        };
+            focusWeapon = null;
+            var basePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CrownfallLoadout.BasePrefab);
+            if (basePrefab == null)
+            {
+                Debug.LogError("[CrownfallForge] Missing base rig " + CrownfallLoadout.BasePrefab);
+                return GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            }
 
-        internal static readonly Dictionary<ClassId, string> HeroSkinsAlt = new Dictionary<ClassId, string>
-        {
-            { ClassId.Knight,     "Assets/Mini Legion Footman PBR HP Polyart/Prefabs/FootmanPolyart.prefab" },
-            { ClassId.Greatsword, "Assets/Mini Legion Grunt PBR HP Polyart/Prefab/GruntPolyart.prefab" },
-            { ClassId.Duelist,    "Assets/RPG Tiny Hero Duo/Prefab/MaleCharacterPolyart.prefab" },
-            { ClassId.Mage,       "Assets/WizardPBR/Prefabs/WizardPBRMaskTintMaterial.prefab" },
-            { ClassId.Warhammer,  "Assets/Mini Legion Rock Golem PBR HP Polyart/Prefabs/Polyart_Golem.prefab" },
-            { ClassId.Healer,     "Assets/RPG Tiny Hero Duo/Prefab/FemaleCharacterPolyart.prefab" },
-        };
-
-        internal static float HeroHeight(ClassId cls) => cls switch
-        {
-            ClassId.Duelist => 1.6f,
-            ClassId.Healer => 1.6f,
-            ClassId.Greatsword => 1.85f,
-            ClassId.Warhammer => 2.0f,
-            _ => 1.72f,
-        };
-
-        internal static GameObject LoadHeroPrefab(string skin) =>
-            AssetDatabase.LoadAssetAtPath<GameObject>(
-                skin.Contains("/") ? skin : $"{CharDir}/{skin}.prefab");
-
-        static Transform FindDeepChild(Transform root, string name)
-        {
-            foreach (var tr in root.GetComponentsInChildren<Transform>(true))
-                if (string.Equals(tr.name, name, System.StringComparison.OrdinalIgnoreCase))
-                    return tr;
-            return null;
+            var model = (GameObject)PrefabUtility.InstantiatePrefab(basePrefab);
+            PrefabUtility.UnpackPrefabInstance(model, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            model.name = "Model";
+            var spec = CrownfallLoadout.Get(cls, understudy);
+            focusWeapon = CrownfallLoadout.Apply(model, spec);
+            // rigid hand attachment: the pack's holder-curve scheme breaks on
+            // three clips (including the Knight's light+heavy) and blends badly
+            // across fast cross-fades — see WeldWeaponsToHands
+            CrownfallLoadout.WeldWeaponsToHands(model, spec);
+            return model;
         }
 
-        /// Normalize + arm an external (Dungeon Mason) hero model: uniform
-        /// gameplay height, the wizard's Staff01 flown, the duelist dual-wielding
-        /// the pack's one-handed swords on the humanoid hand bones.
-        internal static void PrepareExternalHero(GameObject model, ClassId cls)
+        /// The rig is authored at 1 unit = 1 metre and every class now shares it,
+        /// so silhouette differences are a deliberate scale nudge rather than an
+        /// accident of mismatched pack scales.
+        public static float HeroScale(ClassId cls) => cls switch
         {
-            var b = MeasureBoundsInstance(model);
-            if (b.size.y > 0.05f)
-            {
-                float s = HeroHeight(cls) / b.size.y;
-                if (Mathf.Abs(1f - s) > 0.05f)
-                    model.transform.localScale = model.transform.localScale * s;
-            }
+            ClassId.Warhammer => 1.12f,   // the bruiser reads biggest
+            ClassId.Greatsword => 1.06f,
+            ClassId.Duelist => 0.95f,     // light and quick
+            ClassId.Healer => 0.96f,
+            _ => 1f,
+        };
 
-            if (cls == ClassId.Mage)
-            {
-                for (int i = 1; i <= 3; i++)
-                {
-                    var staff = FindDeepChild(model.transform, "Staff0" + i);
-                    if (staff != null) staff.gameObject.SetActive(i == 1);
-                }
-            }
-            else if (cls == ClassId.Duelist)
-            {
-                // the male hero ships already holding OHS03 + a shield — twin
-                // blades means shield off, second sword into the left hand
-                var shield = FindDeepChild(model.transform, "Shield08");
-                if (shield != null) shield.gameObject.SetActive(false);
-                var anim = model.GetComponentInChildren<Animator>();
-                if (anim != null && anim.isHuman)
-                    AttachProp(anim, HumanBodyBones.LeftHand, "Assets/RPG Tiny Hero Duo/Prefab/OHS06PBR.prefab");
-            }
-            else if (cls == ClassId.Healer)
-            {
-                // the female hero ships holding OHS06 + Shield05 on her weapon_l/r
-                // sockets — strip whatever is parented there so only the staff shows
-                foreach (var sock in new[] { "weapon_l", "weapon_r" })
-                {
-                    var s = FindDeepChild(model.transform, sock);
-                    if (s != null)
-                        foreach (Transform child in s) child.gameObject.SetActive(false);
-                }
-                // fly a wizard staff into her right hand so she reads as a staff
-                // healer (name "staff" lets the weapon-trail/enchant pass below find it)
-                var anim = model.GetComponentInChildren<Animator>();
-                if (anim != null && anim.isHuman)
-                {
-                    var staff = AttachProp(anim, HumanBodyBones.RightHand, "Assets/WizardPBR/Prefabs/Staff01.prefab");
-                    if (staff != null)
-                    {
-                        staff.name = "HealerStaff";
-                        // WizardPBR's staff mesh is authored at a huge native scale
-                        // (the wizard prefab corrects it on its own root). Renderer.bounds
-                        // is unreliable for a freshly-attached object at forge time, so
-                        // size off the MESH ASSET's local bounds x the transform's world
-                        // scale — both always valid — and normalize to a chibi-hand length.
-                        float longest = 0f;
-                        foreach (var mf in staff.GetComponentsInChildren<MeshFilter>())
-                        {
-                            if (mf.sharedMesh == null) continue;
-                            Vector3 sz = mf.sharedMesh.bounds.size;
-                            Vector3 ls = mf.transform.lossyScale;
-                            longest = Mathf.Max(longest, Mathf.Max(sz.x * Mathf.Abs(ls.x),
-                                Mathf.Max(sz.y * Mathf.Abs(ls.y), sz.z * Mathf.Abs(ls.z))));
-                        }
-                        if (longest > 0.001f)
-                            staff.transform.localScale *= 1.15f / longest; // ~1.15u staff
-                        staff.transform.localRotation = Quaternion.identity;
-                        staff.transform.localPosition = Vector3.zero;
-                    }
-                }
-            }
-        }
-
-        static GameObject AttachProp(Animator anim, HumanBodyBones bone, string prefabPath)
-        {
-            var hand = anim.GetBoneTransform(bone);
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-            if (hand == null || prefab == null)
-            {
-                Debug.LogWarning($"[CrownfallForge] AttachProp failed: hand={hand != null} prefab={prefabPath}");
-                return null;
-            }
-            var prop = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
-            PrefabUtility.UnpackPrefabInstance(prop, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-            prop.transform.SetParent(hand, false);
-            prop.transform.localPosition = Vector3.zero;
-            prop.transform.localRotation = Quaternion.identity;
-            return prop;
-        }
 
         // ------------------------------------------------------------------ entry points
 
@@ -354,10 +256,15 @@ namespace Crownfall.EditorTools
             T(l3, l4, "AttackL", duration: 0.06f);
             foreach (var atk in new[] { l1, l2, l3, l4, heavy, skill })
             {
-                // late exit so buffered combo presses win the race against the
-                // return-to-locomotion transition (motor hard-breaks at 0.92 anyway)
-                T(atk, loco, null, hasExit: true, exitTime: 0.92f, duration: 0.14f);
+                // matches Tuning.AttackExitPoint: the motor hands control back at
+                // 0.78 and cross-fades out itself, so holding the state to 0.92
+                // here only left the rig swinging after the player was free —
+                // visible as input lag even though the input was already accepted
+                T(atk, loco, null, hasExit: true, exitTime: 0.78f, duration: 0.12f);
                 T(atk, roll, "Roll", duration: 0.06f);
+                // the skill button must never be eaten by a committed swing
+                // (skip the skill state itself — that would be a self-transition)
+                if (atk != skill) T(atk, skill, "Skill", duration: 0.06f);
             }
 
             T(roll, loco, null, hasExit: true, exitTime: 0.8f, duration: 0.12f);
@@ -476,7 +383,9 @@ namespace Crownfall.EditorTools
             public ElementId element;
             public Team team;
             public string name;
-            public string skin;
+            /// AI understudies wear the alternate wardrobe from CrownfallLoadout
+            /// so a team's two Mages still read apart at a glance.
+            public bool understudy;
             public int slot;
             public bool isPlayerVariant;
             public float aggression;
@@ -495,7 +404,11 @@ namespace Crownfall.EditorTools
             var camGo = new GameObject("Main Camera");
             camGo.tag = "MainCamera";
             var cam = camGo.AddComponent<Camera>();
-            cam.fieldOfView = 57f;
+            // 57 -> 46: in the motion probe the hero filled only ~8% of frame
+            // height and read as a smudge among the bushes. FOV is the right lever
+            // rather than pulling the camera in — restDistance is 6.2 specifically
+            // so the lens clears 2m crates, and shortening it re-opens that.
+            cam.fieldOfView = 46f;
             cam.nearClipPlane = 0.08f;
             cam.farClipPlane = 400f;
             camGo.AddComponent<AudioListener>();
@@ -559,19 +472,19 @@ namespace Crownfall.EditorTools
             // ---- fighters
             var specs = new List<FighterSpec>
             {
-                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Kael", skin = HeroSkins[ClassId.Knight], slot = 0, isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Doran", skin = HeroSkins[ClassId.Greatsword], slot = 0, isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Vesper", skin = HeroSkins[ClassId.Duelist], slot = 0, isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Elyra", skin = HeroSkins[ClassId.Mage], slot = 0, isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Warhammer, element = ElementId.Storm, team = Team.Azure, name = "Volt", skin = HeroSkins[ClassId.Warhammer], slot = 0, isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Healer, element = ElementId.Life, team = Team.Azure, name = "Seraph", skin = HeroSkins[ClassId.Healer], slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Kael", slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Doran", slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Vesper", slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Elyra", slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Warhammer, element = ElementId.Storm, team = Team.Azure, name = "Volt", slot = 0, isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Healer, element = ElementId.Life, team = Team.Azure, name = "Seraph", slot = 0, isPlayerVariant = true },
 
-                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Bram", skin = HeroSkinsAlt[ClassId.Greatsword], slot = 1, aggression = 0.6f },
-                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Lyra", skin = HeroSkinsAlt[ClassId.Mage], slot = 2, aggression = 0.55f },
+                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Bram", understudy = true, slot = 1, aggression = 0.6f },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Lyra", understudy = true, slot = 2, aggression = 0.55f },
 
-                new FighterSpec { cls = ClassId.Knight, element = ElementId.Shadow, team = Team.Crimson, name = "Vex", skin = HeroSkinsAlt[ClassId.Knight], slot = 0, aggression = 0.62f },
-                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Fire, team = Team.Crimson, name = "Sable", skin = HeroSkinsAlt[ClassId.Duelist], slot = 1, aggression = 0.7f },
-                new FighterSpec { cls = ClassId.Mage, element = ElementId.Arcane, team = Team.Crimson, name = "Morgath", skin = HeroSkinsAlt[ClassId.Mage], slot = 2, aggression = 0.58f },
+                new FighterSpec { cls = ClassId.Knight, element = ElementId.Shadow, team = Team.Crimson, name = "Vex", understudy = true, slot = 0, aggression = 0.62f },
+                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Fire, team = Team.Crimson, name = "Sable", understudy = true, slot = 1, aggression = 0.7f },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Arcane, team = Team.Crimson, name = "Morgath", understudy = true, slot = 2, aggression = 0.58f },
             };
 
             var playerVariants = new GameObject[6];
@@ -817,43 +730,96 @@ namespace Crownfall.EditorTools
                 pl.shadows = LightShadows.None;
             }
 
-            // center crystals
-            Place(FindPrefab("Battle Arena", "Crystal2"), new Vector3(0f, 0f, 0f), 0f, 1.1f, true);
-            Place(FindPrefab("Battle Arena", "Crystal1"), new Vector3(1.8f, 0f, 0.9f), 40f, 0.8f, true);
-            Place(FindPrefab("Battle Arena", "Crystal3"), new Vector3(-1.5f, 0f, -1.2f), 210f, 0.75f, true);
-
-            // props
             var rand = new System.Random(7);
             float R(float a, float b) => Mathf.Lerp(a, b, (float)rand.NextDouble());
-            string[] barrels = { "Barrel01", "Barrel02", "Box", "Box02" };
-            for (int i = 0; i < 10; i++)
-            {
-                float side = i % 2 == 0 ? 1f : -1f;
-                Vector3 pos = new Vector3(R(-19f, 19f), 0f, side * R(17.5f, 20f));
-                if (Mathf.Abs(pos.x) < 4.5f) pos.x += Mathf.Sign(pos.x + 0.1f) * 5f;
-                Place(FindPrefab("Battle Arena", barrels[i % barrels.Length]), pos, R(0f, 360f), R(0.85f, 1.1f), true);
-            }
-            Place(FindPrefab("Battle Arena", "Chariot"), new Vector3(-16f, 0f, 6f), 40f, 1f, true);
-            string[] bones = { "Bone1", "Bone2", "skull1", "skull2" };
-            for (int i = 0; i < 8; i++)
-                Place(FindPrefab("Battle Arena", bones[i % bones.Length]),
-                    new Vector3(R(-18f, 18f), 0f, R(-18f, 18f)), R(0f, 360f), R(0.4f, 0.6f), false);
 
-            string[] rocks = { "Stone01", "Stone02", "Stone03", "rock1", "rock2" };
-            for (int i = 0; i < 10; i++)
+            // ---------------------------------------------------------------- layout
+            // The old dressing pass scattered four unrelated prop families at random
+            // coordinates: village barrels, a chariot, graveyard bones and skulls,
+            // loose rocks and magic crystals, all sprinkled with R(-19,19). At play
+            // distance that reads as an asset dump rather than a designed arena, and
+            // it gave neither team a landmark to orient by.
+            //
+            // The arena is mirror-symmetric across Z (Azure spawns at z=-16.5,
+            // Crimson at z=+16.5), so the layout is built the same way: everything
+            // placed below the halfway line is mirrored above it, guaranteeing that
+            // neither side gets better cover. Props are restricted to the pack's
+            // stone/timber family; the bones and the chariot are gone.
+            void Mirror(GameObject prefab, Vector3 pos, float yaw, float scale, bool collide)
             {
-                Vector3 pos = new Vector3(R(-19f, 19f), 0f, R(-19f, 19f));
-                if (pos.magnitude < 5f || Mathf.Abs(pos.z) > 14f) continue;
-                Place(FindPrefab("Battle Arena", rocks[i % rocks.Length]), pos, R(0f, 360f), R(0.7f, 1.1f), true);
+                Place(prefab, pos, yaw, scale, collide);
+                Place(prefab, new Vector3(pos.x, pos.y, -pos.z), 180f - yaw, scale, collide);
             }
 
-            // grass dressing (no colliders)
-            string[] grass = { "Grass01", "Grass02", "Grass03", "Grass04", "SolGrass01", "SolGrass02", "SolGrass03", "Flower01", "Flower02" };
-            for (int i = 0; i < 90; i++)
+            // ---- the crown dais: a low stone platform marking the contested centre.
+            // Nothing tall may stand here — the centre must stay a clean sightline, and
+            // the objective needs flat ground to rest on. (The old build put a full-size
+            // crystal at exactly (0,0,0), which is what left the crown hovering 3m up.)
+            // Floor1, NOT the Floor2 accent: Floor2 is the pack's dark tile and a
+            // plus-shaped patch of it in the middle of a green arena read as a hole
+            // punched in the ground rather than a platform.
+            var daisTile = floor ?? FindPrefab("Battle Arena", "Floor2");
+            for (int gx = -1; gx <= 1; gx++)
+                for (int gz = -1; gz <= 1; gz++)
+                {
+                    if (Mathf.Abs(gx) + Mathf.Abs(gz) > 1 && (gx != 0 && gz != 0)) continue; // plus-shape
+                    Place(daisTile, new Vector3(gx * tile, 0.18f, gz * tile), 0f, 1f, true);
+                }
+
+            // crystals ring the dais instead of blocking it — they frame the objective
+            string[] daisCrystals = { "Crystal1", "Crystal3", "Crystal1", "Crystal3" };
+            for (int i = 0; i < 4; i++)
             {
-                Vector3 pos = new Vector3(R(-20f, 20f), 0f, R(-20f, 20f));
-                if (pos.magnitude < 3.5f) continue;
-                Place(FindPrefab("Battle Arena", grass[i % grass.Length]), pos, R(0f, 360f), R(0.8f, 1.35f), false);
+                float a = 45f + i * 90f;
+                Vector3 p = Quaternion.Euler(0f, a, 0f) * new Vector3(0f, 0f, 5.2f);
+                Place(FindPrefab("Battle Arena", daisCrystals[i]), p, a + 180f, 0.7f, true);
+            }
+
+            // ---- cover clusters: mirrored crate/barrel stacks that break the long
+            // lanes without hiding the centre. Two per half, pushed off-axis so the
+            // straight run from spawn to crown is contested but never fully walled.
+            var crate = FindPrefab("Battle Arena", "Box") ?? FindPrefab("Battle Arena", "Barrel01");
+            var crateAlt = FindPrefab("Battle Arena", "Box02") ?? crate;
+            var coverBarrel = FindPrefab("Battle Arena", "Barrel01");
+            var coverBarrelAlt = FindPrefab("Battle Arena", "Barrel02") ?? coverBarrel;
+            Vector3[] coverSpots =
+            {
+                new Vector3(-11.5f, 0f, -6.5f), new Vector3(11.5f, 0f, -6.5f),
+                new Vector3(-6.5f, 0f, -13.5f), new Vector3(6.5f, 0f, -13.5f),
+            };
+            for (int i = 0; i < coverSpots.Length; i++)
+            {
+                Vector3 c = coverSpots[i];
+                float baseYaw = R(0f, 360f);
+                Mirror(i % 2 == 0 ? crate : crateAlt, c, baseYaw, 1f, true);
+                Mirror(i % 2 == 0 ? coverBarrelAlt : coverBarrel,
+                    c + new Vector3(1.15f, 0f, 0.55f), baseYaw + 38f, 0.92f, true);
+                Mirror(i % 2 == 0 ? coverBarrel : crateAlt,
+                    c + new Vector3(-0.7f, 0f, 1.2f), baseYaw + 122f, 0.85f, true);
+            }
+
+            // ---- stone outcrops on the flanks: low, wide, and mirrored, so the side
+            // routes have shape without becoming camera-eating walls
+            string[] rocks = { "Stone01", "Stone02", "Stone03" };
+            Vector3[] rockSpots =
+            {
+                new Vector3(-17f, 0f, -3.5f), new Vector3(17f, 0f, -3.5f),
+                new Vector3(-15f, 0f, -10.5f), new Vector3(15f, 0f, -10.5f),
+            };
+            for (int i = 0; i < rockSpots.Length; i++)
+                Mirror(FindPrefab("Battle Arena", rocks[i % rocks.Length]), rockSpots[i],
+                    R(0f, 360f), R(0.75f, 0.95f), true);
+
+            // ---- ground dressing: kept off the dais and thinned out, so it reads as
+            // groundcover rather than confetti
+            string[] grass = { "Grass01", "Grass02", "Grass03", "Grass04",
+                               "SolGrass01", "SolGrass02", "Flower01" };
+            for (int i = 0; i < 56; i++)
+            {
+                Vector3 pos = new Vector3(R(-20f, 20f), 0f, R(-19f, 0f));
+                if (new Vector2(pos.x, pos.z).magnitude < 7f) continue;   // keep the dais clean
+                Mirror(FindPrefab("Battle Arena", grass[i % grass.Length]), pos,
+                    R(0f, 360f), R(0.8f, 1.25f), false);
             }
 
             // gate braziers with flames seated on the barrel rim
@@ -960,12 +926,12 @@ namespace Crownfall.EditorTools
 
             var netSpecs = new[]
             {
-                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Knight", skin = HeroSkins[ClassId.Knight], isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Warbrand", skin = HeroSkins[ClassId.Greatsword], isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Duelist", skin = HeroSkins[ClassId.Duelist], isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Mage", skin = HeroSkins[ClassId.Mage], isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Warhammer, element = ElementId.Storm, team = Team.Azure, name = "Juggernaut", skin = HeroSkins[ClassId.Warhammer], isPlayerVariant = true },
-                new FighterSpec { cls = ClassId.Healer, element = ElementId.Life, team = Team.Azure, name = "Seraph", skin = HeroSkins[ClassId.Healer], isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Knight, element = ElementId.Light, team = Team.Azure, name = "Knight", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Greatsword, element = ElementId.Earth, team = Team.Azure, name = "Warbrand", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Duelist, element = ElementId.Storm, team = Team.Azure, name = "Duelist", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Mage, element = ElementId.Frost, team = Team.Azure, name = "Mage", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Warhammer, element = ElementId.Storm, team = Team.Azure, name = "Juggernaut", isPlayerVariant = true },
+                new FighterSpec { cls = ClassId.Healer, element = ElementId.Life, team = Team.Azure, name = "Seraph", isPlayerVariant = true },
             };
 
             foreach (var spec in netSpecs)
@@ -991,42 +957,19 @@ namespace Crownfall.EditorTools
             var root = new GameObject($"{(spec.isPlayerVariant ? "Player_" : "")}{spec.name}_{spec.cls}");
             root.transform.SetPositionAndRotation(pos, rot);
 
-            // model (external Dungeon Mason path or legacy modular-pack name)
-            bool externalSkin = spec.skin.Contains("/");
-            var charPrefab = LoadHeroPrefab(spec.skin);
-            GameObject model;
-            if (charPrefab != null)
-            {
-                model = (GameObject)PrefabUtility.InstantiatePrefab(charPrefab);
-                PrefabUtility.UnpackPrefabInstance(model, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-            }
-            else
-            {
-                Debug.LogError("[CrownfallForge] Missing character prefab " + spec.skin);
-                model = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            }
-            model.name = "Model";
+            // one shared rig for every class, toggled into its loadout; the
+            // focus weapon comes back already correctly seated in the grip
+            var model = BuildHeroModel(spec.cls, spec.understudy, out var focusWeapon);
             model.transform.SetParent(root.transform, false);
             model.transform.localPosition = Vector3.zero;
             model.transform.localRotation = Quaternion.identity;
+            model.transform.localScale = Vector3.one * HeroScale(spec.cls);
 
             var anim = model.GetComponentInChildren<Animator>();
             if (anim == null) anim = model.AddComponent<Animator>();
             anim.runtimeAnimatorController = aoc;
             anim.applyRootMotion = false;
             anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-
-            if (externalSkin)
-            {
-                PrepareExternalHero(model, spec.cls);
-            }
-            else
-            {
-                // modular-pack weapons ship on loose "weaponShield_l/r" holder
-                // nodes whose motion is baked per-clip — move them to hand bones
-                ReparentWeaponsToHands(model.transform);
-                if (spec.cls == ClassId.Warhammer) ApplyHammerLoadout(model.transform);
-            }
 
             // physics + brain components
             var cc = root.AddComponent<CharacterController>();
@@ -1066,8 +1009,10 @@ namespace Crownfall.EditorTools
                 root.AddComponent<PlayerController>();
             }
 
-            // weapon: trail + enchant aura
-            var weapon = FindWeaponTransform(model.transform);
+            // weapon: trail + enchant aura, anchored on the loadout's focus
+            // weapon. Every class has one now, so no class silently loses its
+            // impact presentation the way Knight/Greatsword/Warhammer used to.
+            var weapon = focusWeapon;
             if (weapon != null)
             {
                 var wb = RendererBounds(weapon);
@@ -1591,106 +1536,6 @@ namespace Crownfall.EditorTools
             var b = rends[0].bounds;
             foreach (var r in rends) b.Encapsulate(r.bounds);
             return b;
-        }
-
-        internal static void ReparentWeaponsToHands(Transform model)
-        {
-            Transform FindDeep(Transform t, string name)
-            {
-                foreach (var tr in t.GetComponentsInChildren<Transform>(true))
-                    if (string.Equals(tr.name, name, System.StringComparison.OrdinalIgnoreCase))
-                        return tr;
-                return null;
-            }
-
-            var pairs = new (string holder, string hand)[]
-            {
-                ("weaponShield_l", "hand_l"),
-                ("weaponShield_r", "hand_r"),
-            };
-            foreach (var (holderName, handName) in pairs)
-            {
-                var holder = FindDeep(model, holderName);
-                var hand = FindDeep(model, handName);
-                if (holder == null || hand == null) continue;
-                for (int i = holder.childCount - 1; i >= 0; i--)
-                    holder.GetChild(i).SetParent(hand, true);
-            }
-        }
-
-        /// Swap the two-hander's sword for the modular pack's Hammer01 with a
-        /// neon storm-glow emissive material. Runs on any Warhammer rig: scene
-        /// fighters, net prefab, menu showcase and portrait models.
-        internal static void ApplyHammerLoadout(Transform model)
-        {
-            var sword = FindWeaponTransform(model);
-            if (sword == null)
-            {
-                Debug.LogWarning("[CrownfallForge] Hammer loadout: no weapon node found");
-                return;
-            }
-            var hammerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/ModularRPGHeroesPBR/Prefabs/Weapons/Hammer01.prefab");
-            if (hammerPrefab == null)
-            {
-                Debug.LogWarning("[CrownfallForge] Hammer loadout: Hammer01.prefab missing");
-                return;
-            }
-            var hammer = (GameObject)PrefabUtility.InstantiatePrefab(hammerPrefab);
-            PrefabUtility.UnpackPrefabInstance(hammer, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-            hammer.name = "Hammer01";
-            hammer.transform.SetParent(sword.parent, false);
-            hammer.transform.localPosition = sword.localPosition;
-            hammer.transform.localRotation = sword.localRotation;
-            hammer.transform.localScale = sword.localScale;
-
-            var glow = LoadOrCreateNeonHammerMat(hammer);
-            if (glow != null)
-                foreach (var r in hammer.GetComponentsInChildren<Renderer>())
-                    r.sharedMaterial = glow;
-
-            Object.DestroyImmediate(sword.gameObject);
-        }
-
-        static Material LoadOrCreateNeonHammerMat(GameObject hammer)
-        {
-            string path = $"{GenDir}/NeonHammerGlow.mat";
-            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (existing != null) return existing;
-            var srcRend = hammer.GetComponentInChildren<Renderer>();
-            if (srcRend == null || srcRend.sharedMaterial == null) return null;
-            var mat = new Material(srcRend.sharedMaterial);
-            mat.EnableKeyword("_EMISSION");
-            mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
-            // storm cyan pushed past bloom threshold so the head glows
-            mat.SetColor("_EmissionColor", new Color(0.35f, 0.85f, 1f) * 2.2f);
-            AssetDatabase.CreateAsset(mat, path);
-            return mat;
-        }
-
-        static Transform FindWeaponTransform(Transform model)
-        {
-            string[] keys = { "sword", "wand", "bow", "axe", "hammer", "blade", "staff" };
-            Transform best = null;
-            float bestScore = float.MinValue;
-            foreach (var tr in model.GetComponentsInChildren<Transform>())
-            {
-                string n = tr.name.ToLowerInvariant();
-                if (n.Contains("shield")) continue;
-                bool match = keys.Any(k => n.Contains(k));
-                if (!match) continue;
-                var rend = tr.GetComponentInChildren<Renderer>();
-                if (rend == null) continue;
-
-                // prefer weapons parented under a hand bone over back decorations
-                bool inHand = false;
-                for (var p = tr.parent; p != null && p != model; p = p.parent)
-                    if (p.name.ToLowerInvariant().Contains("hand")) { inHand = true; break; }
-
-                float score = rend.bounds.size.magnitude + (inHand ? 100f : 0f);
-                if (score > bestScore) { bestScore = score; best = tr; }
-            }
-            return best;
         }
 
         static Bounds RendererBounds(Transform t)

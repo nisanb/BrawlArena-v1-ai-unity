@@ -52,7 +52,7 @@ namespace Crownfall
         float baseTimeScale = 1f;
         Coroutine hitstopRoutine;
 
-        void Awake() { I = this; baseTimeScale = 1f; }
+        void Awake() { I = this; baseTimeScale = 1f; liveEffects.Clear(); }
 
         public ElementSet Set(ElementId el)
         {
@@ -103,7 +103,13 @@ namespace Crownfall
         {
             var set = Set(el);
             var prefab = heavy && set != null && set.cleave != null ? set.cleave : set?.slash;
-            SpawnTemp(prefab, pos, rot, heavy ? 1.35f : 1f);
+            // 1.35/1.0 -> 0.70/0.55. In the motion probe the heavy's arc rendered as
+            // a full-height vertical light PILLAR offset from the fighter, covering
+            // the very swing it should be selling (probe_knight sheet-main-06, rows
+            // 2-3). These MagicArsenal prefabs are authored for a distant showcase
+            // camera. NOTE: scaling only tames it — the cleave/pillar family is the
+            // wrong SHAPE for a sword arc and still wants a proper slash prefab.
+            SpawnTemp(prefab, pos, rot, heavy ? 0.70f : 0.55f);
         }
 
         public void Nova(ElementId el, Vector3 pos)
@@ -163,12 +169,44 @@ namespace Crownfall
             }
         }
 
+        // ---- VFX discipline ------------------------------------------------
+        // The pack's AoE prefabs are authored for a distant showcase camera. Spawned
+        // a metre from a third-person lens they become an opaque wall of particles
+        // that hides the very fight they are decorating (the magenta screen-fill in
+        // the baseline capture). Two rules keep spectacle from eating readability:
+        //   1. bursts close to the camera shrink toward a floor scale
+        //   2. only so many transient effects may live at once
+        const float NearCamFull = 6f;    // at/after this distance, authored scale
+        const float NearCamMin = 1.2f;   // right on the lens
+        const float NearCamFloor = 0.42f;
+        const int MaxLiveEffects = 22;
+        const float TempLifetime = 2.6f;
+
+        static readonly System.Collections.Generic.Queue<GameObject> liveEffects =
+            new System.Collections.Generic.Queue<GameObject>();
+
         void SpawnTemp(GameObject prefab, Vector3 pos, Quaternion rot, float scale)
         {
             if (prefab == null) return;
+
+            var cam = Camera.main;
+            if (cam != null)
+            {
+                float d = Vector3.Distance(pos, cam.transform.position);
+                scale *= Mathf.Lerp(NearCamFloor, 1f,
+                    Mathf.InverseLerp(NearCamMin, NearCamFull, d));
+            }
+
             var go = Instantiate(prefab, pos, rot);
             if (!Mathf.Approximately(scale, 1f)) go.transform.localScale *= scale;
-            Destroy(go, 4f);
+            Destroy(go, TempLifetime);
+
+            liveEffects.Enqueue(go);
+            while (liveEffects.Count > MaxLiveEffects)
+            {
+                var old = liveEffects.Dequeue();
+                if (old != null) Destroy(old);
+            }
         }
 
         // ------------------------------------------------------------------ numbers
@@ -283,6 +321,35 @@ namespace Crownfall
         {
             Time.timeScale = 0.05f;
             yield return new WaitForSecondsRealtime(seconds);
+            Time.timeScale = baseTimeScale;
+            hitstopRoutine = null;
+        }
+
+        /// The player just took someone down. A hard freeze followed by a short
+        /// ramp back to full speed reads as impact rather than lag, and the camera
+        /// punch sells the hit without stealing control.
+        public void Takedown(Vector3 at)
+        {
+            if (hitstopRoutine != null) StopCoroutine(hitstopRoutine);
+            hitstopRoutine = StartCoroutine(TakedownRoutine());
+            OrbitCamera.I?.Shake(0.75f);
+            PlayAt(deathCry, at, 0.6f, Random.Range(0.85f, 0.95f));
+        }
+
+        IEnumerator TakedownRoutine()
+        {
+            Time.timeScale = 0.04f;
+            yield return new WaitForSecondsRealtime(0.09f);
+            // ease back instead of snapping — the recovery is what makes it feel
+            // like a beat rather than a hitch
+            float t = 0f;
+            const float Ramp = 0.22f;
+            while (t < Ramp)
+            {
+                t += Time.unscaledDeltaTime;
+                Time.timeScale = Mathf.Lerp(0.28f, baseTimeScale, t / Ramp);
+                yield return null;
+            }
             Time.timeScale = baseTimeScale;
             hitstopRoutine = null;
         }

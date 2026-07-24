@@ -15,15 +15,38 @@ namespace Crownfall
         public Sprite enemyFill;  // designed red
 
         float shown = 1f, ghostShown = 1f;
+        Vector3 baseScale;
+        bool baseScaleCaptured;
+
+        /// Distance the authored scale is tuned for; the bar counter-scales around
+        /// this so it keeps a steady on-screen size instead of ballooning into a
+        /// screen-wide slab whenever the camera ends up next to a fighter.
+        const float RefDistance = 9f;
+        const float MinScaleMul = 0.55f;
+        const float MaxScaleMul = 2.4f;
+        const float NearFade = 2.2f;   // camera practically on top of them
+        const float FarFade = 34f;     // too far to matter, and it's just clutter
+
+        float rangeAlpha = 1f;
 
         void LateUpdate()
         {
             if (health == null || fill == null) return;
+            if (!baseScaleCaptured) { baseScale = transform.localScale; baseScaleCaptured = true; }
 
             var cam = Camera.main;
             if (cam != null)
             {
                 transform.rotation = Quaternion.LookRotation(transform.position - cam.transform.position);
+
+                float camDist = Vector3.Distance(transform.position, cam.transform.position);
+                float mul = Mathf.Clamp(camDist / RefDistance, MinScaleMul, MaxScaleMul);
+                transform.localScale = baseScale * mul;
+
+                // behind the lens, in its face, or out past the useful range: drop it
+                bool behind = Vector3.Dot(cam.transform.forward, transform.position - cam.transform.position) < 0f;
+                rangeAlpha = behind || camDist < NearFade ? 0f
+                           : Mathf.Clamp01(Mathf.InverseLerp(FarFade, FarFade - 6f, camDist));
             }
 
             // the active player's own bar is redundant with the HUD
@@ -65,7 +88,8 @@ namespace Crownfall
                     else if (pmm.LastEngagedEnemy != null && !pmm.LastEngagedEnemy.IsDead) framed = pmm.LastEngagedEnemy;
                 }
                 bool nameplated = framed != null && framed == health.Motor;
-                float want = !inCombat || health.IsDead || isActivePlayer || concealed || nameplated ? 0f : 1f;
+                float want = !inCombat || health.IsDead || isActivePlayer || concealed || nameplated
+                    ? 0f : rangeAlpha;
                 group.alpha = Mathf.MoveTowards(group.alpha, want, 4f * Time.unscaledDeltaTime);
                 if (!inCombat) group.alpha = 0f;
             }

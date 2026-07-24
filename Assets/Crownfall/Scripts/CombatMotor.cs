@@ -79,6 +79,9 @@ namespace Crownfall
 
         int comboIndex;
         bool comboWindowOpen;
+        /// Normalized progress through the current attack clip, published by the
+        /// attack/cast routines so Update can scale movement authority by phase.
+        float attackNt;
         Coroutine actionRoutine;
         float animMoveX, animMoveZ;
         CombatMotor attackAim;
@@ -138,6 +141,11 @@ namespace Crownfall
             }
 
             if (enchantFx != null) enchantBaseScale = enchantFx.transform.localScale;
+
+            // Team readability is a property of being a fighter, not of how a
+            // fighter got into the scene — attaching it here covers forge-built
+            // rigs, menu showcase variants and network-spawned prefabs alike.
+            if (GetComponent<TeamTint>() == null) gameObject.AddComponent<TeamTint>();
         }
 
         // ------------------------------------------------------------------ concealment
@@ -229,6 +237,7 @@ namespace Crownfall
             // stuck away from its rest value
             if (State != MotorState.Attacking)
             {
+                attackNt = 0f; // never let a stale phase leak into MoveAuthority
                 if (Anim != null && Anim.speed != 1f) Anim.speed = 1f;
                 if (enchantFx != null && enchantBaseScale != Vector3.zero &&
                     enchantFx.transform.localScale != enchantBaseScale)
@@ -248,12 +257,7 @@ namespace Crownfall
             if (State == MotorState.Locomotion)
                 LocomotionMove();
             else
-            {
-                // committed states: bleed residual drift, keep grounded
-                velocity = Vector3.MoveTowards(velocity, Vector3.zero, 18f * Time.deltaTime);
-                ApplyGravity();
-                cc.Move((velocity * 0.25f + Vector3.up * yVel) * Time.deltaTime);
-            }
+                CommittedMove();
 
             UpdateAnimatorParams(PlanarVelocity);
         }
@@ -291,6 +295,20 @@ namespace Crownfall
                     bufferedLightUntil = 0f;
                     StartAttack(false);
                 }
+                return;
+            }
+
+            // A flinch used to swallow every press for its whole duration, so
+            // getting clipped mid-fight cost you the next input too. It is now
+            // dodge-cancelable outright: you can always roll out of being hit.
+            // The flinch keeps its cost (you ate the damage and lost your swing)
+            // without also taking the escape option away — that combination is
+            // what made focus fire feel like being played rather than playing.
+            if (State == MotorState.Hit && wantRoll && Stamina.TrySpend(Kit.staminaRoll))
+            {
+                bufferedRollUntil = 0f;
+                if (actionRoutine != null) StopCoroutine(actionRoutine);
+                StartRoll(bufferedRollDir);
             }
         }
 
@@ -303,6 +321,9 @@ namespace Crownfall
             float speed = Kit.runSpeed;
             if (canSprint) speed *= Kit.sprintMultiplier;
             if (IsBlockingHeld) speed *= 0.42f;
+            // the crown is heavy, and heavier the longer you have worn it
+            if (CrownObjective.I != null && CrownObjective.I.IsCarriedBy(this))
+                speed *= CrownObjective.I.CurrentCarrierSpeedMultiplier;
 
             Vector3 desired = moveInput * speed;
             float rate = desired.sqrMagnitude > velocity.sqrMagnitude ? 40f : 46f;
@@ -325,6 +346,51 @@ namespace Crownfall
                 transform.rotation = Quaternion.RotateTowards(transform.rotation,
                     Quaternion.LookRotation(moveInput), 950f * Time.deltaTime);
             }
+        }
+
+        /// How much steering the player keeps while the motor is committed.
+        /// Attacks ramp: you can still set up during the windup, you are pinned
+        /// at the moment of contact (so the hit reads as a hit), then you regain
+        /// control through the follow-through instead of standing frozen.
+        float MoveAuthority()
+        {
+            switch (State)
+            {
+                case MotorState.Attacking:
+                    if (attackNt < Tuning.StrikeMoment - 0.06f) return Tuning.AuthorityWindup;
+                    if (attackNt < Tuning.StrikeMoment + 0.10f) return Tuning.AuthorityStrike;
+                    // ease back in across the recovery rather than snapping
+                    float k = Mathf.InverseLerp(Tuning.StrikeMoment + 0.10f, Tuning.AttackExitPoint, attackNt);
+                    return Mathf.Lerp(Tuning.AuthorityStrike, Tuning.AuthorityRecovery, k);
+                case MotorState.Rolling:
+                    return 0f;   // the roll owns its own motion
+                default:
+                    return 0f;   // hit reactions and stagger are meant to hurt
+            }
+        }
+
+        /// Committed-state movement. Keeps the residual-drift bleed of the old
+        /// hard freeze, but folds in whatever steering authority the current
+        /// phase allows so the player is never fully disconnected from the stick.
+        void CommittedMove()
+        {
+            float authority = MoveAuthority();
+            if (authority > 0.001f && moveInput.sqrMagnitude > 0.01f)
+            {
+                Vector3 desired = moveInput * (Kit.runSpeed * authority);
+                velocity = Vector3.MoveTowards(velocity, desired, 34f * Time.deltaTime);
+                // steer the body a little too, or partial movement reads as a slide
+                if (State == MotorState.Attacking && attackNt > Tuning.StrikeMoment + 0.10f)
+                    transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                        Quaternion.LookRotation(moveInput), 300f * Time.deltaTime);
+            }
+            else
+            {
+                velocity = Vector3.MoveTowards(velocity, Vector3.zero, 18f * Time.deltaTime);
+            }
+
+            ApplyGravity();
+            cc.Move((velocity + Vector3.up * yVel) * Time.deltaTime);
         }
 
         void ApplyGravity()
@@ -447,6 +513,7 @@ namespace Crownfall
                 ringBaseColor = Identity.TeamColor;
                 ringMat.color = ringBaseColor;
             }
+            GetComponent<TeamTint>()?.Rebind();
         }
 
         // ------------------------------------------------------------------ attacks
@@ -562,6 +629,7 @@ namespace Crownfall
                     var cur = Anim.GetCurrentAnimatorStateInfo(0);
                     if (cur.shortNameHash == prevHash) t = cur.normalizedTime;
                     else t += Time.deltaTime / len; // transitioning frames
+                    attackNt = t; // Update() scales movement authority off this
 
                     // magnetize toward the attack target before the strike lands
                     if (t < Tuning.StrikeMoment && attackAim != null && !attackAim.IsDead)
@@ -635,7 +703,24 @@ namespace Crownfall
                         yield break;
                     }
 
-                    if (t >= 0.92f) break;
+                    // skill-cancel: a committed swing should never eat the one
+                    // button with a cooldown attached to it
+                    if (t >= Tuning.RollCancelPoint && bufferedSkillUntil > Time.time &&
+                        SkillReady && Stamina.TrySpend(Kit.staminaSkill))
+                    {
+                        bufferedSkillUntil = 0f;
+                        SetTrail(false);
+                        StartSkill();
+                        yield break;
+                    }
+
+                    // move-cancel: hold a direction through the follow-through and
+                    // you walk out of it. Without this the tail of every swing is
+                    // dead air you can only wait through.
+                    if (t >= Tuning.MoveCancelPoint && moveInput.sqrMagnitude > 0.25f)
+                        break;
+
+                    if (t >= Tuning.AttackExitPoint) break;
                     yield return null;
                 }
 
@@ -644,7 +729,16 @@ namespace Crownfall
             }
 
             SetTrail(false);
-            if (State == MotorState.Attacking) State = MotorState.Locomotion;
+            attackNt = 0f;
+            if (State == MotorState.Attacking)
+            {
+                State = MotorState.Locomotion;
+                // the motor now leaves the swing before the animator's own exit
+                // time, so cut the follow-through explicitly — otherwise the rig
+                // keeps swinging for a beat after control has already returned,
+                // which is exactly the disconnect that reads as input lag
+                if (Anim != null) Anim.CrossFadeInFixedTime("Locomotion", 0.12f);
+            }
         }
 
         // Ranged cast: a caster plants and channels rather than swinging. No weapon
@@ -683,6 +777,10 @@ namespace Crownfall
             {
                 var cur = Anim.GetCurrentAnimatorStateInfo(0);
                 t = cur.IsTag("Attack") ? cur.normalizedTime : t + Time.deltaTime / len;
+                // casters keep the same phase-scaled footwork as melee: rooted at
+                // the release, free again through the recovery
+                attackNt = Mathf.Lerp(0f, Tuning.AttackExitPoint,
+                    Mathf.Clamp01(t / Mathf.Max(0.01f, cut)));
 
                 // charge tell: the wand aura grows into the release, then eases back
                 if (enchantFx != null && enchantBaseScale != Vector3.zero)
@@ -982,6 +1080,11 @@ namespace Crownfall
             Anim.speed = 1f;
             Anim.SetTrigger(HashSkill);
             FireNet(NetEvent.Skill);
+            // There are six skill routines and none of them published the attack
+            // phase, so MoveAuthority() saw attackNt=0 and handed out the WINDUP
+            // authority for the entire skill — including the moment of impact.
+            // One shared ticker fixes all six rather than patching each.
+            StartCoroutine(PublishSkillPhase());
             switch (Kit.id)
             {
                 case ClassId.Knight:     actionRoutine = StartCoroutine(SlamSkillRoutine()); break;
@@ -991,6 +1094,22 @@ namespace Crownfall
                 case ClassId.Healer:     actionRoutine = StartCoroutine(SanctuaryRoutine()); break;
                 default:                 actionRoutine = StartCoroutine(BarrageSkillRoutine()); break;
             }
+        }
+
+        /// Mirrors the animator's Skill-state progress into `attackNt` for as long
+        /// as the skill owns the motor, so a skill gets the same phase-scaled
+        /// footwork as a normal swing: able to set up during the windup, planted
+        /// at the strike, free again through the recovery.
+        IEnumerator PublishSkillPhase()
+        {
+            while (State == MotorState.Attacking)
+            {
+                var st = Anim.GetCurrentAnimatorStateInfo(0);
+                if (st.IsTag("Skill"))
+                    attackNt = Mathf.Clamp(st.normalizedTime % 1f, 0f, Tuning.AttackExitPoint);
+                yield return null;
+            }
+            attackNt = 0f;
         }
 
         /// Waits for the animator's Skill state, then hands back its length via

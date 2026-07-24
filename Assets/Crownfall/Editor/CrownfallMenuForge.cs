@@ -31,8 +31,6 @@ namespace Crownfall.EditorTools
             (ClassId.Healer, null),
         };
 
-        static string SkinFor(ClassId cls) => CrownfallForge.HeroSkins[cls];
-
         static readonly string[] AnimFolders =
         {
             CrownfallForge.AnimRoot + "/SwordShield",
@@ -156,43 +154,23 @@ namespace Crownfall.EditorTools
         static GameObject BuildShowcaseRig(int classIndex, AnimatorOverrideController aoc)
         {
             var cls = Champions[classIndex].cls;
-            string skin = SkinFor(cls);
             var root = new GameObject($"Champion_{cls}");
             root.transform.position = Vector3.zero;
             root.transform.rotation = Quaternion.Euler(0f, 180f, 0f); // face the camera
 
-            var charPrefab = CrownfallForge.LoadHeroPrefab(skin);
-            GameObject model;
-            if (charPrefab != null)
-            {
-                model = (GameObject)PrefabUtility.InstantiatePrefab(charPrefab);
-                PrefabUtility.UnpackPrefabInstance(model, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-            }
-            else
-            {
-                Debug.LogError("[CrownfallMenuForge] Missing character prefab " + skin);
-                model = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            }
-            model.name = "Model";
+            // same shared rig + loadout the arena builds, so the champion you
+            // preview is exactly the champion you fight with
+            var model = CrownfallForge.BuildHeroModel(cls, false, out _);
             model.transform.SetParent(root.transform, false);
             model.transform.localPosition = Vector3.zero;
             model.transform.localRotation = Quaternion.identity;
+            model.transform.localScale = Vector3.one * CrownfallForge.HeroScale(cls);
 
             var anim = model.GetComponentInChildren<Animator>();
             if (anim == null) anim = model.AddComponent<Animator>();
             anim.runtimeAnimatorController = aoc;
             anim.applyRootMotion = false;
             anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-
-            if (skin.Contains("/"))
-            {
-                CrownfallForge.PrepareExternalHero(model, cls);
-            }
-            else
-            {
-                CrownfallForge.ReparentWeaponsToHands(model.transform);
-                if (cls == ClassId.Warhammer) CrownfallForge.ApplyHammerLoadout(model.transform);
-            }
             return root;
         }
 
@@ -209,45 +187,26 @@ namespace Crownfall.EditorTools
             {
                 string path = $"{PortraitDir}/Champion_{i}.png";
                 var cls = Champions[i].cls;
-                string skin = SkinFor(cls);
-                var charPrefab = CrownfallForge.LoadHeroPrefab(skin);
-                if (charPrefab == null) continue;
-
                 var basePos = new Vector3(500f, 500f, 500f);
-                var model = (GameObject)Object.Instantiate(charPrefab, basePos, Quaternion.Euler(0f, 200f, 0f));
-                if (skin.Contains("/"))
-                {
-                    CrownfallForge.PrepareExternalHero(model, cls);
-                }
-                else
-                {
-                    CrownfallForge.ReparentWeaponsToHands(model.transform);
-                    if (cls == ClassId.Warhammer) CrownfallForge.ApplyHammerLoadout(model.transform);
-                }
+                var model = CrownfallForge.BuildHeroModel(cls, false, out _);
+                model.transform.SetPositionAndRotation(basePos, Quaternion.Euler(0f, 200f, 0f));
+                model.transform.localScale = Vector3.one * CrownfallForge.HeroScale(cls);
                 var camGo = new GameObject("__PortraitCam");
                 RenderTexture rt = null;
                 Texture2D tex = null;
                 try
                 {
-                    // idle pose from the hero's OWN pack (SampleAnimation plays
-                    // raw curves — humanoid retargeting does not apply here)
+                    // idle pose from the class's own weapon family, so the
+                    // portrait shows the grip it actually fights with
+                    // (SampleAnimation plays raw curves — humanoid retargeting
+                    // does not apply here, and it does not need to: one rig now)
                     AnimationClip idle = null;
-                    if (skin.Contains("/"))
-                    {
-                        string packRoot = skin.Substring(0, skin.IndexOf('/', 7)); // "Assets/<pack>"
-                        foreach (var guid in AssetDatabase.FindAssets("Idle t:AnimationClip", new[] { packRoot }))
-                        {
-                            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(AssetDatabase.GUIDToAssetPath(guid));
-                            if (clip != null && !clip.name.StartsWith("__preview")) { idle = clip; break; }
-                        }
-                    }
-                    else
-                    {
-                        var clips = CrownfallForge.LoadClips(AnimFolders[i]);
-                        var idleKey = clips.Keys.FirstOrDefault(k =>
-                            k.StartsWith("Idle", System.StringComparison.OrdinalIgnoreCase));
-                        if (idleKey != null) idle = clips[idleKey];
-                    }
+                    var clips = CrownfallForge.LoadClips(
+                        CrownfallForge.AnimRoot + "/" +
+                        CrownfallLoadout.AnimFolder(CrownfallLoadout.Get(cls, false).family));
+                    var idleKey = clips.Keys.FirstOrDefault(k =>
+                        k.StartsWith("Idle", System.StringComparison.OrdinalIgnoreCase));
+                    if (idleKey != null) idle = clips[idleKey];
                     if (idle != null) idle.SampleAnimation(model, idle.length * 0.25f);
                     // clips may animate the root — park it back on station
                     model.transform.position = basePos;

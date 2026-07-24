@@ -11,8 +11,31 @@ namespace Crownfall
         public static OrbitCamera I { get; private set; }
 
         public CombatMotor target;
-        public float distance = 4.4f;
+        /// Renamed from `distance` deliberately: the arena scene still carries the
+        /// old 4.4m value serialized on the component, and a rename is the clean way
+        /// to let the new framing default win without forcing a full forge rebuild.
+        public float restDistance = 6.2f;
         public float mouseSensitivity = 0.13f;
+
+        // Framing constants. The old rig sat at 4.4m / 14 degrees, which put the lens
+        // at chest height inside a prop-dense arena: barrels, crates and rocks
+        // constantly ate the frame and 3v3 scrums were unreadable. Sitting higher and
+        // further back reads the fight instead of the player's shoulder blades.
+        // 28 degrees, not the old 14: crates and barrels are ~2m tall, so a low
+        // camera spends the match looking THROUGH the arena's own cover. Sitting
+        // above the prop line looks down past it, which is exactly why arena
+        // brawlers pitch their cameras this way. MinPitch no longer goes negative —
+        // an under-shot camera framed the sky and nothing else.
+        const float RestPitch = 28f;
+        const float MinPitch = 4f;
+        const float MaxPitch = 68f;
+        const float CollisionRadius = 0.42f;   // was 0.25 — the lens phased into props
+        const float MinDistance = 1.9f;        // never jam inside the character
+        const float ShoulderOffset = 0.45f;
+        const float PivotHeight = 1.62f;
+        /// Extra distance per nearby combatant, so a scrum frames itself.
+        const float CrowdDistance = 0.34f;
+        const float MaxCrowdDistance = 1.4f;
 
         /// Home-hub champion podium: when set (and no fight target), the menu
         /// camera does a close hero orbit instead of the wide arena sweep.
@@ -21,9 +44,11 @@ namespace Crownfall
         public Vector3 PlanarForward => Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
         public Vector3 PlanarRight => Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
 
-        float yaw, pitch = 14f;
+        float yaw, pitch = RestPitch;
         float shake;
         float crowdLift;
+        float crowdDist;        // smoothed extra pull-back when the fight gets busy
+        float occludeDist;      // smoothed collision distance (snap in, ease out)
         static readonly Team[] BothTeams = { Team.Azure, Team.Crimson };
         Vector3 pivotSmoothed;
         Camera cam;
@@ -47,12 +72,14 @@ namespace Crownfall
             if (t != null && snapBehind)
             {
                 yaw = t.transform.eulerAngles.y;
-                pitch = 14f;
+                pitch = RestPitch;
                 pivotSmoothed = Pivot();
+                occludeDist = restDistance;
+                crowdDist = 0f;
             }
         }
 
-        Vector3 Pivot() => target != null ? target.transform.position + Vector3.up * 1.55f : transform.position;
+        Vector3 Pivot() => target != null ? target.transform.position + Vector3.up * PivotHeight : transform.position;
 
         void LateUpdate()
         {
@@ -117,7 +144,7 @@ namespace Crownfall
                     yaw = Mathf.LerpAngle(yaw, desiredYaw, 5.5f * Time.deltaTime);
                 }
                 float dist = Vector3.Distance(target.transform.position, lockTarget.transform.position);
-                float desiredPitch = Mathf.Lerp(10f, 22f, Mathf.InverseLerp(2f, 12f, dist));
+                float desiredPitch = Mathf.Lerp(24f, 34f, Mathf.InverseLerp(2f, 12f, dist));
                 pitch = Mathf.Lerp(pitch, desiredPitch, 4f * Time.deltaTime);
 
                 if (fighting && mouse != null && Cursor.lockState == CursorLockMode.Locked)
@@ -125,26 +152,51 @@ namespace Crownfall
                 yaw += orbit.x * 0.35f;
                 pitch -= orbit.y * 0.35f;
             }
-            pitch = Mathf.Clamp(pitch, -28f, 62f);
+            pitch = Mathf.Clamp(pitch, MinPitch, MaxPitch);
             // death cam: ease higher and pull back so being downed reads as its own beat
-            if (target.IsDead) pitch = Mathf.Lerp(pitch, 32f, 2.4f * Time.deltaTime);
+            if (target.IsDead) pitch = Mathf.Lerp(pitch, 40f, 2.4f * Time.deltaTime);
 
             pivotSmoothed = Vector3.Lerp(pivotSmoothed, Pivot(), 14f * Time.deltaTime);
 
-            Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
-            float wantDist = (locked ? distance + 0.5f : distance) + (target.IsDead ? 3.4f : 0f);
-            Vector3 desired = pivotSmoothed - rot * Vector3.forward * wantDist
-                              + rot * Vector3.right * 0.35f;
-
-            // collision: keep the camera out of walls (combatants live on IgnoreRaycast)
-            Vector3 castDir = desired - pivotSmoothed;
-            float castLen = castDir.magnitude;
-            if (castLen > 0.01f &&
-                Physics.SphereCast(pivotSmoothed, 0.25f, castDir.normalized, out var hitInfo, castLen,
-                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            // busy-fight pull-back: every combatant inside the immediate brawl radius
+            // buys a little extra distance so a 3v3 scrum frames itself instead of
+            // filling the lens with shoulders
+            float wantCrowd = 0f;
+            if (mm != null && target.Identity != null)
             {
-                desired = pivotSmoothed + castDir.normalized * Mathf.Max(0.4f, hitInfo.distance - 0.05f);
+                int near = 0;
+                foreach (var team in BothTeams)
+                    foreach (var other in mm.AliveEnemiesOf(team))
+                        if (other != null && other != target && !other.IsDead &&
+                            (other.transform.position - target.transform.position).sqrMagnitude < 49f)
+                            near++;
+                wantCrowd = Mathf.Min(near * CrowdDistance, MaxCrowdDistance);
             }
+            crowdDist = Mathf.MoveTowards(crowdDist, wantCrowd, 2.2f * Time.deltaTime);
+
+            Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
+            float wantDist = (locked ? restDistance + 0.6f : restDistance) + crowdDist
+                             + (target.IsDead ? 3.4f : 0f);
+
+            // collision: keep the camera out of walls (combatants live on IgnoreRaycast).
+            // Snap IN instantly so geometry never clips through the lens, but ease OUT
+            // so brushing a barrel doesn't yank the framing back and forth.
+            Vector3 back = -(rot * Vector3.forward);
+            float allowed = wantDist;
+            if (Physics.SphereCast(pivotSmoothed, CollisionRadius, back, out var hitInfo, wantDist,
+                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                allowed = Mathf.Max(MinDistance, hitInfo.distance - 0.08f);
+
+            occludeDist = allowed < occludeDist
+                ? allowed
+                : Mathf.MoveTowards(occludeDist, allowed, 6f * Time.deltaTime);
+            occludeDist = Mathf.Clamp(occludeDist, MinDistance, wantDist);
+
+            // the shoulder offset shrinks along with the distance, so a camera pinned
+            // against a wall doesn't swing sideways into it
+            float offsetScale = Mathf.Clamp01(occludeDist / Mathf.Max(0.01f, wantDist));
+            Vector3 desired = pivotSmoothed + back * occludeDist
+                              + rot * Vector3.right * (ShoulderOffset * offsetScale);
 
             // combatant bodies crowd the lens (they live on IgnoreRaycast so the
             // wall cast can't push off them); lift the camera to see over a body

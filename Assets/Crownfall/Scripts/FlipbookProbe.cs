@@ -68,6 +68,13 @@ namespace Crownfall
             Phase("light2"); m.RequestLight(); yield return Hold(0.6f, Vector3.zero, false);
             Phase("light3"); m.RequestLight(); yield return Hold(1.3f, Vector3.zero, false);
             Phase("heavy"); m.RequestHeavy(); yield return Hold(1.5f, Vector3.zero, false);
+            // 2026-07-24: the phases above all attack from a standstill, so they
+            // exercise none of the movement-authority / cancel-window work. These
+            // three do: swing while pushing forward (authority ramp), swing then
+            // immediately steer off (move-cancel out of recovery), and the skill.
+            Phase("attack-while-moving"); m.RequestLight(); yield return Hold(1.0f, Vector3.forward, false);
+            Phase("attack-move-cancel"); m.RequestLight(); yield return Hold(1.0f, Vector3.right, false);
+            Phase("skill"); m.RequestSkill(); yield return Hold(1.8f, Vector3.zero, false);
             Phase("end"); yield return Hold(0.4f, Vector3.zero, false);
             Finish();
         }

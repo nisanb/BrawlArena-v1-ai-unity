@@ -30,10 +30,16 @@ namespace Crownfall
 
         public static bool forceEnableForTesting;
 
-        /// True once the on-screen controls are built and acting as the control
-        /// scheme (now every platform). PlayerController/MatchManager read this to
-        /// hand the mouse to the buttons instead of mouse-look, and to keep the
-        /// cursor free during a fight so the buttons are clickable on PC.
+        /// True while the on-screen controls are the LIVE control scheme.
+        /// PlayerController/MatchManager read this to hand the mouse to the buttons
+        /// instead of mouse-look, and to keep the cursor free during a fight so the
+        /// buttons stay clickable.
+        ///
+        /// This is adaptive, not a platform constant: a desktop player gets the
+        /// proper keyboard+mouse scheme (and an unobstructed screen) until they
+        /// actually touch the display, and CrownfallSettings.VirtualControls can
+        /// pin it either way. A permanent five-button overlay on a PC screen was
+        /// the single loudest "unfinished game" tell in the capture review.
         public static bool Active;
         /// The touch joystick is currently steering — the keyboard driver defers
         /// movement while this is set.
@@ -69,12 +75,56 @@ namespace Crownfall
 
         void Start()
         {
-            // The on-screen mobile controls now show on EVERY platform (owner wants
-            // the mobile layout available on PC too). On desktop the mouse operates
-            // them directly (mouse-as-finger, see PollMouse) — no global TouchSimulation.
-            Active = true;
+            // The layout is built on every platform, but whether it is the LIVE
+            // scheme is decided each frame by ResolveScheme(). On a phone that is
+            // immediately; on a PC only once the player touches the screen (or
+            // pins the mode in settings).
+            Active = Application.isMobilePlatform || forceEnableForTesting;
             EnhancedTouchSupport.Enable();
             BuildUi();
+        }
+
+        /// Decide whether the on-screen controls own input this frame.
+        /// Auto: mobile always; desktop only after a genuine touch, and it hands
+        /// control straight back the moment the player uses WASD or the mouse.
+        void ResolveScheme()
+        {
+            if (forceEnableForTesting) { Active = true; return; }
+
+            switch (CrownfallSettings.VirtualControls)
+            {
+                case CrownfallSettings.VirtualControlMode.Always: Active = true; return;
+                case CrownfallSettings.VirtualControlMode.Never: Active = false; return;
+            }
+
+            if (Application.isMobilePlatform) { Active = true; return; }
+
+            // desktop auto-detect
+            if (ETouch.activeTouches.Count > 0) { Active = true; return; }
+
+            if (!Active) return;
+            // a real keyboard/mouse action reclaims the scheme (and the screen)
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            var ms = UnityEngine.InputSystem.Mouse.current;
+            bool kbmUsed =
+                (kb != null && (kb.wKey.isPressed || kb.aKey.isPressed || kb.sKey.isPressed ||
+                                kb.dKey.isPressed || kb.spaceKey.wasPressedThisFrame)) ||
+                (ms != null && ms.delta.ReadValue().sqrMagnitude > 16f && moveTouchId == -1 &&
+                 attackTouchId == -1 && dodgeTouchId == -1 && blockTouchId == -1 && cameraTouchId == -1);
+            if (kbmUsed)
+            {
+                Active = false;
+                ClearAllTouches();
+            }
+        }
+
+        void ClearAllTouches()
+        {
+            moveTouchId = cameraTouchId = attackTouchId = dodgeTouchId = blockTouchId = -1;
+            moveDir01 = Vector2.zero;
+            sprintHeld = false;
+            JoystickActive = false;
+            if (joyBase != null) SetJoyVisual(RestScreenPos(), RestScreenPos());
         }
 
         void OnEnable() => EnhancedTouchSupport.Enable();
@@ -217,8 +267,11 @@ namespace Crownfall
             var mm = MatchManager.I;
             if (mm == null || canvas == null) return;
 
-            // controls belong to the match only — never the home hub / menus
-            bool inMatch = mm.State == MatchState.Countdown || mm.State == MatchState.Fighting;
+            ResolveScheme();
+
+            // controls belong to the match only — never the home hub / menus — and
+            // only while they are the live scheme
+            bool inMatch = Active && (mm.State == MatchState.Countdown || mm.State == MatchState.Fighting);
             if (canvas.enabled != inMatch) canvas.enabled = inMatch;
             if (!inMatch) return;
 
@@ -373,15 +426,15 @@ namespace Crownfall
                 case UnityEngine.InputSystem.TouchPhase.Stationary:
                     if (id == moveTouchId)
                     {
-                        Vector2 delta = pos - moveAnchor;
+                        Vector2 stickDelta = pos - moveAnchor;
                         float maxPix = JoyRadius * ScaleFactor();
-                        if (delta.magnitude > maxPix)
+                        if (stickDelta.magnitude > maxPix)
                         {
                             // drag the anchor along so the stick follows the thumb
-                            moveAnchor = pos - delta.normalized * maxPix;
-                            delta = pos - moveAnchor;
+                            moveAnchor = pos - stickDelta.normalized * maxPix;
+                            stickDelta = pos - moveAnchor;
                         }
-                        moveDir01 = delta / Mathf.Max(1f, maxPix);
+                        moveDir01 = stickDelta / Mathf.Max(1f, maxPix);
                         SetJoyVisual(moveAnchor, pos);
                     }
                     else if (id == cameraTouchId && phase == UnityEngine.InputSystem.TouchPhase.Moved)

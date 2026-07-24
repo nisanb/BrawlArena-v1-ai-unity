@@ -60,6 +60,12 @@ namespace Crownfall
                 res.blocked = blocked;
             }
 
+            // Wearing the crown paints a target on you. Applied last so it scales
+            // whatever the block branches settled on, rather than being overwritten
+            // by them — holding the crown behind a shield still has to hurt.
+            if (Motor != null && CrownObjective.I != null && CrownObjective.I.IsCarriedBy(Motor))
+                dmg *= CrownObjective.I.CurrentCarrierDamageMultiplier;
+
             Current = Mathf.Max(0f, Current - dmg);
             res.landed = true;
             res.damageDealt = dmg;

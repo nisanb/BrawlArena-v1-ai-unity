@@ -59,6 +59,10 @@ namespace Crownfall
 
             if (agent != null && agent.isOnNavMesh) agent.nextPosition = transform.position;
 
+            // objective play comes before target selection: an AI that ignores a
+            // loose crown makes the mode meaningless to fight over
+            if (TryPlayCrown(mm)) return;
+
             if (target == null || target.IsDead || Time.time >= retargetAt ||
                 (target != null && target.IsConcealedFrom(motor)))
                 PickTarget(mm);
@@ -74,6 +78,56 @@ namespace Crownfall
 
             if (motor.Kit.isRanged) MageBrain();
             else MeleeBrain();
+        }
+
+        // ------------------------------------------------------------------ crown
+
+        /// Objective behaviour, in priority order:
+        ///   - carrying it: fall back toward friendly ground and keep fighting
+        ///   - it is loose: go get it (nearest claimant commits hardest)
+        ///   - an enemy has it: make them the target, no matter who is closer
+        /// Returns true when it fully owns this frame's movement.
+        bool TryPlayCrown(MatchManager mm)
+        {
+            var crown = CrownObjective.I;
+            if (crown == null || crown.State == CrownState.Hidden || motor.Identity == null)
+                return false;
+
+            if (crown.State == CrownState.Loose)
+            {
+                Vector3 to = crown.transform.position - transform.position;
+                to.y = 0f;
+                float dist = to.magnitude;
+                // Commit when it is close enough to be worth contesting, or when
+                // nothing is actively pressuring us. Being in a fight never excuses
+                // ignoring a crown two steps away — that moment IS the game.
+                bool pressured = target != null && !target.IsDead &&
+                                 (target.transform.position - transform.position).sqrMagnitude < 9f;
+                if (dist < 6.5f || (dist < 26f && !pressured))
+                {
+                    // drop the lock so the run faces where it is going rather than
+                    // strafing sideways at a stale target the whole way
+                    motor.LockTarget = null;
+                    MoveTowards(crown.transform.position, dist > 5f, 1f);
+                    motor.SetBlock(false);
+                    return true;
+                }
+                return false;
+            }
+
+            // carried
+            if (crown.Carrier == motor) return false;   // keep brawling, just guarded
+            if (crown.CarrierTeam != motor.Identity.team)
+            {
+                // hunt the carrier — they are the score, everything else is noise
+                if (crown.Carrier != null && !crown.Carrier.IsDead &&
+                    !crown.Carrier.IsConcealedFrom(motor))
+                {
+                    target = crown.Carrier;
+                    retargetAt = Time.time + 0.8f;
+                }
+            }
+            return false;
         }
 
         void PickTarget(MatchManager mm)

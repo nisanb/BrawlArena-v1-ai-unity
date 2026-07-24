@@ -116,6 +116,115 @@ namespace Crownfall
             killTarget = mode.killTarget;
             matchDuration = mode.duration;
             TimeLeft = mode.duration;
+            CrownEnabled = mode.crown;
+            crownSecondsPerPoint = mode.crownSecondsPerPoint > 0f ? mode.crownSecondsPerPoint : 2.6f;
+            matchPointCalled = false;
+        }
+
+        // ------------------------------------------------------------------ crown
+
+        /// True when this match runs the Crown objective. Networked rooms always
+        /// run the standard brawl for now — the crown is authoritative state and
+        /// would need its own master-side sync to be fair online.
+        public bool CrownEnabled { get; private set; }
+        float crownSecondsPerPoint = 2.6f;
+
+        /// Every fighter in the match, alive or not — the crown polls this for
+        /// pickups and the AI reads it to find the carrier.
+        public IReadOnlyList<CombatMotor> AllFighters => all;
+
+        void SetupCrown()
+        {
+            if (!CrownEnabled || OnlineMode) return;
+            var crown = CrownObjective.Ensure();
+            crown.secondsPerPoint = crownSecondsPerPoint;
+            crown.BeginMatch(ArenaCentre());
+        }
+
+        /// Centre of the fight: the midpoint of the two teams' spawn clusters, so
+        /// the crown lands in genuinely contested ground on any arena layout.
+        Vector3 ArenaCentre()
+        {
+            Vector3 sum = Vector3.zero;
+            int n = 0;
+            foreach (var arr in new[] { azureSpawns, crimsonSpawns })
+            {
+                if (arr == null) continue;
+                foreach (var t in arr)
+                    if (t != null) { sum += t.position; n++; }
+            }
+            return n > 0 ? sum / n : Vector3.zero;
+        }
+
+        /// One crown tick for `team`. Feeds the same score as a kill so the HUD,
+        /// win condition and sudden-death logic all work unchanged.
+        public void AddCrownPoint(Team team)
+        {
+            if (State != MatchState.Fighting) return;
+            if (team == Team.Azure) ScoreAzure++; else ScoreCrimson++;
+            ScoreChanged?.Invoke(ScoreAzure, ScoreCrimson);
+            GameEffects.I?.PlayUi(GameEffects.I.uiTick, 0.3f);
+            CheckMatchPoint();
+
+            if (ScoreAzure >= killTarget || ScoreCrimson >= killTarget)
+                EndMatch(ScoreAzure > ScoreCrimson ? Team.Azure : Team.Crimson);
+        }
+
+        public void AnnounceCrown(string text)
+        {
+            if (!string.IsNullOrEmpty(text)) Announce?.Invoke(text);
+        }
+
+        // ---- takedown feedback
+        // Landing a kill used to produce nothing but a body falling over and a line
+        // in the feed. A kill is the loudest thing a player can do in a match, so it
+        // gets its own beat: a moment of slowed time, a camera punch, and a callout
+        // when they are chained.
+        int playerStreak;
+        float streakExpiresAt;
+        const float StreakWindow = 4.5f;
+        static readonly string[] StreakCallouts =
+            { null, "DOUBLE KILL", "TRIPLE KILL", "QUAD KILL", "RAMPAGE" };
+
+        void ReportTakedown(CombatMotor killer, CombatMotor victim)
+        {
+            if (killer == null || PlayerMotor == null) return;
+            bool byPlayer = killer == PlayerMotor;
+            bool onPlayer = victim == PlayerMotor;
+            if (!byPlayer && !onPlayer) return;
+
+            if (byPlayer)
+            {
+                GameEffects.I?.Takedown(victim != null ? victim.transform.position : killer.transform.position);
+
+                playerStreak = Time.time < streakExpiresAt ? playerStreak + 1 : 1;
+                streakExpiresAt = Time.time + StreakWindow;
+                int idx = Mathf.Clamp(playerStreak - 1, 0, StreakCallouts.Length - 1);
+                string callout = StreakCallouts[idx];
+                if (callout != null) Announce?.Invoke(callout);
+            }
+            else
+            {
+                // dying breaks the chain
+                playerStreak = 0;
+                streakExpiresAt = 0f;
+            }
+        }
+
+        bool matchPointCalled;
+
+        /// One-shot "this is the last stretch" beat. Without it a 40-point target is
+        /// just a number climbing; with it the endgame has a moment where everyone
+        /// knows the next crown tick could finish it.
+        void CheckMatchPoint()
+        {
+            if (matchPointCalled || State != MatchState.Fighting) return;
+            int lead = Mathf.Max(ScoreAzure, ScoreCrimson);
+            int threshold = Mathf.Max(1, Mathf.RoundToInt(killTarget * 0.12f));
+            if (killTarget - lead > threshold) return;
+            matchPointCalled = true;
+            Announce?.Invoke("MATCH POINT");
+            GameEffects.I?.PlayUi(GameEffects.I.uiFight, 0.8f);
         }
 
         /// Home-hub PLAY: fight with the persisted champion pick.
@@ -260,6 +369,7 @@ namespace Crownfall
             CountdownTick?.Invoke(0);
             GameEffects.I?.PlayUi(GameEffects.I.uiFight, 0.9f);
             SetState(MatchState.Fighting);
+            SetupCrown();
         }
 
         void OnCombatantDied(CombatMotor victim, CombatMotor killer)
@@ -280,6 +390,10 @@ namespace Crownfall
                 return;
             }
 
+            // a crown carrier who goes down drops it on the spot — the single most
+            // important swing moment in the mode, so it must be immediate
+            CrownObjective.I?.NotifyCarrierDown(victim);
+
             var victimId = victim.Identity;
             var killerId = killer != null ? killer.Identity : null;
 
@@ -288,6 +402,8 @@ namespace Crownfall
             ScoreChanged?.Invoke(ScoreAzure, ScoreCrimson);
             KillFeed?.Invoke(killerId, victimId);
             GameEffects.I?.PlayUi(GameEffects.I.killDing, 0.45f);
+            ReportTakedown(killer, victim);
+            CheckMatchPoint();
 
             if (SuddenDeath || ScoreAzure >= killTarget || ScoreCrimson >= killTarget)
             {
@@ -298,9 +414,25 @@ namespace Crownfall
             StartCoroutine(RespawnRoutine(victim));
         }
 
+        /// Respawn delay for `team`, shortened while they are being run away from.
+        /// A 5s walk back for the losing side is how a deficit turns into a rout —
+        /// the trailing team gets back to the crown sooner so the game stays live.
+        /// Deliberately mild: it speeds up re-entry, it does not hand out damage.
+        float RespawnDelayFor(Team team)
+        {
+            int mine = team == Team.Azure ? ScoreAzure : ScoreCrimson;
+            int theirs = team == Team.Azure ? ScoreCrimson : ScoreAzure;
+            int deficit = theirs - mine;
+            float bigDeficit = Mathf.Max(4f, killTarget * 0.2f);
+            float t = Mathf.Clamp01(deficit / bigDeficit);
+            return Mathf.Lerp(Tuning.RespawnSeconds, Tuning.RespawnSeconds * 0.6f, t);
+        }
+
         IEnumerator RespawnRoutine(CombatMotor victim)
         {
-            yield return new WaitForSeconds(Tuning.RespawnSeconds);
+            var vid = victim.Identity;
+            yield return new WaitForSeconds(
+                vid != null ? RespawnDelayFor(vid.team) : Tuning.RespawnSeconds);
             if (State != MatchState.Fighting) yield break;
 
             var id = victim.Identity;
@@ -316,6 +448,7 @@ namespace Crownfall
         {
             if (State == MatchState.Ended) return;
             SetState(MatchState.Ended);
+            CrownObjective.I?.EndMatch();
             // offline the player is always Azure; online they may be on either side
             bool playerWon = PlayerMotor != null && PlayerMotor.Identity != null
                 ? PlayerMotor.Identity.team == winner
@@ -439,6 +572,9 @@ namespace Crownfall
         {
             IsDemo = enableAutopilot;
             Autopilot = enableAutopilot;
+            // headless playtests must run the same rules a real match would, or the
+            // capture evidence describes a mode nobody actually plays
+            ApplySelectedMode();
             SelectClass(classIndex);
         }
     }

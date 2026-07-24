@@ -27,6 +27,10 @@ namespace Crownfall
         RectTransform skillPipRect;
         bool skillWasReady;
         Image damageFlash;
+        Image announceScrim;
+        GameObject crownChip;
+        Image crownChipIcon;
+        TMP_Text crownChipText;
         RectTransform lockOnMarker;
         RectTransform feedContainer;
         GameObject autopilotTag;
@@ -71,6 +75,20 @@ namespace Crownfall
                 new Vector2(0f, 0.5f), new Vector2(14, 0), new Vector2(24, 24), icoTimer, Color.white);
             timerText = Txt("Timer", timerPlate.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
                 new Vector2(12, 1), new Vector2(-40, -6), "5:00", fontSmall, 23, new Color(1f, 1f, 1f, 0.95f));
+
+            // -- crown status chip, right of the timer. The world beacon says WHERE
+            // the crown is; this says WHO is banking points off it, which is the
+            // information that actually changes what you do next.
+            var crownPlate = Img("CrownChip", fight, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f), new Vector2(238, -108), new Vector2(268, 42), rowNavy, Color.white);
+            crownChip = crownPlate.gameObject;
+            crownChipIcon = Icon("CrownChipIco", crownPlate.transform, new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(12, 0), new Vector2(26, 26),
+                iconCrown, Gold);
+            crownChipText = Txt("CrownChipTxt", crownPlate.transform, Vector2.zero, Vector2.one,
+                new Vector2(0.5f, 0.5f), new Vector2(14, 1), new Vector2(-46, -6), "CROWN", fontSmall,
+                20, Gold, TextAlignmentOptions.Left);
+            crownChip.SetActive(false);
 
             // -- player panel: profile ring portrait with class icon, segmented HP
             var panel = Rect("PlayerPanel", fight, Vector2.zero, Vector2.zero, Vector2.zero,
@@ -151,9 +169,18 @@ namespace Crownfall
             feedContainer = Rect("KillFeed", fight, Vector2.one, Vector2.one, Vector2.one,
                 new Vector2(-20, -110), new Vector2(430, 400));
 
-            // -- announcement
+            // -- announcement. The big Lilita face is an OUTLINE font: over a bright
+            // arena its hollow glyphs vanish (verified in capture — "THE CROWN HAS
+            // RISEN" read as a ghost). A dark scrim behind the text is what makes it
+            // legible, so plate and text live and die together.
+            // Sized down from 130pt: at that size a callout like "YOU LOST THE CROWN"
+            // spanned the entire screen and buried the fight it was reporting on.
+            announceScrim = Img("AnnounceScrim", fight, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(0, 168), new Vector2(1020, 92), null,
+                new Color(0.02f, 0.03f, 0.07f, 0.58f));
             announceText = Txt("Announce", fight, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(0, 130), new Vector2(1400, 220), "", fontBig, 130, Gold);
+                new Vector2(0.5f, 0.5f), new Vector2(0, 168), new Vector2(1000, 120), "", fontBig, 74, Gold);
+            announceScrim.gameObject.SetActive(false);
             announceText.gameObject.SetActive(false);
 
             // -- lock-on marker
@@ -261,6 +288,10 @@ namespace Crownfall
         {
             announceText.gameObject.SetActive(true);
             announceText.text = msg;
+            // no scrim behind a single countdown digit — it would frame a "3" in a
+            // full-width black bar
+            bool wantScrim = msg.Length > 2;
+            if (announceScrim != null) announceScrim.gameObject.SetActive(wantScrim);
 
             // countdown digits live just under a second so each fades out before
             // the next fades in; announcements linger longer
@@ -279,9 +310,44 @@ namespace Crownfall
                 float alpha = Mathf.Clamp01(t / fadeIn);
                 if (t > life - fadeOut) alpha = Mathf.Clamp01((life - t) / fadeOut);
                 announceText.color = new Color(color.r, color.g, color.b, alpha);
+                if (wantScrim && announceScrim != null)
+                    announceScrim.color = new Color(0.02f, 0.03f, 0.07f, 0.62f * alpha);
                 yield return null;
             }
             announceText.gameObject.SetActive(false);
+            if (announceScrim != null) announceScrim.gameObject.SetActive(false);
+        }
+
+        /// Crown chip state: hidden in kill-only modes, gold while the crown is out
+        /// there for the taking, team-tinted while somebody is banking points.
+        void TickCrownChip(MatchManager mm)
+        {
+            if (crownChip == null) return;
+            var crown = CrownObjective.I;
+            bool show = mm.CrownEnabled && crown != null && crown.State != CrownState.Hidden;
+            if (crownChip.activeSelf != show) crownChip.SetActive(show);
+            if (!show) return;
+
+            if (crown.State == CrownState.Loose)
+            {
+                crownChipText.text = "CROWN UNCLAIMED";
+                crownChipText.color = Gold;
+                crownChipIcon.color = Gold;
+                return;
+            }
+
+            var carrier = crown.Carrier;
+            var pm = mm.PlayerMotor;
+            bool mine = pm != null && pm.Identity != null && carrier != null && carrier.Identity != null &&
+                        carrier.Identity.team == pm.Identity.team;
+            Color c = carrier != null && carrier.Identity != null ? carrier.Identity.TeamColor : Gold;
+            string who = carrier == pm && pm != null ? "YOU HOLD THE CROWN"
+                       : (carrier != null && carrier.Identity != null
+                            ? carrier.Identity.displayName.ToUpperInvariant() + (mine ? "  ·  ALLY" : "  ·  ENEMY")
+                            : "CROWN HELD");
+            crownChipText.text = who;
+            crownChipText.color = c;
+            crownChipIcon.color = c;
         }
 
         /// Per-frame fight HUD polling, called from the core Update.
@@ -290,6 +356,8 @@ namespace Crownfall
             // timer
             float tl = Mathf.Max(0f, mm.TimeLeft);
             timerText.text = mm.SuddenDeath ? "SUDDEN DEATH" : $"{(int)tl / 60}:{(int)tl % 60:00}";
+
+            TickCrownChip(mm);
 
             // bars
             var pm = mm.PlayerMotor;
